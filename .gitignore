@@ -1,3 +1,7 @@
 *.pyc
 
+build/
+dist/
+*.egg-info/
+
 facility.json
