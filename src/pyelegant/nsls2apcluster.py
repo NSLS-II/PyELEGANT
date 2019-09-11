@@ -61,6 +61,14 @@ __sbatch_sh_example = '''#!/bin/bash
 
 # SBATCH --exclude=apcpu-004
 
+# send email when task begins
+#SBATCH --mail-type=begin
+
+# send email when task ends
+#SBATCH --mail-type=end
+
+#SBATCH --mail-user=yhidaka@bnl.gov
+
 # module load elegant #---# for Environment Modules v.4.2.4
 module load {MODULE_LOAD_CMD_STR} #---# for Lmod v.8.1
 
