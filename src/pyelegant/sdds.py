@@ -78,6 +78,15 @@ def query(sdds_filepath, suppress_err_msg=False):
             param_dict[ss[0]] = {'UNITS': ss[1], 'SYMBOL': ss[2], 'TYPE': ss[3],
                                  'DESCRIPTION': ss[4]}
 
+    # deal with the special cases
+    if 'enx0' in param_dict:
+        param_dict['enx0']['UNITS'] = '{} {}'.format(param_dict['enx0']['UNITS'],
+                                                     param_dict['enx0']['SYMBOL'])
+        param_dict['enx0']['SYMBOL'] = param_dict['enx0']['TYPE']
+        param_dict['enx0']['TYPE'] = param_dict['enx0']['DESCRIPTION'].split()[0]
+        param_dict['enx0']['DESCRIPTION'] = ' '.join(
+            param_dict['enx0']['DESCRIPTION'].split()[1:])
+
     return param_dict, column_dict
 
 #----------------------------------------------------------------------
