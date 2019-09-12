@@ -30,15 +30,15 @@ def str2num(string):
         raise TypeError('str2num only accepts a string or a list of strings.')
 
 #----------------------------------------------------------------------
-def query(sdds_filepath):
+def query(sdds_filepath, suppress_err_msg=False):
     """"""
 
     p = Popen(['sddsquery', sdds_filepath], stdout=PIPE, stderr=PIPE)
     output, error = p.communicate()
     if isinstance(output, bytes):
-        output = output.decode()
-        error = error.decode()
-    if error:
+        output = output.decode('utf-8')
+        error = error.decode('utf-8')
+    if error and (not suppress_err_msg):
         print('sddsquery stderr:', error)
         print('sddsquery stdout:', output)
 
@@ -97,7 +97,7 @@ def printout(sdds_filepath, param_name_list=None,
     elif os.name == 'nt':
         newline_char = '\r\n'
 
-    _, column_info_dict = query(sdds_filepath)
+    _, column_info_dict = query(sdds_filepath, suppress_err_msg=suppress_err_msg)
     if column_name_list is None:
         column_name_list = list(column_info_dict.keys())
 
@@ -109,7 +109,7 @@ def printout(sdds_filepath, param_name_list=None,
             column_option_str += ",format="+str_format
 
     if param_name_list is None:
-        param_info_dict, _ = query(sdds_filepath)
+        param_info_dict, _ = query(sdds_filepath, suppress_err_msg=suppress_err_msg)
         param_name_list = list(param_info_dict.keys())
 
     if param_name_list == []:
@@ -136,8 +136,8 @@ def printout(sdds_filepath, param_name_list=None,
     p = Popen(cmd_list, stdout=PIPE, stderr=PIPE)
     output, error = p.communicate()
     if isinstance(output, bytes):
-        output = output.decode()
-        error = error.decode()
+        output = output.decode('utf-8')
+        error = error.decode('utf-8')
     if error and (not suppress_err_msg):
         print('sddsprintout stderr:', error)
         print('sddsprintout stdout:', output)
@@ -212,8 +212,8 @@ def printout(sdds_filepath, param_name_list=None,
     p = Popen(cmd_list, stdout=PIPE, stderr=PIPE)
     output, error = p.communicate()
     if isinstance(output, bytes):
-        output = output.decode()
-        error = error.decode()
+        output = output.decode('utf-8')
+        error = error.decode('utf-8')
     if error and (not suppress_err_msg):
         print('sddsprintout stderr:', error)
         print('sddsprintout stdout:', output)

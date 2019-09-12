@@ -1,3 +1,6 @@
+import sys
+import matplotlib.pylab as plt
+
 import pyelegant as pe
 
 #from subprocess import Popen, PIPE
@@ -6,7 +9,23 @@ import pyelegant as pe
 #p = Popen(['which','elegant'], stdout=PIPE, stderr=PIPE)
 #print(p.communicate())
 
+result_filepath, result_file_type = 'test.hdf5', 'hdf5'
+pe.plot_twiss(result_filepath, result_file_type, slim=None)
+pe.plot_twiss(result_filepath, result_file_type, slim=[25.0, 50.0], s0_m=0.0)
+pe.plot_twiss(result_filepath, result_file_type, slim=[25.0, 50.0], s0_m=25.0)
+pe.plot_twiss(result_filepath, result_file_type, slim=[25.0, 50.0], s0_m=25.0,
+              s_margin_m=3.0)
 
+sys.exit(0)
+
+
+if False:
+    output_filepath = 'test.hdf5'
+    output_file_type = 'hdf5'
+else:
+    output_filepath = 'test.pgz'
+    output_file_type = 'pgz'
+del_tmp_files = True
 LTE_filepath = 'lattice3Sext_19pm3p2m_5cell.lte'
 E_MeV = 3e3
 use_beamline = None
@@ -18,9 +37,9 @@ higher_order_chromaticity = False
 ele_filepath = None
 twi_filepath = '%s.twi'
 rootname = None
-magnets = None
+magnets = '%s.mag' #None
 semaphore_file = None
-parameters = None
+parameters = '%s.param' #None
 element_divisions = 0
 macros = None
 alter_elements_list = None
@@ -61,9 +80,9 @@ remote_opts = dict(
     #]
 )
 
-if False:
+if True:
     outupt_filepaths = pe.calc_ring_twiss(
-        LTE_filepath, E_MeV, use_beamline=use_beamline,
+        output_filepath, LTE_filepath, E_MeV, use_beamline=use_beamline,
         radiation_integrals=radiation_integrals,
         compute_driving_terms=compute_driving_terms,
         concat_order=concat_order, higher_order_chromaticity=higher_order_chromaticity,
@@ -71,10 +90,11 @@ if False:
         magnets=magnets, semaphore_file=semaphore_file, parameters=parameters,
         element_divisions=element_divisions, macros=macros,
         alter_elements_list=alter_elements_list,
+        output_file_type=output_file_type, del_tmp_files=del_tmp_files,
         run_local=True)
 elif False:
     outupt_filepaths = pe.calc_ring_twiss(
-        LTE_filepath, E_MeV, use_beamline=use_beamline,
+        output_filepath, LTE_filepath, E_MeV, use_beamline=use_beamline,
         radiation_integrals=radiation_integrals,
         compute_driving_terms=compute_driving_terms,
         concat_order=concat_order, higher_order_chromaticity=higher_order_chromaticity,
@@ -82,10 +102,11 @@ elif False:
         magnets=magnets, semaphore_file=semaphore_file, parameters=parameters,
         element_divisions=element_divisions, macros=macros,
         alter_elements_list=alter_elements_list,
+        output_file_type=output_file_type, del_tmp_files=del_tmp_files,
         run_local=False, remote_opts=remote_opts)
 elif False:
     outupt_filepaths = pe.calc_line_twiss(
-        LTE_filepath, E_MeV, betax0, betay0, alphax0=alphax0, alphay0=alphay0,
+        output_filepath, LTE_filepath, E_MeV, betax0, betay0, alphax0=alphax0, alphay0=alphay0,
         etax0=etax0, etay0=etay0, etaxp0=etaxp0, etayp0=etayp0,
         use_beamline=use_beamline, radiation_integrals=radiation_integrals,
         compute_driving_terms=compute_driving_terms, concat_order=concat_order,
@@ -94,10 +115,11 @@ elif False:
         rootname=rootname, magnets=magnets, semaphore_file=semaphore_file,
         parameters=parameters, element_divisions=element_divisions,
         macros=macros, alter_elements_list=alter_elements_list,
+        output_file_type=output_file_type, del_tmp_files=del_tmp_files,
         run_local=True)
-elif True:
+elif False:
     outupt_filepaths = pe.calc_line_twiss(
-        LTE_filepath, E_MeV, betax0, betay0, alphax0=alphax0, alphay0=alphay0,
+        output_filepath, LTE_filepath, E_MeV, betax0, betay0, alphax0=alphax0, alphay0=alphay0,
         etax0=etax0, etay0=etay0, etaxp0=etaxp0, etayp0=etayp0,
         use_beamline=use_beamline, radiation_integrals=radiation_integrals,
         compute_driving_terms=compute_driving_terms, concat_order=concat_order,
@@ -106,6 +128,7 @@ elif True:
         rootname=rootname, magnets=magnets, semaphore_file=semaphore_file,
         parameters=parameters, element_divisions=element_divisions,
         macros=macros, alter_elements_list=alter_elements_list,
+        output_file_type=output_file_type, del_tmp_files=del_tmp_files,
         run_local=False, remote_opts=remote_opts)
 
 print
