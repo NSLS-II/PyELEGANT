@@ -196,18 +196,27 @@ def _calc_twiss(
         # TODO
         raise NotImplementedError('TODO: calc_correct_transport_line_linear_chrom')
 
-    output = {}
+    output, meta = {}, {}
     for k, v in tmp_filepaths.items():
         try:
+            meta_params, meta_columns = sdds.query(v, suppress_err_msg=True)
             params, columns = sdds.printout(
                 v, param_name_list=None, column_name_list=None,
                 str_format='', show_output=False, show_cmd=False,
                 suppress_err_msg=True)
 
+            meta[k] = {}
+            if meta_params != {}:
+                meta[k]['params'] = meta_params
+            if meta_columns != {}:
+                meta[k]['columns'] = meta_columns
+
             output[k] = {}
             if params != {}:
                 output[k]['params'] = params
             if columns != {}:
+                for _k, _v in columns.items():
+                    columns[_k] = np.array(_v)
                 output[k]['columns'] = columns
         except:
             continue
@@ -215,9 +224,25 @@ def _calc_twiss(
     output_file_type = output_file_type.lower()
 
     if output_file_type in ('hdf5', 'h5'):
-        util.robust_sdds_hdf5_write(output_filepath, output, nMaxTry=10, sleep=10.0)
+        util.robust_sdds_hdf5_write(
+            output_filepath, [output, meta], nMaxTry=10, sleep=10.0)
     elif output_file_type == 'pgz':
-        util.robust_pgz_file_write(output_filepath, output, nMaxTry=10, sleep=10.0)
+        mod_output = {}
+        for k, v in output.items():
+            mod_output[k] = {}
+            if 'params' in v:
+                mod_output[k]['scalars'] = v['params']
+            if 'columns' in v:
+                mod_output[k]['arrays'] = v['columns']
+        mod_meta = {}
+        for k, v in meta.items():
+            mod_meta[k] = {}
+            if 'params' in v:
+                mod_meta[k]['scalars'] = v['params']
+            if 'columns' in v:
+                mod_meta[k]['arrays'] = v['columns']
+        util.robust_pgz_file_write(
+            output_filepath, [mod_output, mod_meta], nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
 
@@ -324,18 +349,41 @@ def get_visible_inds(all_s_array, slim, s_margin_m=0.1):
 
 def plot_twiss(
     result_filepath, result_file_type, slim=None, s_margin_m=0.1, s0_m=0.0,
-    etax_unit='mm', right_margin_adj=0.88):
+    etax_unit='mm', right_margin_adj=0.88, print_scalars=None):
     """"""
 
     if result_file_type in ('hdf5', 'h5'):
-        d = util.load_sdds_hdf5_file(result_filepath)
-    elif result_filepath == 'pgz':
-        d = util.load_pgz_file(result_filepath)
+        d, meta = util.load_sdds_hdf5_file(result_filepath)
+    elif result_file_type == 'pgz':
+        d, meta = util.load_pgz_file(result_filepath)
     else:
         raise ValueError('"result_file_type" must be one of "hdf5", "h5", "pgz"')
 
     twi_ar = d['twi']['arrays']
     twi_sc = d['twi']['scalars']
+
+    meta_twi_ar = meta['twi']['arrays']
+    meta_twi_sc = meta['twi']['scalars']
+
+    # Print out scalar values
+    print('################################################################')
+    for k in sorted(list(twi_sc)):
+        if (print_scalars is not None) and (k not in print_scalars):
+            continue
+        v = twi_sc[k]
+        dtype = meta_twi_sc[k]['TYPE']
+        units = meta_twi_sc[k]['UNITS']
+        descr = meta_twi_sc[k]['DESCRIPTION']
+        if dtype == 'double':
+            print(f'{k} = {v:.9g} [{units}] ({descr})')
+        elif dtype == 'string':
+            print(f'{k} = {v} [{units}] ({descr})')
+        elif dtype == 'long':
+            print(f'{k} = {int(v):d} [{units}] ({descr})')
+        else:
+            raise ValueError((k, dtype, units))
+    print('################################################################')
+
 
     if slim is None:
         slim = [np.min(twi_ar['s']), np.max(twi_ar['s'])]

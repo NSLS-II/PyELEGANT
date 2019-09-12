@@ -70,10 +70,12 @@ def load_pgz_file(pgz_filepath):
 
     return out
 
-def robust_sdds_hdf5_write(output_filepath, sdds_dict, nMaxTry=10, sleep=10.0):
+def robust_sdds_hdf5_write(output_filepath, sdds_dict_list, nMaxTry=10, sleep=10.0):
     """"""
 
     success = False
+
+    output, meta = sdds_dict_list
 
     for iTry in range(nMaxTry):
         try:
@@ -83,12 +85,18 @@ def robust_sdds_hdf5_write(output_filepath, sdds_dict, nMaxTry=10, sleep=10.0):
                 time.sleep(sleep)
                 continue
         try:
-            for sdds_file_type, v1 in sdds_dict.items():
+            for sdds_file_type, v1 in output.items():
                 g1 = f.create_group(sdds_file_type)
+
                 if ('params' in v1) and (v1['params'] != {}):
                     g2 = g1.create_group('scalars')
                     for k2, v2 in v1['params'].items():
                         g2[k2] = v2
+
+                        m_d = meta[sdds_file_type]['params'][k2]
+                        for mk, mv in m_d.items():
+                            g2[k2].attrs[mk] = mv
+
                 if ('columns' in v1) and (v1['columns'] != {}):
                     g2 = g1.create_group('arrays')
                     for k2, v2 in v1['columns'].items():
@@ -101,6 +109,11 @@ def robust_sdds_hdf5_write(output_filepath, sdds_dict, nMaxTry=10, sleep=10.0):
                                 g2.create_dataset(k2, data=v2, compression='gzip')
                             except:
                                 g2[k2] = v2
+
+                        m_d = meta[sdds_file_type]['columns'][k2]
+                        for mk, mv in m_d.items():
+                            g2[k2].attrs[mk] = mv
+
 
             f.close()
 
@@ -122,40 +135,58 @@ def load_sdds_hdf5_file(hdf5_filepath):
     """"""
 
     d = {}
+    meta = {}
 
     f = h5py.File(hdf5_filepath, 'r')
     for sdds_file_type in f.keys():
         g1 = f[sdds_file_type]
 
         d2 = d[sdds_file_type] = {}
+        m2 = meta[sdds_file_type] = {}
 
         if 'scalars' in g1:
             g2 = g1['scalars']
             d3 = d2['scalars'] = {}
+            m3 = m2['scalars'] = {}
 
             for k2 in g2.keys():
                 if isinstance(g2[k2], h5py.Dataset):
                     d3[k2] = g2[k2][()]
                     if isinstance(d3[k2], bytes):
                         d3[k2] = d3[k2].decode('utf-8')
+
+                    m3[k2] = {}
+                    for mk, mv in g2[k2].attrs.items():
+                        m3[k2][mk] = mv
+
                 else:
                     for k3 in g2[k2].keys():
                         d3[f'{k2}/{k3}'] = g2[k2][k3][()]
                         if isinstance(d3[f'{k2}/{k3}'], bytes):
                             d3[f'{k2}/{k3}'] = d3[f'{k2}/{k3}'].decode('utf-8')
 
+                        m3[f'{k2}/{k3}'] = {}
+                        for mk, mv in g2[k2][k3].attrs.items():
+                            m3[f'{k2}/{k3}'][mk] = mv
+
         if 'arrays' in g1:
             g2 = g1['arrays']
             d3 = d2['arrays'] = {}
+            m3 = m2['arrays'] = {}
+
             for k2 in g2.keys():
                 d3[k2] = g2[k2][()]
 
                 if isinstance(d3[k2][0], bytes):
                     d3[k2] = np.array([b.decode('utf-8') for b in d3[k2]])
 
+                m3[k2] = {}
+                for mk, mv in g2[k2].attrs.items():
+                    m3[k2][mk] = mv
+
     f.close()
 
-    return d
+    return d, meta
 
 def get_abspath(filepath_in_ele_file, ele_filepath, rootname=None):
     """"""

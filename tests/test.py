@@ -9,15 +9,32 @@ import pyelegant as pe
 #p = Popen(['which','elegant'], stdout=PIPE, stderr=PIPE)
 #print(p.communicate())
 
-result_filepath, result_file_type = 'test.hdf5', 'hdf5'
-pe.plot_twiss(result_filepath, result_file_type, slim=None)
-pe.plot_twiss(result_filepath, result_file_type, slim=[25.0, 50.0], s0_m=0.0)
-pe.plot_twiss(result_filepath, result_file_type, slim=[25.0, 50.0], s0_m=25.0)
-pe.plot_twiss(result_filepath, result_file_type, slim=[25.0, 50.0], s0_m=25.0,
-              s_margin_m=3.0)
+if False:
+    from pyelegant.sdds import printout, query
 
-sys.exit(0)
+    out = query('tmpCalcTwi_s6sce2gb.twi', suppress_err_msg=False)
+    _, _ = printout('tmpCalcTwi_s6sce2gb.twi', param_name_list=None, column_name_list=None,
+             str_format='', show_output=False, show_cmd=True, suppress_err_msg=False)
 
+    sys.exit(0)
+
+
+if True:
+    if True:
+        result_filepath, result_file_type = 'test.hdf5', 'hdf5'
+    else:
+        result_filepath, result_file_type = 'test.pgz', 'pgz'
+
+    #pe.plot_twiss(result_filepath, result_file_type, slim=None)
+    pe.plot_twiss(result_filepath, result_file_type, slim=[25.0, 50.0], s0_m=0.0,
+                  print_scalars=None) # print all scalars
+    pe.plot_twiss(result_filepath, result_file_type, slim=[25.0, 50.0], s0_m=0.0,
+                  print_scalars=['ex0', 'Jx', 'nux', 'dnuy/dp'])
+    #pe.plot_twiss(result_filepath, result_file_type, slim=[25.0, 50.0], s0_m=25.0)
+    #pe.plot_twiss(result_filepath, result_file_type, slim=[25.0, 50.0], s0_m=25.0,
+                  #s_margin_m=3.0)
+
+    sys.exit(0)
 
 if False:
     output_filepath = 'test.hdf5'
@@ -37,7 +54,7 @@ higher_order_chromaticity = False
 ele_filepath = None
 twi_filepath = '%s.twi'
 rootname = None
-magnets = '%s.mag' #None
+magnets = None
 semaphore_file = None
 parameters = '%s.param' #None
 element_divisions = 0
