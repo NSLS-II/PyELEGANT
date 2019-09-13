@@ -19,7 +19,7 @@ if False:
     sys.exit(0)
 
 
-if True:
+if False:
     if True:
         result_filepath, result_file_type = 'test.hdf5', 'hdf5'
     else:
@@ -36,7 +36,7 @@ if True:
 
     sys.exit(0)
 
-if False:
+if True:
     output_filepath = 'test.hdf5'
     output_file_type = 'hdf5'
 else:
@@ -48,7 +48,7 @@ E_MeV = 3e3
 use_beamline = None
 #use_beamline = 'RING'
 radiation_integrals = True
-compute_driving_terms = False
+compute_driving_terms = True
 concat_order = 1
 higher_order_chromaticity = False
 ele_filepath = None
@@ -134,7 +134,7 @@ elif False:
         macros=macros, alter_elements_list=alter_elements_list,
         output_file_type=output_file_type, del_tmp_files=del_tmp_files,
         run_local=True)
-elif False:
+elif True:
     outupt_filepaths = pe.calc_line_twiss(
         output_filepath, LTE_filepath, E_MeV, betax0, betay0, alphax0=alphax0, alphay0=alphay0,
         etax0=etax0, etay0=etay0, etaxp0=etaxp0, etayp0=etayp0,

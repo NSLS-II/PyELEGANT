@@ -1,14 +1,6 @@
-#from __future__ import print_function, division, absolute_import
-#from __future__ import unicode_literals
-
 import os
 import time
 import gzip
-#try:
-    #from six.moves import cPickle as pickle
-#except:
-    #print('Package "six" could not be found.')
-    #import cPickle as pickle
 import pickle
 import h5py
 import numpy as np
