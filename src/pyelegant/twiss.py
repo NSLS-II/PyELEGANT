@@ -97,7 +97,7 @@ def _calc_twiss(
         ele_contents += elebuilder.build_block_alter_elements(alter_elements_list)
 
     ele_contents += elebuilder.build_block_twiss_output(
-        matched, twi_filepath=twi_filepath, radiation_integrals=radiation_integrals,
+        matched, filename=twi_filepath, radiation_integrals=radiation_integrals,
         compute_driving_terms=compute_driving_terms, concat_order=concat_order,
         higher_order_chromaticity=higher_order_chromaticity,
         beta_x=betax0, alpha_x=alphax0, eta_x=etax0, etap_x=etaxp0,
