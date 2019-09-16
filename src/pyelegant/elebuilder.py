@@ -1,4 +1,5 @@
 import re
+import numpy as np
 
 from . import util
 
@@ -286,9 +287,9 @@ for block_header, rest in re.findall(
     #print(block_header)
     ELE_BLOCK_INFO[block_header] = []
     #print(rest)
-    #print(re.findall(r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-,\{\}\s]+);', rest))
+    #print(re.findall(r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-,\{\}\s%]+);', rest))
     for dtype, key, default_val in re.findall(
-        r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-,\{\}\s]+);', rest):
+        r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-,\{\}\s%]+);', rest):
         ELE_BLOCK_INFO[block_header].append([key, dtype, default_val, None])
     #print('*********')
 #
@@ -306,11 +307,31 @@ keys = [v[0] for v in ELE_BLOCK_INFO['twiss_output']]
 ELE_BLOCK_INFO['twiss_output'][keys.index('filename')][3] = '%s.twi'
 keys = [v[0] for v in ELE_BLOCK_INFO['floor_coordinates']]
 ELE_BLOCK_INFO['floor_coordinates'][keys.index('filename')][3] = '%s.flr'
+keys = [v[0] for v in ELE_BLOCK_INFO['optimization_setup']]
+ELE_BLOCK_INFO['optimization_setup'][keys.index('term_log_file')][3] = '%s.tlog'
+ELE_BLOCK_INFO['optimization_setup'][keys.index('interrupt_file')][3] = '%s.interrupt'
+keys = [v[0] for v in ELE_BLOCK_INFO['parallel_optimization_setup']]
+ELE_BLOCK_INFO['parallel_optimization_setup'][keys.index('population_log')][3] = '%s.pop'
+ELE_BLOCK_INFO['parallel_optimization_setup'][keys.index('simplex_log')][3] = '%s.simlog'
 #
 # "&parallel_optimization_setup" also contains all the options for
 # "&optimization_setup" as well. So, add those options here.
 ELE_BLOCK_INFO['parallel_optimization_setup'] = \
     ELE_BLOCK_INFO['optimization_setup'][:] + ELE_BLOCK_INFO['parallel_optimization_setup']
+
+ELE_OUTPUT_FILEPATHS= dict(
+    run_setup=['output', 'centroid', 'sigma', 'final', 'acceptance', 'losses',
+               'magnets', 'semaphore_file', 'parameters'],
+    twiss_output=['filename'], floor_coordinates='filename',
+    optimization_setup=['log_file', 'term_log_file', 'interrupt_file'],
+    parallel_optimization_setup=['population_log', 'simplex_log'],
+    save_lattice=['filename'],
+)
+#
+# "&parallel_optimization_setup" also contains all the options for
+# "&optimization_setup" as well. So, add those here.
+ELE_OUTPUT_FILEPATHS['parallel_optimization_setup'] += \
+    ELE_OUTPUT_FILEPATHS['optimization_setup'][:]
 
 class EleContents():
     """"""
@@ -322,10 +343,20 @@ class EleContents():
 
         self.double_format = double_format
 
+        self.rootname = None
+        self.output_filepath_list = []
+        self.actual_output_filepath_list = []
+
     def clear(self):
         """"""
 
         self.text = ''
+
+        self.double_format = '.12g'
+
+        self.rootname = None
+        self.output_filepath_list = []
+        self.actual_output_filepath_list = []
 
     def write(self, output_ele_filepath, nMaxTry=10, sleep=10.0):
         """"""
@@ -366,6 +397,11 @@ class EleContents():
             i = keywords.index(k)
             if dtypes[i] == 'STRING':
                 block.append(f'{k} = "{v}"')
+                if (block_header in ELE_OUTPUT_FILEPATHS) and \
+                   (k in ELE_OUTPUT_FILEPATHS[block_header]):
+                    self.output_filepath_list.append(v)
+                if (block_header == 'run_setup') and (k == 'rootname'):
+                    self.rootname = v
             elif dtypes[i] == 'long':
                 block.append(f'{k} = {v:d}')
             elif dtypes[i] == 'double':
@@ -389,6 +425,22 @@ class EleContents():
 
         return block_str
 
+    def update_output_filepaths(self, ele_filepath_wo_ext):
+        """"""
+
+        if self.rootname is not None:
+            ele_filepath_wo_ext = self.rootname
+
+        self.actual_output_filepath_list = []
+        for template_fp in self.output_filepath_list:
+            if '%s' in template_fp:
+                self.actual_output_filepath_list.append(
+                    template_fp.replace('%s', ele_filepath_wo_ext))
+            else:
+                self.actual_output_filepath_list.append(template_fp)
+
+        self.actual_output_filepath_list = np.unique(
+            self.actual_output_filepath_list).tolist()
 
     def run_setup(self, **kwargs):
         """"""

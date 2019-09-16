@@ -105,6 +105,8 @@ def extract_slurm_opts(remote_opts):
 
     slurm_opts = {}
 
+    need_mail_user = False
+
     for k, v in remote_opts.items():
 
         if k in ('output', 'error', 'partition', 'time'):
@@ -121,18 +123,39 @@ def extract_slurm_opts(remote_opts):
             else:
                 slurm_opts[k] = '--{}={:d}'.format(k, v)
 
-        elif k in ('job_name',):
+        elif k in ('job_name', 'mail_user'):
 
             if v is None:
                 slurm_opts[k] = ''
             else:
                 slurm_opts[k] = '--{}={}'.format(k.replace('_', '-'), v)
 
+        elif k in ('mail_type_begin', 'mail_type_end'):
+
+            if (v is None) or (not v):
+                slurm_opts[k] = ''
+            else:
+                _type = k.split('_')[-1]
+                slurm_opts[k] = f'--mail-type={_type}'
+
+                need_mail_user = True
+
         elif k in ('nodelist', 'exclude'):
             if v is None:
                 slurm_opts[k] = ''
             else:
                 slurm_opts[k] = '--{}={}'.format(k, ','.join(v))
+
+        elif k in ('use_sbatch', 'pelegant',
+                   'sbatch_err_check_tree,'):
+            pass
+        else:
+            raise ValueError(f'Unknown slurm option keyword: {k}')
+
+    if need_mail_user:
+        if len([s for s in list(slurm_opts) if s == 'mail_user']) != 1:
+            raise ValueError('"mail_user" option must be specified when '
+                             '"mail_type_begin" or "mail_type_end" is True')
 
     return slurm_opts
 
@@ -209,7 +232,8 @@ def run(
         else:
             abort_info = None
 
-        if remote_opts['sbatch_err_check_tree'] == 'default':
+        if ('sbatch_err_check_tree' in remote_opts) and \
+           (remote_opts['sbatch_err_check_tree'] == 'default'):
             remote_opts['sbatch_err_check_tree'] = deepcopy(
                 DEFAULT_REMOTE_OPTS['sbatch_err_check_tree'])
 
@@ -224,29 +248,34 @@ def run(
             slurm_out_filepath, slurm_err_filepath = _sbatch(
                 sbatch_sh_filepath, job_name)
 
-            if remote_opts['sbatch_err_check_tree'] is None:
+            if 'sbatch_err_check_tree' not in remote_opts:
                 # Will NOT check whether Elegant/Pelegant finished its run
                 # without errors or not.
                 break
             else:
-                _update_sbatch_err_check_tree_kwargs(
-                    remote_opts['sbatch_err_check_tree'], output_filepaths,
-                    slurm_err_filepath, abort_info)
-
-                time.sleep(5.0)
-
-                flag = _sbatch_error_check(remote_opts['sbatch_err_check_tree'])
-
-                if flag == 'no_error':
+                if remote_opts['sbatch_err_check_tree'] is None:
+                    # Will NOT check whether Elegant/Pelegant finished its run
+                    # without errors or not.
                     break
-                elif flag == 'retry':
-                    time.sleep(10.0)
-                    continue
-                elif flag == 'abort':
-                    raise RuntimeError(
-                        'Unrecoverable error occurred or abort requested. Aborting.')
                 else:
-                    raise ValueError('Unexpected flag: {}'.format(flag))
+                    _update_sbatch_err_check_tree_kwargs(
+                        remote_opts['sbatch_err_check_tree'], output_filepaths,
+                        slurm_err_filepath, abort_info)
+
+                    time.sleep(5.0)
+
+                    flag = _sbatch_error_check(remote_opts['sbatch_err_check_tree'])
+
+                    if flag == 'no_error':
+                        break
+                    elif flag == 'retry':
+                        time.sleep(10.0)
+                        continue
+                    elif flag == 'abort':
+                        raise RuntimeError(
+                            'Unrecoverable error occurred or abort requested. Aborting.')
+                    else:
+                        raise ValueError('Unexpected flag: {}'.format(flag))
 
         try:
             os.remove(sbatch_sh_filepath)

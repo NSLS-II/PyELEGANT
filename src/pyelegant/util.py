@@ -92,7 +92,9 @@ def robust_sdds_hdf5_write(output_filepath, sdds_dict_list, nMaxTry=10, sleep=10
                 if ('columns' in v1) and (v1['columns'] != {}):
                     g2 = g1.create_group('arrays')
                     for k2, v2 in v1['columns'].items():
-                        if isinstance(v2[0], str):
+                        if v2.size == 0:
+                            g2[k2] = []
+                        elif isinstance(v2[0], str):
                             g2.create_dataset(
                                 k2, data=[u.encode('utf-8') for u in v2],
                                 compression='gzip')

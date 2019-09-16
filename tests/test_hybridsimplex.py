@@ -1,9 +1,18 @@
+# Based on nsls2cb/20190315_Pelegant/cbiiMatch04.ele
+
+import os
+import glob
+
 from pyelegant import elebuilder
+from pyelegant import remote
+from pyelegant import sdds
+from pyelegant import util
 
 eb = elebuilder.EleContents(double_format='.12g')
 
 eb.run_setup(
     lattice = 'lattice3.lte', p_central_mev = 3e3,
+    use_beamline='ring',
     semaphore_file = '%s.done', parameters = '%s.param', default_order = 2
 )
 
@@ -63,7 +72,8 @@ eb.parallel_optimization_setup(
     mode = 'minimize', method = 'hybridsimplex',
     hybrid_simplex_comparison_interval = 100,
     target = 1e-6, tolerance = 1e-14,
-    n_passes = 3, n_evaluations = 1500, n_restarts = 10,
+    #n_passes = 3, n_evaluations = 1500, n_restarts = 10,
+    n_passes = 3, n_evaluations = 100, n_restarts = 1,
     verbose = 0, log_file = '/dev/tty',
     output_sparsing_factor = 100,
     term_log_file = '%s.tlog',
@@ -101,17 +111,13 @@ eb.optimization_variable(
     name = 'QF2', item = 'ANGLE',
     lower_limit=-0.01, upper_limit=0.03, step_size=1e-5
 )
-eb.optimization_variable(
-    name = 'QF3', item = 'ANGLE',
-    lower_limit=-0.01, upper_limit=0.03, step_size=1e-5
-)
 
 eb.newline()
 
 eb.comment('! Set QF4 angle so that the total per cell is 6 degrees')
 eb.optimization_covariable(
     name = 'QF4', item = 'ANGLE',
-    equation = '6 dtor B1QDH.ANGLE 2 * - B2QDH.ANGLE 2 * - B3QDH.ANGLE 2 * - B4QDH.ANGLE 2 * - QF1.ANGLE - QF2.ANGLE - QF3.ANGLE -'
+    equation = '6 dtor B1QDH.ANGLE 2 * - B2QDH.ANGLE 2 * - B3QDH.ANGLE 2 * - B4QDH.ANGLE 2 * - QF1.ANGLE - QF2.ANGLE -'
 )
 
 eb.newline()
@@ -288,7 +294,8 @@ eb.comment("!  Evaluate the results of optimization")
 eb.newline()
 
 eb.run_setup(
-    lattice = 'test_s_1226758685.lte',
+    lattice = 'lattice3.lte',
+    use_beamline='ring',
     # ^ Note that here I am using the full ring, not 2 ring cells
     p_central_mev = 3e3,
     semaphore_file = '%s.done',
@@ -316,4 +323,73 @@ eb.newline()
 
 eb.save_lattice(filename = '%s.newlte')
 
-eb.write('test_hybridsimplex.ele')
+ele_filepath = 'test_hybridsimplex.ele'
+eb.write(ele_filepath)
+
+eb.update_output_filepaths(ele_filepath.replace('.ele', ''))
+output_filepath_list = eb.actual_output_filepath_list
+
+
+# Run Pelegant
+remote_opts = dict(
+    use_sbatch=True, pelegant=True,
+    job_name='job', partition='normal', ntasks=50,
+    mail_type_begin=True, mail_type_end=True, mail_user='yhidaka@bnl.gov',
+)
+remote.run(remote_opts, ele_filepath)
+
+# Consolidate data in the generated SDDS files
+output, meta = {}, {}
+for sdds_fp in output_filepath_list:
+    ext = sdds_fp.split('.')[-1]
+    try:
+        output[ext], meta[ext] = sdds.sdds2dicts(sdds_fp)
+    except:
+        continue
+
+# Save results into a HDF5 file
+output_filepath = 'results.hdf5'
+util.robust_sdds_hdf5_write(
+    output_filepath, [output, meta], nMaxTry=10, sleep=10.0)
+
+# Save the dictionaries into a gzipped pickle file
+output_filepath = 'results.pgz'
+mod_output = {}
+for k, v in output.items():
+    mod_output[k] = {}
+    if 'params' in v:
+        mod_output[k]['scalars'] = v['params']
+    if 'columns' in v:
+        mod_output[k]['arrays'] = v['columns']
+mod_meta = {}
+for k, v in meta.items():
+    mod_meta[k] = {}
+    if 'params' in v:
+        mod_meta[k]['scalars'] = v['params']
+    if 'columns' in v:
+        mod_meta[k]['arrays'] = v['columns']
+util.robust_pgz_file_write(
+    output_filepath, [mod_output, mod_meta], nMaxTry=10, sleep=10.0)
+
+# Delete the raw SDDS files
+if True:
+    for fp in output_filepath_list:
+        if fp.startswith('/dev'):
+            continue
+
+        if fp.endswith('.simlog'):
+            fp_list = glob.glob(fp + '-*')
+            for sub_fp in fp_list:
+                try:
+                    os.remove(sub_fp)
+                except:
+                    print(f'Failed to delete "{sub_fp}"')
+
+        elif fp.startswith('/dev'):
+            continue
+
+        else:
+            try:
+                os.remove(fp)
+            except:
+                print(f'Failed to delete "{fp}"')

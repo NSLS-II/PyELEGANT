@@ -139,25 +139,26 @@ def _calc_twiss(
     output, meta = {}, {}
     for k, v in tmp_filepaths.items():
         try:
-            meta_params, meta_columns = sdds.query(v, suppress_err_msg=True)
-            params, columns = sdds.printout(
-                v, param_name_list=None, column_name_list=None,
-                str_format='', show_output=False, show_cmd=False,
-                suppress_err_msg=True)
+            #meta_params, meta_columns = sdds.query(v, suppress_err_msg=True)
+            #params, columns = sdds.printout(
+                #v, param_name_list=None, column_name_list=None,
+                #str_format='', show_output=False, show_cmd=False,
+                #suppress_err_msg=True)
 
-            meta[k] = {}
-            if meta_params != {}:
-                meta[k]['params'] = meta_params
-            if meta_columns != {}:
-                meta[k]['columns'] = meta_columns
+            #meta[k] = {}
+            #if meta_params != {}:
+                #meta[k]['params'] = meta_params
+            #if meta_columns != {}:
+                #meta[k]['columns'] = meta_columns
 
-            output[k] = {}
-            if params != {}:
-                output[k]['params'] = params
-            if columns != {}:
-                for _k, _v in columns.items():
-                    columns[_k] = np.array(_v)
-                output[k]['columns'] = columns
+            #output[k] = {}
+            #if params != {}:
+                #output[k]['params'] = params
+            #if columns != {}:
+                #for _k, _v in columns.items():
+                    #columns[_k] = np.array(_v)
+                #output[k]['columns'] = columns
+            output[k], meta[k] = sdds.sdds2dicts(v)
         except:
             continue
 

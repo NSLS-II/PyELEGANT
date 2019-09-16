@@ -282,3 +282,30 @@ def printout(sdds_filepath, param_name_list=None,
             print(error)
 
     return param_dict, column_dict
+
+def sdds2dicts(sdds_filepath):
+    """"""
+
+    output, meta = {}, {}
+
+    meta_params, meta_columns = query(sdds_filepath, suppress_err_msg=True)
+    params, columns = printout(
+        sdds_filepath, param_name_list=None, column_name_list=None,
+        str_format='', show_output=False, show_cmd=False,
+        suppress_err_msg=True)
+
+    meta = {}
+    if meta_params != {}:
+        meta['params'] = meta_params
+    if meta_columns != {}:
+        meta['columns'] = meta_columns
+
+    output = {}
+    if params != {}:
+        output['params'] = params
+    if columns != {}:
+        for _k, _v in columns.items():
+            columns[_k] = np.array(_v)
+        output['columns'] = columns
+
+    return output, meta
