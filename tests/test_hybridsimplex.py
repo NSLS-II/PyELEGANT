@@ -336,12 +336,16 @@ show_progress_plot = True
 if not show_progress_plot: # If you don't care to see the progress of the optimization
 
     # Run Pelegant
+    #
+    # Minimal options
+    #    remote_opts = dict(pelegant=True, ntasks=50)
     remote_opts = dict(
         use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
         job_name='job', partition='normal', ntasks=50,
         #mail_type_begin=True,
-        #mail_type_end=True, mail_user='yhidaka@bnl.gov',
+        mail_type_end=True, mail_user='yhidaka@bnl.gov',
     )
+
     remote.run(remote_opts, ele_filepath)
     # ^ This will block until the optimization is completed.
 
