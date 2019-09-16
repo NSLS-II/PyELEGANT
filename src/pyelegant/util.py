@@ -115,6 +115,9 @@ def robust_sdds_hdf5_write(output_filepath, sdds_dict_list, nMaxTry=10, sleep=10
             break
 
         except:
+
+            raise
+
             try:
                 f.close()
             except:

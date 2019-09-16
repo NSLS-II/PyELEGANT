@@ -1,5 +1,6 @@
 # Based on nsls2cb/20190315_Pelegant/cbiiMatch04.ele
 
+import sys
 import os
 import glob
 
@@ -81,7 +82,8 @@ eb.parallel_optimization_setup(
     simplex_log = '%s.simlog',
     #!! Depending on your filesystem, you may want to
     #!! increase this in order to improve performance
-    simplex_log_interval = 10,
+    #simplex_log_interval = 10,
+    simplex_log_interval = 50,
 )
 
 eb.newline()
@@ -289,7 +291,7 @@ eb.optimize()
 
 eb.newline()
 
-eb.comment("!  Evaluate the results of optimization")
+eb.comment("! Evaluate the results of optimization")
 
 eb.newline()
 
@@ -329,31 +331,69 @@ eb.write(ele_filepath)
 eb.update_output_filepaths(ele_filepath.replace('.ele', ''))
 output_filepath_list = eb.actual_output_filepath_list
 
+show_progress_plot = True
 
-# Run Pelegant
-remote_opts = dict(
-    use_sbatch=True, exit_right_after_sbatch=True, pelegant=True,
-    job_name='job', partition='normal', ntasks=50,
-    mail_type_begin=True, mail_type_end=True, mail_user='yhidaka@bnl.gov',
-)
-job_info = remote.run(remote_opts, ele_filepath)
+if not show_progress_plot: # If you don't care to see the progress of the optimization
 
+    # Run Pelegant
+    remote_opts = dict(
+        use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
+        job_name='job', partition='normal', ntasks=50,
+        #mail_type_begin=True,
+        #mail_type_end=True, mail_user='yhidaka@bnl.gov',
+    )
+    remote.run(remote_opts, ele_filepath)
+    # ^ This will block until the optimization is completed.
+
+else: # If you want to see the progress of the optimization
+
+    # Run Pelegant
+    remote_opts = dict(
+        use_sbatch=True, exit_right_after_sbatch=True, pelegant=True,
+        job_name='job', partition='normal', ntasks=50,
+        #mail_type_begin=True,
+        #mail_type_end=True, mail_user='yhidaka@bnl.gov',
+    )
+    job_info = remote.run(remote_opts, ele_filepath)
+
+    # Start plotting simplex optimization progress
+    remote.monitor_simplex_log_progress(job_info['job_ID_str'],
+                                        ele_filepath.replace('.ele', '.simlog'))
+
+    try:
+        os.remove(job_info['sbatch_sh_filepath'])
+    except IOError:
+        print('* Failed to delete temporary sbatch shell file "{}"'.format(
+            job_info['sbatch_sh_filepath']))
 
 # Consolidate data in the generated SDDS files
+print('Consolidating SDDS data files...')
+sys.stdout.flush()
 output, meta = {}, {}
 for sdds_fp in output_filepath_list:
+    if sdds_fp.startswith('/dev/'):
+        continue
+    print('Processing "{}"...'.format(sdds_fp))
     ext = sdds_fp.split('.')[-1]
     try:
         output[ext], meta[ext] = sdds.sdds2dicts(sdds_fp)
     except:
         continue
+print('Finished.')
+sys.stdout.flush()
 
 # Save results into a HDF5 file
+print('Writing data to HDF5 file...')
+sys.stdout.flush()
 output_filepath = 'results.hdf5'
 util.robust_sdds_hdf5_write(
     output_filepath, [output, meta], nMaxTry=10, sleep=10.0)
+print('Finished.')
+sys.stdout.flush()
 
 # Save the dictionaries into a gzipped pickle file
+print('Writing data to pgz file...')
+sys.stdout.flush()
 output_filepath = 'results.pgz'
 mod_output = {}
 for k, v in output.items():
@@ -371,6 +411,8 @@ for k, v in meta.items():
         mod_meta[k]['arrays'] = v['columns']
 util.robust_pgz_file_write(
     output_filepath, [mod_output, mod_meta], nMaxTry=10, sleep=10.0)
+print('Finished.')
+sys.stdout.flush()
 
 # Delete the raw SDDS files
 if True:

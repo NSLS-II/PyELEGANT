@@ -8,6 +8,7 @@ import datetime
 from copy import deepcopy
 from subprocess import Popen, PIPE
 import tempfile
+import glob
 
 try:
     from mpi4py import MPI
@@ -146,7 +147,7 @@ def extract_slurm_opts(remote_opts):
             else:
                 slurm_opts[k] = '--{}={}'.format(k, ','.join(v))
 
-        elif k in ('use_sbatch', 'pelegant',
+        elif k in ('use_sbatch', 'exit_right_after_sbatch', 'pelegant',
                    'sbatch_err_check_tree',):
             pass
         else:
@@ -258,7 +259,8 @@ def run(
 
             if exit_right_after_sbatch:
                 output = dict(
-                    job_ID_str=job_ID_str, slurm_out_filepath=slurm_out_filepath,
+                    sbatch_sh_filepath=sbatch_sh_filepath, job_ID_str=job_ID_str,
+                    slurm_out_filepath=slurm_out_filepath,
                     slurm_err_filepath=slurm_err_filepath)
                 return output
 
@@ -700,3 +702,76 @@ def get_cluster_time_limits():
         timelimit_d[partition] = sec
 
     return timelimit_d
+
+def monitor_simplex_log_progress(job_ID_str, simplex_log_prefix):
+    """"""
+
+    tmp = tempfile.NamedTemporaryFile(
+        dir=os.getcwd(), delete=True, prefix='tmpSbatchSddsplot_')
+    job_name = os.path.basename(tmp.name)
+    tmp.close()
+
+    #'$ srun --x11 sddsplot "-device=motif,-movie true -keep 1" -repeat -column=Step,best* $1.simlog-* -graph=line,vary -mode=y=autolog'
+    srun_cmd = (
+        f'srun --x11 --job-name={job_name} sddsplot "-device=motif,-movie true -keep 1" '
+        f'-repeat -column=Step,best* {simplex_log_prefix}-* -graph=line,vary '
+        '-mode=y=autolog')
+
+    # Wait until first ".simlog" files appear. If the sddsplot command is
+    # issued before any file appears, it will crash.
+    for _ in range(10):
+        simlog_list = glob.glob(f'{simplex_log_prefix}-*')
+        if len(simlog_list) != 0:
+            break
+        else:
+            time.sleep(5.0)
+
+    # Launch sddsplot
+    p_sddsplot = Popen(srun_cmd, shell=True, stdout=PIPE, stderr=PIPE)
+
+    # Get the launched job ID
+    for _ in range(10):
+        p = Popen('squeue -o "%.12i %.50j"', stdout=PIPE, stderr=PIPE, shell=True)
+        out, err = p.communicate()
+        out = out.decode('utf-8')
+        err = err.decode('utf-8')
+
+        if err:
+            err_counter += 1
+
+            if err_counter >= 10:
+                print(err)
+                raise RuntimeError('Encountered error while waiting for job completion')
+            else:
+                print(err)
+                sys.stdout.flush()
+                time.sleep(10.0)
+                continue
+
+        else:
+            err_counter = 0
+
+        job_ID_res_list = [
+            L.split() for L in out.split('\n')[1:] if L.strip() != '']
+        job_ID_list, job_name_list = zip(*job_ID_res_list)
+
+        if job_name not in job_name_list:
+            time.sleep(5.0)
+            continue
+
+        index = job_name_list.index(job_name)
+        sddsplot_job_ID_str = job_ID_list[index]
+
+        break
+
+    status_check_interval = 5.0
+    wait_for_completion(job_ID_str, status_check_interval)
+
+    # Kill the sddsplot job
+    try:
+        p = Popen(['scancel', sddsplot_job_ID_str], stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        out = out.decode('utf-8')
+        err = err.decode('utf-8')
+    except:
+        pass
