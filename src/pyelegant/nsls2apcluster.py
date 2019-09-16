@@ -78,7 +78,7 @@ srun --mpi=pmi2 Pelegant {ele_filepath}
 '''
 
 DEFAULT_REMOTE_OPTS = dict(
-    use_sbatch=False, pelegant=False,
+    use_sbatch=False, exit_right_after_sbatch=False, pelegant=False,
     # -------------
     # SLURM options
     job_name='job', output='job.%J.out', error='job.%J.err',
@@ -147,7 +147,7 @@ def extract_slurm_opts(remote_opts):
                 slurm_opts[k] = '--{}={}'.format(k, ','.join(v))
 
         elif k in ('use_sbatch', 'pelegant',
-                   'sbatch_err_check_tree,'):
+                   'sbatch_err_check_tree',):
             pass
         else:
             raise ValueError(f'Unknown slurm option keyword: {k}')
@@ -160,8 +160,7 @@ def extract_slurm_opts(remote_opts):
     return slurm_opts
 
 def write_sbatch_shell_file(
-    sbatch_sh_filepath, slurm_opts, ele_filepath, use_pelegant, macros=None,
-    nMaxTry=10, sleep=10.0):
+    sbatch_sh_filepath, slurm_opts, srun_cmd, nMaxTry=10, sleep=10.0):
     """"""
 
     # CRITICAL: The line "#!/bin/bash" must come on the first line, not the second or later.
@@ -178,18 +177,7 @@ def write_sbatch_shell_file(
 
     contents += [' ']
 
-    if macros is None:
-        macro_str = ''
-    else:
-        macro_str_list = []
-        for k, v in macros.items():
-            macro_str_list.append('='.join([k, v]))
-        macro_str = '-macro=' + ','.join(macro_str_list)
-
-    if use_pelegant:
-        contents += ['srun --mpi=pmi2 Pelegant {} {}'.format(ele_filepath, macro_str)]
-    else:
-        contents += ['srun elegant {} {}'.format(ele_filepath, macro_str)]
+    contents += [srun_cmd]
 
     contents += [' ']
 
@@ -205,6 +193,8 @@ def run(
         remote_opts = deepcopy(DEFAULT_REMOTE_OPTS)
 
     slurm_opts = extract_slurm_opts(remote_opts)
+
+    output = None
 
     if remote_opts['use_sbatch']:
 
@@ -222,9 +212,22 @@ def run(
             dir=os.getcwd(), delete=False, prefix='tmpSbatch_', suffix='.sh')
         sbatch_sh_filepath = os.path.abspath(tmp.name)
 
+        if macros is None:
+            macro_str = ''
+        else:
+            macro_str_list = []
+            for k, v in macros.items():
+                macro_str_list.append('='.join([k, v]))
+            macro_str = '-macro=' + ','.join(macro_str_list)
+
+        if remote_opts['pelegant']:
+            srun_cmd = 'srun --mpi=pmi2 Pelegant {} {}'.format(ele_filepath, macro_str)
+        else:
+            srun_cmd = 'srun elegant {} {}'.format(ele_filepath, macro_str)
+
         write_sbatch_shell_file(
-            sbatch_sh_filepath, slurm_opts, ele_filepath, remote_opts['pelegant'],
-            macros=macros, nMaxTry=10, sleep=10.0)
+            sbatch_sh_filepath, slurm_opts, srun_cmd, #ele_filepath, remote_opts['pelegant'], macros=macros,
+            nMaxTry=10, sleep=10.0)
 
         if 'abort_filepath' in remote_opts:
             abort_info = dict(filepath=remote_opts['abort_filepath'],
@@ -245,8 +248,19 @@ def run(
                 print('\n\n*** Immediate abort requested. Aborting now.')
                 raise RuntimeError('Abort requested.')
 
-            slurm_out_filepath, slurm_err_filepath = _sbatch(
-                sbatch_sh_filepath, job_name)
+            exit_right_after_sbatch = (
+                remote_opts['exit_right_after_sbatch']
+                if 'exit_right_after_sbatch' in remote_opts else False)
+
+            job_ID_str, slurm_out_filepath, slurm_err_filepath = _sbatch(
+                sbatch_sh_filepath, job_name,
+                exit_right_after_submission=exit_right_after_sbatch)
+
+            if exit_right_after_sbatch:
+                output = dict(
+                    job_ID_str=job_ID_str, slurm_out_filepath=slurm_out_filepath,
+                    slurm_err_filepath=slurm_err_filepath)
+                return output
 
             if 'sbatch_err_check_tree' not in remote_opts:
                 # Will NOT check whether Elegant/Pelegant finished its run
@@ -313,7 +327,9 @@ def run(
             print('ERROR:')
             print(err)
 
-def _sbatch(sbatch_sh_filepath, job_name):
+    return output
+
+def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False):
     """"""
 
     mpi_rank_header = get_mpi_rank_header()
@@ -342,22 +358,24 @@ def _sbatch(sbatch_sh_filepath, job_name):
 
     sys.stdout.flush()
 
-    status_check_interval = 5.0 #10.0
+    if not exit_right_after_submission:
 
-    err_log_check = dict(
-        interval=60.0, func=check_unable_to_open_mode_w_File_exists,
-        job_name=job_name)
+        status_check_interval = 5.0 #10.0
 
-    used_nodes = wait_for_completion(
-        job_ID_str, status_check_interval, err_log_check=err_log_check)
-    #print('Used Nodes: {0}'.format(used_nodes))
+        err_log_check = dict(
+            interval=60.0, func=check_unable_to_open_mode_w_File_exists,
+            job_name=job_name)
+
+        used_nodes = wait_for_completion(
+            job_ID_str, status_check_interval, err_log_check=err_log_check)
+        #print('Used Nodes: {0}'.format(used_nodes))
 
     slurm_out_filepath = '{job_name}.{job_ID_str}.out'.format(
         job_name=job_name, job_ID_str=job_ID_str)
     slurm_err_filepath = '{job_name}.{job_ID_str}.err'.format(
         job_name=job_name, job_ID_str=job_ID_str)
 
-    return slurm_out_filepath, slurm_err_filepath
+    return job_ID_str, slurm_out_filepath, slurm_err_filepath
 
 def _update_sbatch_err_check_tree_kwargs(
     check_tree, output_filepaths_in_ele, slurm_err_filepath, abort_info):

@@ -332,11 +332,12 @@ output_filepath_list = eb.actual_output_filepath_list
 
 # Run Pelegant
 remote_opts = dict(
-    use_sbatch=True, pelegant=True,
+    use_sbatch=True, exit_right_after_sbatch=True, pelegant=True,
     job_name='job', partition='normal', ntasks=50,
     mail_type_begin=True, mail_type_end=True, mail_user='yhidaka@bnl.gov',
 )
-remote.run(remote_opts, ele_filepath)
+job_info = remote.run(remote_opts, ele_filepath)
+
 
 # Consolidate data in the generated SDDS files
 output, meta = {}, {}
