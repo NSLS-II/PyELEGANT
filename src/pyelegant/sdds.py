@@ -30,11 +30,12 @@ def str2num(string):
 def query(sdds_filepath, suppress_err_msg=False):
     """"""
 
-    p = Popen(['sddsquery', sdds_filepath], stdout=PIPE, stderr=PIPE)
+    p = Popen(['sddsquery', sdds_filepath], stdout=PIPE, stderr=PIPE,
+              encoding='utf-8')
     output, error = p.communicate()
-    if isinstance(output, bytes):
-        output = output.decode('utf-8')
-        error = error.decode('utf-8')
+    #if isinstance(output, bytes):
+        #output = output.decode('utf-8')
+        #error = error.decode('utf-8')
     if error and (not suppress_err_msg):
         print('sddsquery stderr:', error)
         print('sddsquery stdout:', output)
@@ -68,12 +69,13 @@ def query(sdds_filepath, suppress_err_msg=False):
         m = re.search(r'(?<='+param_header+r')[\w\W]+', output)
         param_str_list = m.group(0).split('\n')[2:(2+nParams)]
         symbol_unit_pattern = r'[\w\$\(\)/]+'
-        for s in param_str_list:
+        for index, s in enumerate(param_str_list):
             ss = re.search(
                 r'([\w/]+) +({0:s}) +({0:s}) +(\w+) +(.+)'.format(
                     symbol_unit_pattern), s).groups()
             param_dict[ss[0]] = {'UNITS': ss[1], 'SYMBOL': ss[2], 'TYPE': ss[3],
-                                 'DESCRIPTION': ss[4]}
+                                 'DESCRIPTION': ss[4],
+                                 '_index': index}
 
     # deal with the special cases
     if 'enx0' in param_dict:
@@ -105,7 +107,7 @@ def printout(sdds_filepath, param_name_list=None,
 
     _, column_info_dict = query(sdds_filepath, suppress_err_msg=suppress_err_msg)
     if column_name_list is None:
-        column_name_list = list(column_info_dict.keys())
+        column_name_list = list(column_info_dict)
 
     if column_name_list == []:
         column_option_str = ''
@@ -116,7 +118,7 @@ def printout(sdds_filepath, param_name_list=None,
 
     if param_name_list is None:
         param_info_dict, _ = query(sdds_filepath, suppress_err_msg=suppress_err_msg)
-        param_name_list = list(param_info_dict.keys())
+        param_name_list = list(param_info_dict)
 
     if param_name_list == []:
         param_option_str = ''
@@ -139,22 +141,22 @@ def printout(sdds_filepath, param_name_list=None,
 
     if show_cmd:
         print(cmd_list)
-    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE)
+    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8')
     output, error = p.communicate()
-    if isinstance(output, bytes):
-        output = output.decode('utf-8')
-        error = error.decode('utf-8')
+    #if isinstance(output, bytes):
+        #output = output.decode('utf-8')
+        #error = error.decode('utf-8')
     if error and (not suppress_err_msg):
         print('sddsprintout stderr:', error)
         print('sddsprintout stdout:', output)
-
-    eq_pattern = ' = '
-    eq_ind =  strfind(output, eq_pattern)
 
     if (param_name_list == []): # or (param_name_list is None):
         param_dict = {}
     else:
         if False: # old version
+            eq_pattern = ' = '
+            eq_ind =  strfind(output, eq_pattern)
+
             param_name_ind = [[] for i in param_name_list]
             for i,n in enumerate(param_name_list):
                 param_name_ind[i] = strfind(output,newline_char+n+' ')
@@ -187,7 +189,7 @@ def printout(sdds_filepath, param_name_list=None,
             param_dict = {}
             for k, v_str in re.findall(
                 #'([\w /\(\)\$]+)[ ]+=[ ]+([nae\d\.\+\-]+)[ \n]?',
-                '([\w /\(\)\$]+)[ ]+=[ ]+([naife\d\.\+\-]+)[ \n]?',
+                '([\w /\(\)\$]+)[ ]*=[ ]*([naife\d\.\+\-]+)[ \n]?',
                 output):
                 # ^ [n] & [a] is added for digit matching in cases for "nan"
                 #   [i] & [f] is added for digit matching in cases for "inf"
@@ -204,6 +206,41 @@ def printout(sdds_filepath, param_name_list=None,
 
                 param_dict[k_stripped] = float(v_str)
 
+            # Extract string types
+            if 'string' in [q_d['TYPE'] for q_d in param_info_dict.values()]:
+
+                ordered_param_name_list = [None] * len(param_name_list)
+                for param_name, q_d in param_info_dict.items():
+                    ordered_param_name_list[q_d['_index']] = param_name
+
+                for param_name, q_d in param_info_dict.items():
+
+                    if q_d['TYPE'] != 'string':
+                        continue
+
+                    _extracted = re.findall(f'{param_name}[ ]*=[ ]*(.+)[=\n]', output)
+                    assert len(_extracted) == 1
+                    val = _extracted[0].split('=')[0].strip()
+
+                    try:
+                        next_param_name = ordered_param_name_list[
+                            ordered_param_name_list.index(param_name)+1]
+                        val = val.replace(next_param_name, '').strip()
+                    except IndexError:
+                        pass
+
+                    #print([param_name, val])
+                    param_dict[param_name] = val
+
+    # Check if all the specified parameters have been correctly extracted
+    _extracted_param_names = list(param_dict)
+    for name in param_name_list:
+        if name not in _extracted_param_names:
+            print(f'* ERROR: Paramter "{name}" was not extracted')
+    for name in _extracted_param_names:
+        if name not in param_name_list:
+            print(f'* WARNING: Unrequested Parameter "{name}" was extracted')
+
     cmd_list = ['sddsprintout', sdds_filepath]
     if column_option_str:
         cmd_list.append(column_option_str)
@@ -215,11 +252,11 @@ def printout(sdds_filepath, param_name_list=None,
 
     if show_cmd:
         print(cmd_list)
-    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE)
+    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8')
     output, error = p.communicate()
-    if isinstance(output, bytes):
-        output = output.decode('utf-8')
-        error = error.decode('utf-8')
+    #if isinstance(output, bytes):
+        #output = output.decode('utf-8')
+        #error = error.decode('utf-8')
     if error and (not suppress_err_msg):
         print('sddsprintout stderr:', error)
         print('sddsprintout stdout:', output)
@@ -275,6 +312,16 @@ def printout(sdds_filepath, param_name_list=None,
             for col_name in column_name_list:
                 if column_info_dict[col_name]['TYPE'] == 'double':
                     column_dict[col_name] = str2num(column_dict[col_name])
+
+    # Check if all the specified columns have been correctly extracted
+    _extracted_column_names = list(column_dict)
+    for name in column_name_list:
+        if name not in _extracted_column_names:
+            print(f'* ERROR: Column "{name}" was not extracted')
+    for name in _extracted_column_names:
+        if name not in column_name_list:
+            print(f'* WARNING: Unrequested Column "{name}" was extracted')
+
 
     if show_output:
         print(output)
