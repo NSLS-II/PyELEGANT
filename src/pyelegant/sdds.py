@@ -204,7 +204,15 @@ def printout(sdds_filepath, param_name_list=None,
                 # non-digit values as characters, remove those here.
                 k_stripped = k_stripped.split()[-1]
 
-                param_dict[k_stripped] = float(v_str)
+                if param_info_dict[k_stripped]['TYPE'] == 'double':
+                    param_dict[k_stripped] = float(v_str)
+                elif param_info_dict[k_stripped]['TYPE'] == 'long':
+                    param_dict[k_stripped] = int(v_str)
+                elif param_info_dict[k_stripped]['TYPE'] == 'string':
+                    pass
+                else:
+                    raise ValueError(
+                        f'Unexpected TYPE: {param_info_dict[k_stripped]["TYPE"]}')
 
             # Extract string types
             if 'string' in [q_d['TYPE'] for q_d in param_info_dict.values()]:
