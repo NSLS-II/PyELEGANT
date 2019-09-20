@@ -1,8 +1,9 @@
 import os, sys
-import os.path as osp
 from subprocess import Popen, PIPE
 import re
 import numpy as np
+import tempfile
+import shlex
 
 #----------------------------------------------------------------------
 def strfind(string, pattern):
@@ -364,3 +365,173 @@ def sdds2dicts(sdds_filepath):
         output['columns'] = columns
 
     return output, meta
+
+def dicts2sdds(
+    sdds_output_filepath, params=None, columns=None, outputMode='ascii',
+    suppress_err_msg=True):
+    """"""
+
+    tmp = tempfile.NamedTemporaryFile(
+        dir=os.getcwd(), delete=False, prefix='tmpDicts2sdds_', suffix='.txt')
+    plaindata_txt_filepath = os.path.abspath(tmp.name)
+
+    lines = []
+
+    if params is None:
+
+        param_name_list = []
+        param_type_list = []
+
+    else:
+
+        param_name_list = list(params)
+
+        param_type_list = []
+
+        for name in param_name_list:
+            v = params[name]
+            if isinstance(v, float):
+                s = f'{v:.16g}'
+                param_type_list.append('double')
+            elif isinstance(v, int):
+                s = f'{v:d}'
+                param_type_list.append('long')
+            elif isinstance(v, str):
+                s = f'"{v}"'
+                param_type_list.append('string')
+            else:
+                raise ValueError(f'Unexpected data type for paramter "{name}"')
+
+            lines.append(s)
+
+    if columns is None:
+
+        column_name_list = []
+        column_type_list = []
+
+    else:
+
+        column_name_list = list(columns)
+
+        column_type_list = []
+
+        nCols = len(column_name_list)
+
+        # Write the number of rows
+        nRows = np.unique([len(columns[name]) for name in column_name_list])
+        if len(nRows) == 1:
+            nRows = nRows[0]
+        else:
+            raise ValueError('All the column data must have the same length')
+        #
+        lines.append(f'\t{nRows:d}')
+
+        M = zip(*[columns[name] for name in column_name_list])
+
+        for iRow, row in enumerate(M):
+            tokens = []
+            for iCol, v in enumerate(row):
+                if isinstance(v, float):
+                    s = f'{v:.16g}'
+                    if iRow != 0:
+                        assert column_type_list[iCol] == 'double'
+                    else:
+                        column_type_list.append('double')
+                elif isinstance(v, int):
+                    s = f'{v:d}'
+                    if iRow != 0:
+                        assert column_type_list[iCol] == 'long'
+                    else:
+                        column_type_list.append('long')
+                elif isinstance(v, str):
+                    s = f'"{v}"'
+                    if iRow != 0:
+                        assert column_type_list[iCol] == 'string'
+                    else:
+                        column_type_list.append('string')
+                else:
+                    raise ValueError(
+                        f'Unexpected data type for column "{column_name_list[iCol]}" index {iRow:d}')
+
+                tokens.append(s)
+
+            lines.append(' '.join(tokens))
+
+    with open(plaindata_txt_filepath, 'w') as f:
+        f.write('\n'.join(lines))
+
+    plaindata2sdds(
+        plaindata_txt_filepath, sdds_output_filepath, outputMode=outputMode,
+        param_name_list=param_name_list, param_type_list=param_type_list,
+        column_name_list=column_name_list, column_type_list=column_type_list,
+        suppress_err_msg=suppress_err_msg)
+
+    try:
+        os.remove(plaindata_txt_filepath)
+    except IOError:
+        pass
+
+def sdds2plaindata(
+    sdds_filepath, output_txt_filepath, param_name_list=None, column_name_list=None,
+    suppress_err_msg=True):
+    """"""
+
+    cmd_list = [
+        'sdds2plaindata', sdds_filepath, output_txt_filepath, '"-separator= "',]
+
+    meta_params, meta_columns = query(sdds_filepath, suppress_err_msg=True)
+
+    if param_name_list is None:
+        param_name_list = list(meta_params)
+    if column_name_list is None:
+        column_name_list = list(meta_columns)
+
+    for name in param_name_list:
+        cmd_list.append(f'-parameter={name}')
+    for name in column_name_list:
+        cmd_list.append(f'-column={name}')
+
+    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    output, error = p.communicate()
+
+    if error and (not suppress_err_msg):
+        print('sdds2plaindata stderr:', error)
+        print('sdds2plaindata stdout:', output)
+
+def plaindata2sdds(
+    input_txt_filepath, sdds_output_filepath, outputMode='ascii',
+    param_name_list=None, param_type_list=None,
+    column_name_list=None, column_type_list=None,
+    suppress_err_msg=True):
+    """"""
+
+    if outputMode not in ('ascii', 'binary'):
+        raise ValueError('"outputMode" must be either "ascii" or "binary".')
+
+    cmd_list = [
+        'plaindata2sdds', input_txt_filepath, sdds_output_filepath,
+        '-inputMode=ascii', f'-outputMode={outputMode}', '"-separator= "',]
+
+    if param_name_list is not None:
+        assert len(param_name_list) == len(param_type_list)
+        for name, dtype in zip(param_name_list, param_type_list):
+            assert dtype in ('string', 'long', 'double')
+            cmd_list.append(f'-parameter={name},{dtype}')
+
+    if column_name_list is not None:
+        assert len(column_name_list) == len(column_type_list)
+        for name, dtype in zip(column_name_list, column_type_list):
+            assert dtype in ('string', 'long', 'double')
+            cmd_list.append(f'-column={name},{dtype}')
+
+    shell_cmd = ' '.join(cmd_list)
+    cmd_list = shlex.split(shell_cmd, posix=True)
+    #print(cmd_list)
+
+    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    output, error = p.communicate()
+
+    if error and (not suppress_err_msg):
+        print('plaindata2sdds stderr:', error)
+        print('plaindata2sdds stdout:', output)
+
