@@ -140,7 +140,20 @@ def _calc_twiss(
         run(ele_filepath, macros=macros, print_cmd=False,
             print_stdout=True, print_stderr=True)
     else:
-        remote.run(remote_opts, ele_filepath, macros=macros, print_cmd=False,
+        if remote_opts is None:
+            remote_opts = dict(use_sbatch=False)
+
+        if ('pelegant' in remote_opts) and (remote_opts['pelegant'] is not False):
+            print('"pelegant" option in `remote_opts` must be False for Twiss calculation')
+            remote_opts['pelegant'] = False
+        else:
+            remote_opts['pelegant'] = False
+
+        remote_opts['ntasks'] = 1
+        # ^ If this is more than 1, you will likely see an error like "Unable to
+        #   access file /.../tmp*.twi--file is locked (SDDS_InitializeOutput)"
+
+        remote.run(remote_opts, ele_filepath, macros=macros, print_cmd=True,
                    print_stdout=True, print_stderr=True, output_filepaths=None)
 
     if calc_correct_transport_line_linear_chrom:

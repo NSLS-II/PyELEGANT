@@ -83,7 +83,7 @@ DEFAULT_REMOTE_OPTS = dict(
     # -------------
     # SLURM options
     job_name='job', output='job.%J.out', error='job.%J.err',
-    partition='normal', ntasks=2, time=None, nodelist=None, exclude=None,
+    partition='normal', ntasks=1, time=None, nodelist=None, exclude=None,
     # ---------------------------------
     # SBATCH error check decistion tree
     sbatch_err_check_tree=[
