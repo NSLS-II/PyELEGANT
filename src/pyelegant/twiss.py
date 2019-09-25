@@ -372,14 +372,16 @@ def plot_twiss(
     plt.tight_layout()
     plt.subplots_adjust(right=right_margin_adj)
 
-    plt.figure()
-    plt.plot((twi_ar['s'] - s0_m)[_vis], twi_ar['psix'][_vis] / (2 * np.pi), 'b-',
-             (twi_ar['s'] - s0_m)[_vis], twi_ar['psiy'][_vis] / (2 * np.pi), 'r-')
-    plt.legend([r'$\nu_x$', r'$\nu_y$'], prop=leg_prop)
-    #plt.grid(True)
-    if s0_m == 0.0:
-        plt.xlabel(r'$s\, [\mathrm{m}]$', **_kw_label)
-    else:
-        plt.xlabel(r'$s\, - {:.6g}\, [\mathrm{{m}}]$'.format(s0_m), **_kw_label)
-    plt.ylabel(r'$\mathrm{Phase\, Advance\, [2\pi]}$', **_kw_label)
-    plt.tight_layout()
+    if False:
+        plt.figure()
+        plt.plot((twi_ar['s'] - s0_m)[_vis], twi_ar['psix'][_vis] / (2 * np.pi), 'b-',
+                 (twi_ar['s'] - s0_m)[_vis], twi_ar['psiy'][_vis] / (2 * np.pi), 'r-')
+        plt.legend([r'$\nu_x$', r'$\nu_y$'], prop=leg_prop)
+        #plt.grid(True)
+        if s0_m == 0.0:
+            plt.xlabel(r'$s\, [\mathrm{m}]$', **_kw_label)
+        else:
+            plt.xlabel(r'$s\, - {:.6g}\, [\mathrm{{m}}]$'.format(s0_m), **_kw_label)
+        plt.ylabel(r'$\mathrm{Phase\, Advance\, [2\pi]}$', **_kw_label)
+        plt.tight_layout()
+
