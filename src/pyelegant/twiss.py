@@ -17,7 +17,7 @@ def calc_ring_twiss(
     ele_filepath=None, twi_filepath='%s.twi', rootname=None, magnets=None,
     semaphore_file=None, parameters='%s.param', element_divisions=0, macros=None,
     alter_elements_list=None,
-    output_file_type='hdf5', del_tmp_files=True,
+    output_file_type=None, del_tmp_files=True,
     run_local=True, remote_opts=None):
     """"""
 
@@ -45,7 +45,7 @@ def calc_line_twiss(
     ele_filepath=None, twi_filepath='%s.twi', rootname=None, magnets=None,
     semaphore_file=None, parameters='%s.param', element_divisions=0, macros=None,
     alter_elements_list=None,
-    output_file_type='hdf5', del_tmp_files=True,
+    output_file_type=None, del_tmp_files=True,
     run_local=True, remote_opts=None):
     """"""
 
@@ -81,9 +81,9 @@ def _calc_twiss(
 
     if output_file_type is None:
         # Auto-detect file type from "output_filepath"
-        if output_filepath.endswith(('hdf5', 'h5')):
+        if output_filepath.endswith(('.hdf5', '.h5')):
             output_file_type = 'hdf5'
-        elif output_filepath.endswith('pgz'):
+        elif output_filepath.endswith('.pgz'):
             output_file_type = 'pgz'
         else:
             raise ValueError(
