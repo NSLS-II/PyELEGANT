@@ -194,7 +194,7 @@ def get_visible_inds(all_s_array, slim, s_margin_m=0.1):
     return _visible
 
 def plot_twiss(
-    result_filepath, result_file_type, slim=None, s_margin_m=0.1, s0_m=0.0,
+    result_filepath, result_file_type=None, slim=None, s_margin_m=0.1, s0_m=0.0,
     etax_unit='mm', right_margin_adj=0.88, print_scalars=None):
     """"""
 
@@ -202,6 +202,11 @@ def plot_twiss(
         d, meta = util.load_sdds_hdf5_file(result_filepath)
     elif result_file_type == 'pgz':
         d, meta = util.load_pgz_file(result_filepath)
+    elif result_file_type is None:
+        try:
+            d, meta = util.load_sdds_hdf5_file(result_filepath)
+        except OSError:
+            d, meta = util.load_pgz_file(result_filepath)
     else:
         raise ValueError('"result_file_type" must be one of "hdf5", "h5", "pgz"')
 
