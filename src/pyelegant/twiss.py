@@ -75,9 +75,20 @@ def _calc_twiss(
     rootname=None, magnets=None, semaphore_file=None, parameters='%s.param',
     element_divisions=0, macros=None, alter_elements_list=None,
     calc_correct_transport_line_linear_chrom=False,
-    output_file_type='hdf5', del_tmp_files=True,
+    output_file_type=None, del_tmp_files=True,
     run_local=True, remote_opts=None):
     """"""
+
+    if output_file_type is None:
+        # Auto-detect file type from "output_filepath"
+        if output_filepath.endswith(('hdf5', 'h5')):
+            output_file_type = 'hdf5'
+        elif output_filepath.endswith('pgz'):
+            output_file_type = 'pgz'
+        else:
+            raise ValueError(
+                ('"output_file_type" could NOT be automatically deduced from '
+                 '"output_filepath". Please specify "output_file_type".'))
 
     if output_file_type.lower() not in ('hdf5', 'h5', 'pgz'):
         raise ValueError('Invalid output file type: {}'.format(output_file_type))
