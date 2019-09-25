@@ -197,7 +197,7 @@ def run(
 
     output = None
 
-    if remote_opts['use_sbatch']:
+    if ('use_sbatch' in remote_opts) and (remote_opts['use_sbatch']):
 
         if 'job_name' not in slurm_opts:
             print('* Using `sbatch` requires "job_name" option to be specified. Using default.')
@@ -326,7 +326,7 @@ def run(
             print(out)
 
         if err and print_stderr:
-            print('ERROR:')
+            print('stderr:')
             print(err)
 
     return output
