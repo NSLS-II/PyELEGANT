@@ -65,11 +65,13 @@ def query(sdds_filepath, suppress_err_msg=False):
                 'UNITS': ss[1], 'SYMBOL': ss[2], 'FORMAT': ss[3],
                 'TYPE': ss[4], 'FIELD LENGTH': ss[5], 'DESCRIPTION': ss[6]}
 
+        assert len(column_dict) == nColumns
+
     param_dict = {}
     if nParams != 0:
         m = re.search(r'(?<='+param_header+r')[\w\W]+', output)
         param_str_list = m.group(0).split('\n')[2:(2+nParams)]
-        symbol_unit_pattern = r'[\w\$\(\)/]+'
+        symbol_unit_pattern = r'[\w\$\(\)/\']+'
         for index, s in enumerate(param_str_list):
             ss = re.search(
                 r'([\w/]+) +({0:s}) +({0:s}) +(\w+) +(.+)'.format(
@@ -77,6 +79,8 @@ def query(sdds_filepath, suppress_err_msg=False):
             param_dict[ss[0]] = {'UNITS': ss[1], 'SYMBOL': ss[2], 'TYPE': ss[3],
                                  'DESCRIPTION': ss[4],
                                  '_index': index}
+
+        assert len(param_dict) == nParams
 
     # deal with the special cases
     if 'enx0' in param_dict:
