@@ -4,6 +4,11 @@ build/
 dist/
 *.egg-info/
 
+tests/
+
 .ipynb_checkpoints/
 
 facility.json
+
+demo/*.hdf5
+demo/*.pgz
