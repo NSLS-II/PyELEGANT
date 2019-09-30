@@ -25,7 +25,8 @@ except:
 
 from . import util
 
-MODULE_LOAD_CMD_STR = 'elegant-latest'
+#MODULE_LOAD_CMD_STR = 'elegant-latest'
+MODULE_LOAD_CMD_STR = 'elegant-latest elegant/2019.2.1'
 
 nMaxTry = 3
 for iTry in range(nMaxTry):
