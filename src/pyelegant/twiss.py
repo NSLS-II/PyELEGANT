@@ -359,6 +359,13 @@ def plot_twiss(
             if elem_type in ('QUAD', 'KQUAD'):
                 m = np.logical_and(parameters['ElementName'] == elem_name,
                                    parameters['ElementOccurence'] == elem_occur)
+                if np.sum(m) == 0:
+                    m = np.logical_and(parameters['ElementName'] == elem_name,
+                                       parameters['ElementOccurence'] < elem_occur)
+                    elem_occur = str(np.max(
+                        [int(v) for v in np.unique(parameters['ElementOccurence'][m])]))
+                    m = np.logical_and(parameters['ElementName'] == elem_name,
+                                       parameters['ElementOccurence'] == elem_occur)
                 m = np.logical_and(m, parameters['ElementParameter'] == 'K1')
                 assert np.sum(m) == 1
                 K1 = parameters['ParameterValue'][m]
