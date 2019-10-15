@@ -382,7 +382,7 @@ def plot_twiss(
             elif elem_type in ('SEXT', 'KSEXT'):
                 ax.plot([prev_s, cur_s], np.array([0.0, 0.0]) + prof_center_y, 'k-')
 
-            elif elem_type in ('RBEND', 'SBEND', 'CSBEND'):
+            elif elem_type in ('RBEND', 'SBEND', 'SBEN', 'CSBEND'):
                 bottom, top = -bend_half_height, bend_half_height
 
                 # Shift vertically
