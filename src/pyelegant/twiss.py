@@ -18,7 +18,7 @@ def calc_ring_twiss(
     semaphore_file=None, parameters='%s.param', element_divisions=0, macros=None,
     alter_elements_list=None,
     output_file_type=None, del_tmp_files=True,
-    run_local=True, remote_opts=None):
+    run_local=True, remote_opts=None, print_stdout=True, print_stderr=True):
     """"""
 
     matched = True
@@ -34,7 +34,8 @@ def calc_ring_twiss(
         macros=macros, alter_elements_list=alter_elements_list,
         calc_correct_transport_line_linear_chrom=False,
         output_file_type=output_file_type, del_tmp_files=del_tmp_files,
-        run_local=run_local, remote_opts=remote_opts)
+        run_local=run_local, remote_opts=remote_opts,
+        print_stdout=print_stdout, print_stderr=print_stderr)
 
 
 def calc_line_twiss(
@@ -46,7 +47,7 @@ def calc_line_twiss(
     semaphore_file=None, parameters='%s.param', element_divisions=0, macros=None,
     alter_elements_list=None,
     output_file_type=None, del_tmp_files=True,
-    run_local=True, remote_opts=None):
+    run_local=True, remote_opts=None, print_stdout=True, print_stderr=True):
     """"""
 
     matched = False
@@ -64,7 +65,8 @@ def calc_line_twiss(
         alter_elements_list=alter_elements_list,
         calc_correct_transport_line_linear_chrom=calc_correct_transport_line_linear_chrom,
         output_file_type=output_file_type, del_tmp_files=del_tmp_files,
-        run_local=run_local, remote_opts=remote_opts)
+        run_local=run_local, remote_opts=remote_opts,
+        print_stdout=print_stdout, print_stderr=print_stderr)
 
 def _calc_twiss(
     output_filepath, matched, LTE_filepath, E_MeV,
@@ -76,7 +78,7 @@ def _calc_twiss(
     element_divisions=0, macros=None, alter_elements_list=None,
     calc_correct_transport_line_linear_chrom=False,
     output_file_type=None, del_tmp_files=True,
-    run_local=True, remote_opts=None):
+    run_local=True, remote_opts=None, print_stdout=True, print_stderr=True):
     """"""
 
     if output_file_type is None:
@@ -138,7 +140,7 @@ def _calc_twiss(
     # Run Elegant
     if run_local:
         run(ele_filepath, macros=macros, print_cmd=False,
-            print_stdout=True, print_stderr=True)
+            print_stdout=print_stdout, print_stderr=print_stderr)
     else:
         if remote_opts is None:
             remote_opts = dict(use_sbatch=False)
@@ -154,7 +156,8 @@ def _calc_twiss(
         #   access file /.../tmp*.twi--file is locked (SDDS_InitializeOutput)"
 
         remote.run(remote_opts, ele_filepath, macros=macros, print_cmd=True,
-                   print_stdout=True, print_stderr=True, output_filepaths=None)
+                   print_stdout=print_stdout, print_stderr=print_stderr,
+                   output_filepaths=None)
 
     if calc_correct_transport_line_linear_chrom:
         # TODO
