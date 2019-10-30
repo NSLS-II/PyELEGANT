@@ -25,8 +25,8 @@ except:
 
 from . import util
 
-#MODULE_LOAD_CMD_STR = 'elegant-latest'
-MODULE_LOAD_CMD_STR = 'elegant-latest elegant/2019.2.1'
+MODULE_LOAD_CMD_STR = 'elegant-latest'
+#MODULE_LOAD_CMD_STR = 'elegant-latest elegant/2019.2.1'
 
 nMaxTry = 3
 for iTry in range(nMaxTry):
@@ -776,3 +776,77 @@ def monitor_simplex_log_progress(job_ID_str, simplex_log_prefix):
         err = err.decode('utf-8')
     except:
         pass
+
+def write_geneticOptimizer_dot_local(remote_opts=None):
+    """"""
+
+    slurm_opts = extract_slurm_opts(remote_opts)
+
+    contents = '''#!/bin/sh
+# \
+exec oagtclsh "$0" "$@"
+
+# These two procedures may need to be customized to your installation.
+# If so, then this file (i.e,. your modified version of it) needs to
+# be in the directory from which you run geneticOptimizer.
+
+proc SubmitJob {args} {
+    set code ""
+    set input ""
+    APSStrictParseArguments {code input}
+    global env
+    eval file delete -force $input.log [file rootname $input].done
+    set tmpFile [file rootname $input].csh
+    set fd [open $tmpFile w]
+    puts $fd "#!/bin/csh "
+    puts $fd "ml elegant-latest"
+    puts $fd "unset savehist"
+    puts $fd "echo running $code $input on [exec uname -a]"
+    puts $fd "cd [pwd]"
+    puts $fd "./$code $input >& $input.log"
+    close $fd
+
+    catch {exec sbatch -o [pwd] -J [file root [file tail $input]] $tmpFile } result
+
+    return "$result"
+}
+
+proc SubmitRunScript {args} {
+    set script ""
+    set tagList ""
+    set valueList ""
+    set rootname ""
+    APSStrictParseArguments {script rootname tagList valueList}
+    global env
+
+    eval file delete -force $rootname.log $rootname.done $rootname.run
+    set tmpFile [file rootname $rootname].csh
+    APSAddToTempFileList $tmpFile
+    set fd [open $tmpFile w]
+    puts $fd "#!/bin/csh "
+    puts $fd "unset savehist"
+    puts $fd "ml elegant-latest"
+    puts $fd "echo running $script on [exec uname -a]"
+    puts $fd "echo running $script $rootname $tagList $valueList on [exec uname -a]"
+    puts $fd "cd [pwd]"
+    #puts $fd "./$script -rootname $rootname -tagList '$tagList' -valueList '$valueList' >& $rootname.log"
+    puts $fd "srun ./$script -rootname $rootname -tagList '$tagList' -valueList '$valueList' >& $rootname.log"
+    close $fd
+
+'''
+
+    contents += '''
+    #catch {{exec cat $tmpFile | qsub -V -o [pwd] -j y -N [file root [file tail $rootname]] }} result
+    catch {{exec sbatch -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] {slurm_switches} $tmpFile }} result
+
+    #catch {{exec srun -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] --ntasks=1 bash $tmpFile & }} result
+    #catch {{exec srun -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] bash $tmpFile & }} result
+'''.format(slurm_switches=' '.join([v for v in slurm_opts.values()]))
+
+    contents += '''
+    return "$result"
+}
+'''
+
+    with open('geneticOptimizer.local', 'w') as f:
+        f.write(contents)
