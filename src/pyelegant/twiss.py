@@ -191,7 +191,8 @@ def _calc_twiss(
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
         util.robust_pgz_file_write(
-            output_filepath, [mod_output, mod_meta], nMaxTry=10, sleep=10.0)
+            output_filepath, dict(data=mod_output, meta=mod_meta),
+            nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
 
