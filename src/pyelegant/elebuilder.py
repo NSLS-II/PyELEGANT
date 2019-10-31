@@ -592,6 +592,11 @@ class EleContents():
 
         self.text += self._get_block_str('correct_tunes', **kwargs)
 
+    def chromaticity(self, **kwargs):
+        """"""
+
+        self.text += self._get_block_str('chromaticity', **kwargs)
+
     def track(self, **kwargs):
         """"""
 
