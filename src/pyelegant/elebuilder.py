@@ -5,209 +5,31 @@ from . import util
 
 # From https://ops.aps.anl.gov/manuals/elegant_latest/elegant.pdf
 _RAW_ELE_BLOCK_INFO_STR = '''
-&run_setup
-    STRING lattice = NULL;
-    STRING use_beamline = NULL;
-    STRING rootname = NULL;
-    STRING output = NULL;
-    STRING centroid = NULL;
-    STRING sigma = NULL;
-    STRING final = NULL;
-    STRING acceptance = NULL;
-    STRING losses = NULL;
-    STRING magnets = NULL;
-    STRING semaphore_file = NULL;
-    STRING parameters = NULL;
-    long combine_bunch_statistics = 0;
-    long wrap_around = 1;
-    long final_pass = 0;
-    long default_order = 2;
-    long concat_order = 0;
-    long print_statistics = 0;
-    long show_element_timing = 0;
-    long monitor_memory_usage = 0;
-    long random_number_seed = 987654321;
-    long correction_iterations = 1;
-    double p_central = 0.0;
-    double p_central_mev = 0.0;
-    long always_change_p0 = 0;
-    STRING expand_for = NULL;
-    long tracking_updates = 1;
-    long echo_lattice = 0;
-    STRING search_path = NULL;
-    long element_divisions = 0;
-    long load_balancing_on = 0;
-&end
 
-&load_parameters
-    STRING filename = NULL;
-    STRING filename_list = NULL;
-    STRING include_name_pattern = NULL;
-    STRING exclude_name_pattern = NULL;
-    STRING include_item_pattern = NULL;
-    STRING exclude_item_pattern = NULL;
-    STRING include_type_pattern = NULL;
-    STRING exclude_type_pattern = NULL;
-    STRING edit_name_command = NULL;
-    long change_defined_values = 0;
-    long clear_settings = 0;
+# 7.5
+&alter_elements
+    STRING name = NULL;
+    STRING item = NULL;
+    STRING type = NULL;
+    STRING exclude = NULL;
+    double value = 0;
+    STRING string_value = NULL;
+    long differential = 0;
+    long multiplicative = 0;
+    long alter_at_each_step = 0;
+    long alter_before_load_parameters = 0;
+    long verbose = 0;
     long allow_missing_elements = 0;
     long allow_missing_parameters = 0;
-    long allow_missing_files = 0;
-    long force_occurence_data = 0;
-    long verbose = 0;
-    long skip_pages = 0;
-    long use_first = 0;
+    long start_occurence = 0;
+    long end_occurence = 0;
+    double s_start = -1;
+    double s_end = -1;
+    STRING before = NULL;
+    STRING after = NULL;
 &end
 
-&twiss_output
-    STRING filename = NULL;
-    long matched = 1;
-    long output_at_each_step = 0;
-    long output_before_tune_correction = 0;
-    long final_values_only = 0;
-    long statistics = 0;
-    long radiation_integrals = 0;
-    long concat_order = 3;
-    long higher_order_chromaticity = 0;
-    long higher_order_chromaticity_points = 5;
-    double higher_order_chromaticity_range = 4e-4;
-    double chromatic_tune_spread_half_range = 0;
-    long quick_higher_order_chromaticity = 0;
-    double beta_x = 1;
-    double alpha_x = 0;
-    double eta_x = 0;
-    double etap_x = 0;
-    double beta_y = 1;
-    double alpha_y = 0;
-    double eta_y = 0;
-    double etap_y = 0;
-    STRING reference_file = NULL;
-    STRING reference_element = NULL;
-    long reference_element_occurrence = 0;
-    long reflect_reference_values = 0;
-    long cavities_are_drifts_if_matched = 1;
-    long compute_driving_terms = 0;
-    long leading_order_driving_terms_only = 0;
-    STRING s_dependent_driving_terms_file = NULL;
-    long local_dispersion = 1;
-&end
-
-&floor_coordinates
-    STRING filename = NULL;
-    double X0 = 0.0;
-    double Z0 = 0.0;
-    double theta0 = 0.0;
-    long include_vertices = 0;
-    long vertices_only = 0;
-    long magnet_centers = 0;
-    long store_vertices = 0;
-&end
-
-&rpn_load
-    STRING tag = NULL;
-    STRING filename = NULL;
-    STRING match_column = NULL;
-    STRING match_column_value = NULL;
-    long matching_row_number = -1;
-    STRING match_parameter = NULL;
-    STRING match_parameter_value = NULL;
-    long use_row = -1;
-    long use_page = -1;
-    long load_parameters = 0;
-&end
-
-&run_control
-    long n_steps = 1;
-    double bunch_frequency = 0;
-    long n_indices = 0;
-    long n_passes = 1;
-    long n_passes_fiducial = 0;
-    long reset_rf_for_each_step = 1;
-    long first_is_fiducial = 0;
-    long restrict_fiducialization = 0;
-&end
-
-&optimization_setup
-    STRING equation = NULL;
-    STRING mode = "minimize";
-    STRING method = "simplex";
-    double tolerance = -0.01;
-    double target = 0;
-    long center_on_orbit = 0;
-    long center_momentum_also = 1;
-    long soft_failure = 1;
-    long n_passes = 2;
-    long n_evaluations = 500;
-    long n_restarts = 0;
-    long matrix_order = 1;
-    STRING log_file = NULL;
-    STRING term_log_file = NULL;
-    long output_sparsing_factor = 0;
-    long balance_terms = 0;
-    double restart_worst_term_factor = 1;
-    long restart_worst_terms = 1;
-    long verbose = 1;
-    long balance_terms = 0;
-    double simplex_divisor = 3;
-    double simplex_pass_range_factor = 1;
-    long include_simplex_1d_scans = 1;
-    long start_from_simplex_vertex1 = 0;
-    long restart_random_numbers = 0;
-    STRING interrupt_file = "%s.interrupt";
-    long interrupt_file_check_interval = 0;
-&end
-
-&parallel_optimization_setup
-    STRING method = "simplex";
-    double hybrid_simplex_tolerance = -0.01;
-    double hybrid_simplex_tolerance_count = 2;
-    long hybrid_simplex_comparison_interval = 0;
-    double random_factor = 1
-    long n_iterations = 10000;
-    long max_no_change = 10000;
-    long population_size = 100;
-    STRING population_log = NULL;
-    long print_all_individuals = 0;
-    long output_sparsing_factor = 1;
-    STRING crossover = "twopoint";
-    STRING simplex_log = NULL;
-    long simplex_log_interval = 1;
-&end
-
-&optimization_variable
-    STRING name = NULL;
-    STRING item = NULL;
-    double lower_limit = 0;
-    double upper_limit = 0;
-    double step_size = 1;
-    long disable = 0;
-    long force_inside = 0;
-&end
-
-&optimization_covariable
-    STRING name = NULL;
-    STRING item = NULL;
-    STRING equation = NULL;
-    long disable = 0;
-&end
-
-&optimization_term
-    STRING term = NULL;
-    double weight = 1.0;
-    STRING field_string = NULL;
-    long field_initial_value = 0;
-    long field_final_value = 0;
-    long field_interval = 1;
-    STRING input_file = NULL;
-    STRING input_column = NULL;
-    long verbose = 0;
-&end
-
-&optimize
-    long summarize_setup = 0;
-&end
-
+# 7.9
 &bunched_beam
     STRING bunch = NULL;
     long n_particles_per_bunch = 1;
@@ -251,31 +73,276 @@ _RAW_ELE_BLOCK_INFO_STR = '''
     long save_initial_coordinates = 1;
 &end
 
+# 7.11
+&chromaticity
+    STRING sextupoles = NULL;
+    STRING exclude = NULL;
+    double dnux_dp = 0;
+    double dnuy_dp = 0;
+    double sextupole_tweek = 1e-3;
+    double correction_fraction = 0.9;
+    long n_iterations = 5;
+    double tolerance = 0;
+    STRING strength_log = NULL;
+    long change_defined_values = 0;
+    double strength_limit = 0;
+    long use_perturbed_matrix = 0;
+    long exit_on_failure = 0;
+    long update_orbit = 0;
+    long verbosity = 1;
+    double dK2_weight = 1;
+&end
+
+# 7.15
+&correct_tunes
+    STRING quadrupoles = NULL;
+    STRING exclude = NULL;
+    double tune_x = 0;
+    double tune_y = 0;
+    long n_iterations = 5;
+    double correction_fraction = 0.9;
+    double tolerance = 0;
+    long step_up_interval = 0;
+    double max_correction_fraction = 0.9;
+    double delta_correction_fraction = 0.1;
+    long update_orbit = 0;
+    STRING strength_log = NULL;
+    long change_defined_values = 0;
+    long use_perturbed_matrix = 0;
+    double dK1_weight = 1;
+&end
+
+# 7.22
+&floor_coordinates
+    STRING filename = NULL;
+    double X0 = 0.0;
+    double Z0 = 0.0;
+    double theta0 = 0.0;
+    long include_vertices = 0;
+    long vertices_only = 0;
+    long magnet_centers = 0;
+    long store_vertices = 0;
+&end
+
+# 7.33
+&load_parameters
+    STRING filename = NULL;
+    STRING filename_list = NULL;
+    STRING include_name_pattern = NULL;
+    STRING exclude_name_pattern = NULL;
+    STRING include_item_pattern = NULL;
+    STRING exclude_item_pattern = NULL;
+    STRING include_type_pattern = NULL;
+    STRING exclude_type_pattern = NULL;
+    STRING edit_name_command = NULL;
+    long change_defined_values = 0;
+    long clear_settings = 0;
+    long allow_missing_elements = 0;
+    long allow_missing_parameters = 0;
+    long allow_missing_files = 0;
+    long force_occurence_data = 0;
+    long verbose = 0;
+    long skip_pages = 0;
+    long use_first = 0;
+&end
+
+# 7.38
+&optimize
+    long summarize_setup = 0;
+&end
+
+# 7.40
+&optimization_covariable
+    STRING name = NULL;
+    STRING item = NULL;
+    STRING equation = NULL;
+    long disable = 0;
+&end
+
+# 7.41
+&optimization_setup
+    STRING equation = NULL;
+    STRING mode = "minimize";
+    STRING method = "simplex";
+    double tolerance = -0.01;
+    double target = 0;
+    long center_on_orbit = 0;
+    long center_momentum_also = 1;
+    long soft_failure = 1;
+    long n_passes = 2;
+    long n_evaluations = 500;
+    long n_restarts = 0;
+    long matrix_order = 1;
+    STRING log_file = NULL;
+    STRING term_log_file = NULL;
+    long output_sparsing_factor = 0;
+    long balance_terms = 0;
+    double restart_worst_term_factor = 1;
+    long restart_worst_terms = 1;
+    long verbose = 1;
+    long balance_terms = 0;
+    double simplex_divisor = 3;
+    double simplex_pass_range_factor = 1;
+    long include_simplex_1d_scans = 1;
+    long start_from_simplex_vertex1 = 0;
+    long restart_random_numbers = 0;
+    STRING interrupt_file = "%s.interrupt";
+    long interrupt_file_check_interval = 0;
+&end
+
+# 7.42
+&parallel_optimization_setup
+    STRING method = "simplex";
+    double hybrid_simplex_tolerance = -0.01;
+    double hybrid_simplex_tolerance_count = 2;
+    long hybrid_simplex_comparison_interval = 0;
+    double random_factor = 1
+    long n_iterations = 10000;
+    long max_no_change = 10000;
+    long population_size = 100;
+    STRING population_log = NULL;
+    long print_all_individuals = 0;
+    long output_sparsing_factor = 1;
+    STRING crossover = "twopoint";
+    STRING simplex_log = NULL;
+    long simplex_log_interval = 1;
+&end
+
+# 7.43
+&optimization_term
+    STRING term = NULL;
+    double weight = 1.0;
+    STRING field_string = NULL;
+    long field_initial_value = 0;
+    long field_final_value = 0;
+    long field_interval = 1;
+    STRING input_file = NULL;
+    STRING input_column = NULL;
+    long verbose = 0;
+&end
+
+# 7.44
+&optimization_variable
+    STRING name = NULL;
+    STRING item = NULL;
+    double lower_limit = 0;
+    double upper_limit = 0;
+    double step_size = 1;
+    long disable = 0;
+    long force_inside = 0;
+&end
+
+# 7.50
+&rpn_load
+    STRING tag = NULL;
+    STRING filename = NULL;
+    STRING match_column = NULL;
+    STRING match_column_value = NULL;
+    long matching_row_number = -1;
+    STRING match_parameter = NULL;
+    STRING match_parameter_value = NULL;
+    long use_row = -1;
+    long use_page = -1;
+    long load_parameters = 0;
+&end
+
+# 7.51
+&run_control
+    long n_steps = 1;
+    double bunch_frequency = 0;
+    long n_indices = 0;
+    long n_passes = 1;
+    long n_passes_fiducial = 0;
+    long reset_rf_for_each_step = 1;
+    long first_is_fiducial = 0;
+    long restrict_fiducialization = 0;
+&end
+
+# 7.52
+&run_setup
+    STRING lattice = NULL;
+    STRING use_beamline = NULL;
+    STRING rootname = NULL;
+    STRING output = NULL;
+    STRING centroid = NULL;
+    STRING sigma = NULL;
+    STRING final = NULL;
+    STRING acceptance = NULL;
+    STRING losses = NULL;
+    STRING magnets = NULL;
+    STRING semaphore_file = NULL;
+    STRING parameters = NULL;
+    long combine_bunch_statistics = 0;
+    long wrap_around = 1;
+    long final_pass = 0;
+    long default_order = 2;
+    long concat_order = 0;
+    long print_statistics = 0;
+    long show_element_timing = 0;
+    long monitor_memory_usage = 0;
+    long random_number_seed = 987654321;
+    long correction_iterations = 1;
+    double p_central = 0.0;
+    double p_central_mev = 0.0;
+    long always_change_p0 = 0;
+    STRING expand_for = NULL;
+    long tracking_updates = 1;
+    long echo_lattice = 0;
+    STRING search_path = NULL;
+    long element_divisions = 0;
+    long load_balancing_on = 0;
+&end
+
+# 7.54
 &save_lattice
     STRING filename = NULL;
     long output_seq = 0;
 &end
 
-&alter_elements
-    STRING name = NULL;
-    STRING item = NULL;
-    STRING type = NULL;
-    STRING exclude = NULL;
-    double value = 0;
-    STRING string_value = NULL;
-    long differential = 0;
-    long multiplicative = 0;
-    long alter_at_each_step = 0;
-    long alter_before_load_parameters = 0;
-    long verbose = 0;
-    long allow_missing_elements = 0;
-    long allow_missing_parameters = 0;
-    long start_occurence = 0;
-    long end_occurence = 0;
-    double s_start = -1;
-    double s_end = -1;
-    STRING before = NULL;
-    STRING after = NULL;
+# 7.65
+&twiss_output
+    STRING filename = NULL;
+    long matched = 1;
+    long output_at_each_step = 0;
+    long output_before_tune_correction = 0;
+    long final_values_only = 0;
+    long statistics = 0;
+    long radiation_integrals = 0;
+    long concat_order = 3;
+    long higher_order_chromaticity = 0;
+    long higher_order_chromaticity_points = 5;
+    double higher_order_chromaticity_range = 4e-4;
+    double chromatic_tune_spread_half_range = 0;
+    long quick_higher_order_chromaticity = 0;
+    double beta_x = 1;
+    double alpha_x = 0;
+    double eta_x = 0;
+    double etap_x = 0;
+    double beta_y = 1;
+    double alpha_y = 0;
+    double eta_y = 0;
+    double etap_y = 0;
+    STRING reference_file = NULL;
+    STRING reference_element = NULL;
+    long reference_element_occurrence = 0;
+    long reflect_reference_values = 0;
+    long cavities_are_drifts_if_matched = 1;
+    long compute_driving_terms = 0;
+    long leading_order_driving_terms_only = 0;
+    STRING s_dependent_driving_terms_file = NULL;
+    long local_dispersion = 1;
+&end
+
+# 7.66
+&track
+    long center_on_orbit = 0;
+    long center_momentum_also = 1;
+    long offset_by_orbit = 0;
+    long offset_momentum_also = 1;
+    long soft_failure = 1;
+    long stop_tracking_particle_limit = -1;
+    long check_beam_structure = 0;
+    STRING interrupt_file = "%s.interrupt";
 &end
 
 '''
@@ -396,7 +463,10 @@ class EleContents():
         for k, v in kwargs.items():
             i = keywords.index(k)
             if dtypes[i] == 'STRING':
-                block.append(f'{k} = "{v}"')
+                if v is None:
+                    continue
+                else:
+                    block.append(f'{k} = "{v}"')
                 if (block_header in ELE_OUTPUT_FILEPATHS) and \
                    (k in ELE_OUTPUT_FILEPATHS[block_header]):
                     self.output_filepath_list.append(v)
@@ -517,7 +587,15 @@ class EleContents():
 
         self.text += self._get_block_str('alter_elements', **kwargs)
 
+    def correct_tunes(self, **kwargs):
+        """"""
 
+        self.text += self._get_block_str('correct_tunes', **kwargs)
+
+    def track(self, **kwargs):
+        """"""
+
+        self.text += self._get_block_str('track', **kwargs)
 
 
 
