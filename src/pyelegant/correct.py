@@ -26,8 +26,7 @@ def tunes(
     eb = elebuilder.EleContents(double_format='.12g')
 
     eb.run_setup(
-        lattice=init_LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline,
-        parameters='%s.param')
+        lattice=init_LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline)
 
     eb.newline()
 
@@ -51,19 +50,6 @@ def tunes(
     eb.newline()
 
     eb.track()
-
-    #eb.newline()
-
-    #eb.run_setup(
-        #lattice=init_LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline)
-
-    #eb.newline()
-
-    #eb.load_parameters(
-        #filename='%s.param', change_defined_values=True,
-        #include_item_pattern='K1', include_name_pattern=used_quads_str)
-
-    #eb.newline()
 
     eb.save_lattice(filename=corrected_LTE_filepath)
 
@@ -126,8 +112,7 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
     eb = elebuilder.EleContents(double_format='.12g')
 
     eb.run_setup(
-        lattice=init_LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline,
-        parameters='%s.param')
+        lattice=init_LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline)
 
     eb.newline()
 
