@@ -7,7 +7,7 @@ from .remote import remote
 
 def tunes(
     corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
-    macros=None, ele_filepath=None, del_tmp_files=True,
+    ele_filepath=None, del_tmp_files=True,
     quadrupoles=None, exclude=None, tune_x=0.0, tune_y=0.0, n_iterations=5,
     correction_fraction=0.9, tolerance=0.0,
     run_local=True, remote_opts=None, print_stdout=True, print_stderr=True):
@@ -74,7 +74,7 @@ def tunes(
 
     # Run Elegant
     if run_local:
-        run(ele_filepath, macros=macros, print_cmd=False,
+        run(ele_filepath, print_cmd=False,
             print_stdout=print_stdout, print_stderr=print_stderr)
     else:
         if remote_opts is None:
@@ -90,7 +90,7 @@ def tunes(
         # ^ If this is more than 1, you will likely see an error like "Unable to
         #   access file /.../tmp*.twi--file is locked (SDDS_InitializeOutput)"
 
-        remote.run(remote_opts, ele_filepath, macros=macros, print_cmd=True,
+        remote.run(remote_opts, ele_filepath, print_cmd=True,
                    print_stdout=print_stdout, print_stderr=print_stderr,
                    output_filepaths=None)
 
@@ -107,7 +107,7 @@ def tunes(
                     print(f'Failed to delete "{fp}"')
 
 def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
-    macros=None, ele_filepath=None, del_tmp_files=True,
+    ele_filepath=None, del_tmp_files=True,
     sextupoles=None, exclude=None, dnux_dp=0.0, dnuy_dp=0.0, n_iterations=5,
     correction_fraction=0.9, tolerance=0.0,
     run_local=True, remote_opts=None, print_stdout=True, print_stderr=True):
@@ -162,7 +162,7 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
 
     # Run Elegant
     if run_local:
-        run(ele_filepath, macros=macros, print_cmd=False,
+        run(ele_filepath, print_cmd=False,
             print_stdout=print_stdout, print_stderr=print_stderr)
     else:
         if remote_opts is None:
@@ -178,7 +178,7 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
         # ^ If this is more than 1, you will likely see an error like "Unable to
         #   access file /.../tmp*.twi--file is locked (SDDS_InitializeOutput)"
 
-        remote.run(remote_opts, ele_filepath, macros=macros, print_cmd=True,
+        remote.run(remote_opts, ele_filepath, print_cmd=True,
                    print_stdout=print_stdout, print_stderr=print_stderr,
                    output_filepaths=None)
 
