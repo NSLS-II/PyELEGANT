@@ -5,6 +5,13 @@ import pickle
 import h5py
 import numpy as np
 
+def get_current_local_time_str():
+    """"""
+
+    DEF_FILENAME_TIMESTAMP_STR_FORMAT = '%Y-%m-%dT%H-%M-%S'
+
+    return time.strftime(DEF_FILENAME_TIMESTAMP_STR_FORMAT, time.localtime())
+
 def is_file_updated(filepath, timestamp_to_compare):
     """
     "timestamp_to_compare" is a float (time elapsed from the Unit epoch time),
