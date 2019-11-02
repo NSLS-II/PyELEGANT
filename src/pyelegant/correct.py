@@ -67,7 +67,7 @@ def tunes(
             remote_opts = dict(use_sbatch=False)
 
         if ('pelegant' in remote_opts) and (remote_opts['pelegant'] is not False):
-            print('"pelegant" option in `remote_opts` must be False for Twiss calculation')
+            print('"pelegant" option in `remote_opts` must be False.')
             remote_opts['pelegant'] = False
         else:
             remote_opts['pelegant'] = False
@@ -154,7 +154,7 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
             remote_opts = dict(use_sbatch=False)
 
         if ('pelegant' in remote_opts) and (remote_opts['pelegant'] is not False):
-            print('"pelegant" option in `remote_opts` must be False for Twiss calculation')
+            print('"pelegant" option in `remote_opts` must be False.')
             remote_opts['pelegant'] = False
         else:
             remote_opts['pelegant'] = False

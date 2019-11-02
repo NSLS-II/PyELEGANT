@@ -300,6 +300,12 @@ def run(
             print('* Failed to delete temporary sbatch shell file "{}"'.format(
                 sbatch_sh_filepath))
 
+        for fp in [slurm_out_filepath, slurm_err_filepath]:
+            try:
+                os.remove(fp)
+            except IOError:
+                print(f'* Failed to delete SLURM file "{fp}"')
+
     else:
         # "Elegant" module must be already loaded.
 

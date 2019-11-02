@@ -124,6 +124,24 @@ _RAW_ELE_BLOCK_INFO_STR = '''
     long store_vertices = 0;
 &end
 
+# 7.23
+&frequency_map
+    STRING output = NULL;
+    double xmin = -0.1;
+    double xmax = 0.1;
+    double ymin = 1e-6;
+    double ymax = 0.1;
+    double delta_min = 0;
+    double delta_max = 0;
+    long nx = 21;
+    long ny = 21;
+    long ndelta = 1;
+    long verbosity = 1;
+    long include_changes = 0;
+    long quadratic_spacing = 0;
+    long full_grid_output = 0;
+&end
+
 # 7.33
 &load_parameters
     STRING filename = NULL;
@@ -299,6 +317,16 @@ _RAW_ELE_BLOCK_INFO_STR = '''
     long output_seq = 0;
 &end
 
+# 7.62
+&transmute_elements
+    STRING name = NULL;
+    STRING type = NULL;
+    STRING exclude = NULL;
+    STRING new_type = "DRIF";
+    long disable = 0;
+    long clear = 0;
+&end
+
 # 7.65
 &twiss_output
     STRING filename = NULL;
@@ -346,6 +374,18 @@ _RAW_ELE_BLOCK_INFO_STR = '''
 &end
 
 '''
+# Note that the following has been modified from the original in the PDF manual
+# to make regex finding consistent.
+#
+## 7.62
+#&transmute_elements
+    #STRING name = NULL, => ;
+    #STRING type = NULL, => ;
+    #STRING exclude = NULL, => ;
+    #STRING new_type = "DRIF", => ;
+    #long disable = 0;
+    #long clear = 0;
+#&end
 
 ELE_BLOCK_INFO = {}
 # ^ keywords, dtypes, default_vals, recommended
@@ -380,25 +420,30 @@ ELE_BLOCK_INFO['optimization_setup'][keys.index('interrupt_file')][3] = '%s.inte
 keys = [v[0] for v in ELE_BLOCK_INFO['parallel_optimization_setup']]
 ELE_BLOCK_INFO['parallel_optimization_setup'][keys.index('population_log')][3] = '%s.pop'
 ELE_BLOCK_INFO['parallel_optimization_setup'][keys.index('simplex_log')][3] = '%s.simlog'
+keys = [v[0] for v in ELE_BLOCK_INFO['frequency_map']]
+ELE_BLOCK_INFO['frequency_map'][keys.index('output')][3] = '%s.fma'
+keys = [v[0] for v in ELE_BLOCK_INFO['save_lattice']]
+ELE_BLOCK_INFO['save_lattice'][keys.index('filename')][3] = '%s.new'
 #
 # "&parallel_optimization_setup" also contains all the options for
 # "&optimization_setup" as well. So, add those options here.
 ELE_BLOCK_INFO['parallel_optimization_setup'] = \
     ELE_BLOCK_INFO['optimization_setup'][:] + ELE_BLOCK_INFO['parallel_optimization_setup']
 
-ELE_OUTPUT_FILEPATHS= dict(
-    run_setup=['output', 'centroid', 'sigma', 'final', 'acceptance', 'losses',
-               'magnets', 'semaphore_file', 'parameters'],
-    twiss_output=['filename'], floor_coordinates='filename',
-    optimization_setup=['log_file', 'term_log_file', 'interrupt_file'],
-    parallel_optimization_setup=['population_log', 'simplex_log'],
-    save_lattice=['filename'],
-)
-#
-# "&parallel_optimization_setup" also contains all the options for
-# "&optimization_setup" as well. So, add those here.
-ELE_OUTPUT_FILEPATHS['parallel_optimization_setup'] += \
-    ELE_OUTPUT_FILEPATHS['optimization_setup'][:]
+ELE_OUTPUT_FILEPATHS = {}
+for k, v in ELE_BLOCK_INFO.items():
+    matched_keys = []
+    for L in v:
+        if (L[2] is not None) and ('%s' in L[2]):
+            #print(L[0], L[2])
+            matched_keys.append(L[0])
+        if (L[3] is not None) and ('%s' in L[3]):
+            #print(L[0], L[3])
+            matched_keys.append(L[0])
+    if matched_keys != []:
+        ELE_OUTPUT_FILEPATHS[k] = np.unique(matched_keys).tolist()
+# Manually add missed output file keys
+ELE_OUTPUT_FILEPATHS['optimization_setup'].append('log_file')
 
 class EleContents():
     """"""
@@ -602,8 +647,15 @@ class EleContents():
 
         self.text += self._get_block_str('track', **kwargs)
 
+    def frequency_map(self, **kwargs):
+        """"""
 
+        self.text += self._get_block_str('frequency_map', **kwargs)
 
+    def transmute_elements(self, **kwargs):
+        """"""
+
+        self.text += self._get_block_str('transmute_elements', **kwargs)
 
 
 

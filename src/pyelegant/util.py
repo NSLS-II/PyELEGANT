@@ -69,7 +69,8 @@ def load_pgz_file(pgz_filepath):
 
     return out
 
-def robust_sdds_hdf5_write(output_filepath, sdds_dict_list, nMaxTry=10, sleep=10.0):
+def robust_sdds_hdf5_write(
+    output_filepath, sdds_dict_list, nMaxTry=10, sleep=10.0, mode='w'):
     """"""
 
     success = False
@@ -78,7 +79,7 @@ def robust_sdds_hdf5_write(output_filepath, sdds_dict_list, nMaxTry=10, sleep=10
 
     for iTry in range(nMaxTry):
         try:
-            f = h5py.File(output_filepath, 'w')
+            f = h5py.File(output_filepath, mode)
         except:
             if iTry != nMaxTry - 1:
                 time.sleep(sleep)
