@@ -3,468 +3,676 @@ import numpy as np
 
 from . import util
 
-# From https://ops.aps.anl.gov/manuals/elegant_latest/elegant.pdf
-_RAW_ELE_BLOCK_INFO_STR = '''
+########################################################################
+class EleBlocks():
+    """
+    From https://ops.aps.anl.gov/manuals/elegant_latest/elegant.pdf
+    """
 
-# 7.5
-&alter_elements
-    STRING name = NULL;
-    STRING item = NULL;
-    STRING type = NULL;
-    STRING exclude = NULL;
-    double value = 0;
-    STRING string_value = NULL;
-    long differential = 0;
-    long multiplicative = 0;
-    long alter_at_each_step = 0;
-    long alter_before_load_parameters = 0;
-    long verbose = 0;
-    long allow_missing_elements = 0;
-    long allow_missing_parameters = 0;
-    long start_occurence = 0;
-    long end_occurence = 0;
-    double s_start = -1;
-    double s_end = -1;
-    STRING before = NULL;
-    STRING after = NULL;
-&end
+    #----------------------------------------------------------------------
+    def __init__(self):
+        """Constructor"""
 
-# 7.9
-&bunched_beam
-    STRING bunch = NULL;
-    long n_particles_per_bunch = 1;
-    double time_start = 0;
-    STRING matched_to_cell = NULL;
-    double emit_x = 0;
-    double emit_nx = 0;
-    double beta_x = 1.0;
-    double alpha_x = 0.0;
-    double eta_x = 0.0;
-    double etap_x = 0.0;
-    double emit_y = 0;
-    double emit_ny = 0;
-    double beta_y = 1.0;
-    double alpha_y = 0.0;
-    double eta_y = 0.0;
-    double etap_y = 0.0;
-    long use_twiss_command_values = 0;
-    long use_moments_output_values = 0;
-    double Po = 0.0;
-    double sigma_dp = 0.0;
-    double sigma_s = 0.0;
-    double dp_s_coupling = 0;
-    double emit_z = 0;
-    double beta_z = 0;
-    double alpha_z = 0;
-    double momentum_chirp = 0;
-    long one_random_bunch = 1;
-    long symmetrize = 0;
-    long halton_sequence[3] = {0, 0, 0};
-    long halton_radix[6] = {0, 0, 0, 0, 0, 0};
-    long optimized_halton = 0;
-    long randomize_order[3] = {0, 0, 0};
-    long limit_invariants = 0;
-    long limit_in_4d = 0;
-    long enforce_rms_values[3] = {0, 0, 0};
-    double distribution_cutoff[3] = {2, 2, 2};
-    STRING distribution_type[3] = {"gaussian","gaussian","gaussian"};
-    double centroid[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    long first_is_fiducial = 0;
-    long save_initial_coordinates = 1;
-&end
+        self.info = {}
+        # ^ Will contain a tuple of (keywords, dtypes, default_vals, recommended)
 
-# 7.11
-&chromaticity
-    STRING sextupoles = NULL;
-    STRING exclude = NULL;
-    double dnux_dp = 0;
-    double dnuy_dp = 0;
-    double sextupole_tweek = 1e-3;
-    double correction_fraction = 0.9;
-    long n_iterations = 5;
-    double tolerance = 0;
-    STRING strength_log = NULL;
-    long change_defined_values = 0;
-    double strength_limit = 0;
-    long use_perturbed_matrix = 0;
-    long exit_on_failure = 0;
-    long update_orbit = 0;
-    long verbosity = 1;
-    double dK2_weight = 1;
-&end
+        self._block_def_strs = {}
+        # ^ Will contain raw block defintion strings from Elegant Manual
 
-# 7.15
-&correct_tunes
-    STRING quadrupoles = NULL;
-    STRING exclude = NULL;
-    double tune_x = 0;
-    double tune_y = 0;
-    long n_iterations = 5;
-    double correction_fraction = 0.9;
-    double tolerance = 0;
-    long step_up_interval = 0;
-    double max_correction_fraction = 0.9;
-    double delta_correction_fraction = 0.1;
-    long update_orbit = 0;
-    STRING strength_log = NULL;
-    long change_defined_values = 0;
-    long use_perturbed_matrix = 0;
-    double dK1_weight = 1;
-&end
+        self._parse_alter_elements()
+        self._parse_bunched_beam()
+        self._parse_chromaticity()
+        self._parse_correct_tunes()
+        self._parse_floor_coordinates()
+        self._parse_frequency_map()
+        self._parse_load_parameters()
+        self._parse_optimize()
+        self._parse_optimization_covariable()
+        self._parse_optimization_setup()
+        self._parse_parallel_optimization_setup()
+        self._parse_optimization_term()
+        self._parse_optimization_variable()
+        self._parse_rpn_load()
+        self._parse_run_control()
+        self._parse_run_setup()
+        self._parse_save_lattice()
+        self._parse_transmute_elements()
+        self._parse_twiss_output()
+        self._parse_track()
 
-# 7.22
-&floor_coordinates
-    STRING filename = NULL;
-    double X0 = 0.0;
-    double Z0 = 0.0;
-    double theta0 = 0.0;
-    long include_vertices = 0;
-    long vertices_only = 0;
-    long magnet_centers = 0;
-    long store_vertices = 0;
-&end
+        # "&parallel_optimization_setup" also contains all the options for
+        # "&optimization_setup" as well. So, add those options here.
+        self.info['parallel_optimization_setup'] = \
+            self.info['optimization_setup'][:] + \
+            self.info['parallel_optimization_setup']
 
-# 7.23
-&frequency_map
-    STRING output = NULL;
-    double xmin = -0.1;
-    double xmax = 0.1;
-    double ymin = 1e-6;
-    double ymax = 0.1;
-    double delta_min = 0;
-    double delta_max = 0;
-    long nx = 21;
-    long ny = 21;
-    long ndelta = 1;
-    long verbosity = 1;
-    long include_changes = 0;
-    long quadratic_spacing = 0;
-    long full_grid_output = 0;
-&end
+        self._update_output_filepaths()
 
-# 7.33
-&load_parameters
-    STRING filename = NULL;
-    STRING filename_list = NULL;
-    STRING include_name_pattern = NULL;
-    STRING exclude_name_pattern = NULL;
-    STRING include_item_pattern = NULL;
-    STRING exclude_item_pattern = NULL;
-    STRING include_type_pattern = NULL;
-    STRING exclude_type_pattern = NULL;
-    STRING edit_name_command = NULL;
-    long change_defined_values = 0;
-    long clear_settings = 0;
-    long allow_missing_elements = 0;
-    long allow_missing_parameters = 0;
-    long allow_missing_files = 0;
-    long force_occurence_data = 0;
-    long verbose = 0;
-    long skip_pages = 0;
-    long use_first = 0;
-&end
+    #----------------------------------------------------------------------
+    def _parse_block_def(self, block_def_str):
+        """"""
 
-# 7.38
-&optimize
-    long summarize_setup = 0;
-&end
+        for iBlock, (block_header, rest) in enumerate(re.findall(
+            r'&([a-zA-Z_]+)\s+([^&]+)&end', block_def_str)):
+            #print(block_header)
+            self.info[block_header] = []
+            #print(rest)
+            #print(re.findall(r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-,\{\}\s%]+);', rest))
+            for dtype, key, default_val in re.findall(
+                r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-,\{\}\s%]+);', rest):
+                self.info[block_header].append([key, dtype, default_val, None])
+            #print('*********')
 
-# 7.40
-&optimization_covariable
-    STRING name = NULL;
-    STRING item = NULL;
-    STRING equation = NULL;
-    long disable = 0;
-&end
+            if iBlock != 0:
+                raise ValueError('"block_def_str" contains more than one block')
 
-# 7.41
-&optimization_setup
-    STRING equation = NULL;
-    STRING mode = "minimize";
-    STRING method = "simplex";
-    double tolerance = -0.01;
-    double target = 0;
-    long center_on_orbit = 0;
-    long center_momentum_also = 1;
-    long soft_failure = 1;
-    long n_passes = 2;
-    long n_evaluations = 500;
-    long n_restarts = 0;
-    long matrix_order = 1;
-    STRING log_file = NULL;
-    STRING term_log_file = NULL;
-    long output_sparsing_factor = 0;
-    long balance_terms = 0;
-    double restart_worst_term_factor = 1;
-    long restart_worst_terms = 1;
-    long verbose = 1;
-    long balance_terms = 0;
-    double simplex_divisor = 3;
-    double simplex_pass_range_factor = 1;
-    long include_simplex_1d_scans = 1;
-    long start_from_simplex_vertex1 = 0;
-    long restart_random_numbers = 0;
-    STRING interrupt_file = "%s.interrupt";
-    long interrupt_file_check_interval = 0;
-&end
+        self._block_def_strs[block_header] = block_def_str
 
-# 7.42
-&parallel_optimization_setup
-    STRING method = "simplex";
-    double hybrid_simplex_tolerance = -0.01;
-    double hybrid_simplex_tolerance_count = 2;
-    long hybrid_simplex_comparison_interval = 0;
-    double random_factor = 1
-    long n_iterations = 10000;
-    long max_no_change = 10000;
-    long population_size = 100;
-    STRING population_log = NULL;
-    long print_all_individuals = 0;
-    long output_sparsing_factor = 1;
-    STRING crossover = "twopoint";
-    STRING simplex_log = NULL;
-    long simplex_log_interval = 1;
-&end
+    #----------------------------------------------------------------------
+    def _update_output_filepaths(self):
+        """"""
 
-# 7.43
-&optimization_term
-    STRING term = NULL;
-    double weight = 1.0;
-    STRING field_string = NULL;
-    long field_initial_value = 0;
-    long field_final_value = 0;
-    long field_interval = 1;
-    STRING input_file = NULL;
-    STRING input_column = NULL;
-    long verbose = 0;
-&end
+        self.output_filepaths = {}
+        for k, v in self.info.items():
+            matched_keys = []
+            for L in v:
+                if (L[2] is not None) and ('%s' in L[2]):
+                    #print(L[0], L[2])
+                    matched_keys.append(L[0])
+                if (L[3] is not None) and ('%s' in L[3]):
+                    #print(L[0], L[3])
+                    matched_keys.append(L[0])
+            if matched_keys != []:
+                self.output_filepaths[k] = np.unique(matched_keys).tolist()
 
-# 7.44
-&optimization_variable
-    STRING name = NULL;
-    STRING item = NULL;
-    double lower_limit = 0;
-    double upper_limit = 0;
-    double step_size = 1;
-    long disable = 0;
-    long force_inside = 0;
-&end
+        # Manually add missed output file keys
+        self.output_filepaths['optimization_setup'].append('log_file')
 
-# 7.50
-&rpn_load
-    STRING tag = NULL;
-    STRING filename = NULL;
-    STRING match_column = NULL;
-    STRING match_column_value = NULL;
-    long matching_row_number = -1;
-    STRING match_parameter = NULL;
-    STRING match_parameter_value = NULL;
-    long use_row = -1;
-    long use_page = -1;
-    long load_parameters = 0;
-&end
+    #----------------------------------------------------------------------
+    def get_default_str(self, block_name):
+        """"""
 
-# 7.51
-&run_control
-    long n_steps = 1;
-    double bunch_frequency = 0;
-    long n_indices = 0;
-    long n_passes = 1;
-    long n_passes_fiducial = 0;
-    long reset_rf_for_each_step = 1;
-    long first_is_fiducial = 0;
-    long restrict_fiducialization = 0;
-&end
+        lines = [
+            '    ' + s.strip() for s in self._block_def_strs[block_name].split('\n')
+            if s.strip() != '']
+        lines[0] = lines[0].strip()
+        lines[-1] = lines[-1].strip()
 
-# 7.52
-&run_setup
-    STRING lattice = NULL;
-    STRING use_beamline = NULL;
-    STRING rootname = NULL;
-    STRING output = NULL;
-    STRING centroid = NULL;
-    STRING sigma = NULL;
-    STRING final = NULL;
-    STRING acceptance = NULL;
-    STRING losses = NULL;
-    STRING magnets = NULL;
-    STRING semaphore_file = NULL;
-    STRING parameters = NULL;
-    long combine_bunch_statistics = 0;
-    long wrap_around = 1;
-    long final_pass = 0;
-    long default_order = 2;
-    long concat_order = 0;
-    long print_statistics = 0;
-    long show_element_timing = 0;
-    long monitor_memory_usage = 0;
-    long random_number_seed = 987654321;
-    long correction_iterations = 1;
-    double p_central = 0.0;
-    double p_central_mev = 0.0;
-    long always_change_p0 = 0;
-    STRING expand_for = NULL;
-    long tracking_updates = 1;
-    long echo_lattice = 0;
-    STRING search_path = NULL;
-    long element_divisions = 0;
-    long load_balancing_on = 0;
-&end
+        return '\n'.join(lines)
 
-# 7.54
-&save_lattice
-    STRING filename = NULL;
-    long output_seq = 0;
-&end
+    #----------------------------------------------------------------------
+    def get_avail_blocks(self):
+        """"""
 
-# 7.62
-&transmute_elements
-    STRING name = NULL;
-    STRING type = NULL;
-    STRING exclude = NULL;
-    STRING new_type = "DRIF";
-    long disable = 0;
-    long clear = 0;
-&end
+        return list(self.info)
 
-# 7.65
-&twiss_output
-    STRING filename = NULL;
-    long matched = 1;
-    long output_at_each_step = 0;
-    long output_before_tune_correction = 0;
-    long final_values_only = 0;
-    long statistics = 0;
-    long radiation_integrals = 0;
-    long concat_order = 3;
-    long higher_order_chromaticity = 0;
-    long higher_order_chromaticity_points = 5;
-    double higher_order_chromaticity_range = 4e-4;
-    double chromatic_tune_spread_half_range = 0;
-    long quick_higher_order_chromaticity = 0;
-    double beta_x = 1;
-    double alpha_x = 0;
-    double eta_x = 0;
-    double etap_x = 0;
-    double beta_y = 1;
-    double alpha_y = 0;
-    double eta_y = 0;
-    double etap_y = 0;
-    STRING reference_file = NULL;
-    STRING reference_element = NULL;
-    long reference_element_occurrence = 0;
-    long reflect_reference_values = 0;
-    long cavities_are_drifts_if_matched = 1;
-    long compute_driving_terms = 0;
-    long leading_order_driving_terms_only = 0;
-    STRING s_dependent_driving_terms_file = NULL;
-    long local_dispersion = 1;
-&end
+    #----------------------------------------------------------------------
+    def _parse_alter_elements(self):
+        """"""
 
-# 7.66
-&track
-    long center_on_orbit = 0;
-    long center_momentum_also = 1;
-    long offset_by_orbit = 0;
-    long offset_momentum_also = 1;
-    long soft_failure = 1;
-    long stop_tracking_particle_limit = -1;
-    long check_beam_structure = 0;
-    STRING interrupt_file = "%s.interrupt";
-&end
+        # Elegant Manual Section 7.5
+        self._parse_block_def('''
+        &alter_elements
+            STRING name = NULL;
+            STRING item = NULL;
+            STRING type = NULL;
+            STRING exclude = NULL;
+            double value = 0;
+            STRING string_value = NULL;
+            long differential = 0;
+            long multiplicative = 0;
+            long alter_at_each_step = 0;
+            long alter_before_load_parameters = 0;
+            long verbose = 0;
+            long allow_missing_elements = 0;
+            long allow_missing_parameters = 0;
+            long start_occurence = 0;
+            long end_occurence = 0;
+            double s_start = -1;
+            double s_end = -1;
+            STRING before = NULL;
+            STRING after = NULL;
+        &end
+        ''')
 
-'''
-# Note that the following has been modified from the original in the PDF manual
-# to make regex finding consistent.
-#
-## 7.62
-#&transmute_elements
-    #STRING name = NULL, => ;
-    #STRING type = NULL, => ;
-    #STRING exclude = NULL, => ;
-    #STRING new_type = "DRIF", => ;
-    #long disable = 0;
-    #long clear = 0;
-#&end
+    #----------------------------------------------------------------------
+    def _parse_bunched_beam(self):
+        """"""
 
-ELE_BLOCK_INFO = {}
-# ^ keywords, dtypes, default_vals, recommended
-for block_header, rest in re.findall(
-    r'&([a-zA-Z_]+)\s+([^&]+)&end', _RAW_ELE_BLOCK_INFO_STR):
-    #print(block_header)
-    ELE_BLOCK_INFO[block_header] = []
-    #print(rest)
-    #print(re.findall(r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-,\{\}\s%]+);', rest))
-    for dtype, key, default_val in re.findall(
-        r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-,\{\}\s%]+);', rest):
-        ELE_BLOCK_INFO[block_header].append([key, dtype, default_val, None])
-    #print('*********')
-#
-keys = [v[0] for v in ELE_BLOCK_INFO['run_setup']]
-ELE_BLOCK_INFO['run_setup'][keys.index('output')][3] = '%s.out'
-ELE_BLOCK_INFO['run_setup'][keys.index('centroid')][3] = '%s.cen'
-ELE_BLOCK_INFO['run_setup'][keys.index('sigma')][3] = '%s.sig'
-ELE_BLOCK_INFO['run_setup'][keys.index('final')][3] = '%s.fin'
-ELE_BLOCK_INFO['run_setup'][keys.index('acceptance')][3] = '%s.acc'
-ELE_BLOCK_INFO['run_setup'][keys.index('losses')][3] = '%s.lost'
-ELE_BLOCK_INFO['run_setup'][keys.index('magnets')][3] = '%s.mag'
-ELE_BLOCK_INFO['run_setup'][keys.index('semaphore_file')][3] = '%s.done'
-ELE_BLOCK_INFO['run_setup'][keys.index('parameters')][3] = '%s.param'
-keys = [v[0] for v in ELE_BLOCK_INFO['twiss_output']]
-ELE_BLOCK_INFO['twiss_output'][keys.index('filename')][3] = '%s.twi'
-keys = [v[0] for v in ELE_BLOCK_INFO['floor_coordinates']]
-ELE_BLOCK_INFO['floor_coordinates'][keys.index('filename')][3] = '%s.flr'
-keys = [v[0] for v in ELE_BLOCK_INFO['optimization_setup']]
-ELE_BLOCK_INFO['optimization_setup'][keys.index('term_log_file')][3] = '%s.tlog'
-ELE_BLOCK_INFO['optimization_setup'][keys.index('interrupt_file')][3] = '%s.interrupt'
-keys = [v[0] for v in ELE_BLOCK_INFO['parallel_optimization_setup']]
-ELE_BLOCK_INFO['parallel_optimization_setup'][keys.index('population_log')][3] = '%s.pop'
-ELE_BLOCK_INFO['parallel_optimization_setup'][keys.index('simplex_log')][3] = '%s.simlog'
-keys = [v[0] for v in ELE_BLOCK_INFO['frequency_map']]
-ELE_BLOCK_INFO['frequency_map'][keys.index('output')][3] = '%s.fma'
-keys = [v[0] for v in ELE_BLOCK_INFO['save_lattice']]
-ELE_BLOCK_INFO['save_lattice'][keys.index('filename')][3] = '%s.new'
-#
-# "&parallel_optimization_setup" also contains all the options for
-# "&optimization_setup" as well. So, add those options here.
-ELE_BLOCK_INFO['parallel_optimization_setup'] = \
-    ELE_BLOCK_INFO['optimization_setup'][:] + ELE_BLOCK_INFO['parallel_optimization_setup']
+        # Elegant Manual Section 7.9
+        self._parse_block_def('''
+        &bunched_beam
+            STRING bunch = NULL;
+            long n_particles_per_bunch = 1;
+            double time_start = 0;
+            STRING matched_to_cell = NULL;
+            double emit_x = 0;
+            double emit_nx = 0;
+            double beta_x = 1.0;
+            double alpha_x = 0.0;
+            double eta_x = 0.0;
+            double etap_x = 0.0;
+            double emit_y = 0;
+            double emit_ny = 0;
+            double beta_y = 1.0;
+            double alpha_y = 0.0;
+            double eta_y = 0.0;
+            double etap_y = 0.0;
+            long use_twiss_command_values = 0;
+            long use_moments_output_values = 0;
+            double Po = 0.0;
+            double sigma_dp = 0.0;
+            double sigma_s = 0.0;
+            double dp_s_coupling = 0;
+            double emit_z = 0;
+            double beta_z = 0;
+            double alpha_z = 0;
+            double momentum_chirp = 0;
+            long one_random_bunch = 1;
+            long symmetrize = 0;
+            long halton_sequence[3] = {0, 0, 0};
+            long halton_radix[6] = {0, 0, 0, 0, 0, 0};
+            long optimized_halton = 0;
+            long randomize_order[3] = {0, 0, 0};
+            long limit_invariants = 0;
+            long limit_in_4d = 0;
+            long enforce_rms_values[3] = {0, 0, 0};
+            double distribution_cutoff[3] = {2, 2, 2};
+            STRING distribution_type[3] = {"gaussian","gaussian","gaussian"};
+            double centroid[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+            long first_is_fiducial = 0;
+            long save_initial_coordinates = 1;
+        &end
+        ''')
 
-ELE_OUTPUT_FILEPATHS = {}
-for k, v in ELE_BLOCK_INFO.items():
-    matched_keys = []
-    for L in v:
-        if (L[2] is not None) and ('%s' in L[2]):
-            #print(L[0], L[2])
-            matched_keys.append(L[0])
-        if (L[3] is not None) and ('%s' in L[3]):
-            #print(L[0], L[3])
-            matched_keys.append(L[0])
-    if matched_keys != []:
-        ELE_OUTPUT_FILEPATHS[k] = np.unique(matched_keys).tolist()
-# Manually add missed output file keys
-ELE_OUTPUT_FILEPATHS['optimization_setup'].append('log_file')
+    #----------------------------------------------------------------------
+    def _parse_chromaticity(self):
+        """"""
 
-class EleContents():
+        # Elegant Manual Section 7.11
+        self._parse_block_def('''
+        &chromaticity
+            STRING sextupoles = NULL;
+            STRING exclude = NULL;
+            double dnux_dp = 0;
+            double dnuy_dp = 0;
+            double sextupole_tweek = 1e-3;
+            double correction_fraction = 0.9;
+            long n_iterations = 5;
+            double tolerance = 0;
+            STRING strength_log = NULL;
+            long change_defined_values = 0;
+            double strength_limit = 0;
+            long use_perturbed_matrix = 0;
+            long exit_on_failure = 0;
+            long update_orbit = 0;
+            long verbosity = 1;
+            double dK2_weight = 1;
+        &end
+        ''')
+
+    #----------------------------------------------------------------------
+    def _parse_correct_tunes(self):
+        """"""
+
+        # Elegant Manual Section 7.15
+        self._parse_block_def('''
+        &correct_tunes
+            STRING quadrupoles = NULL;
+            STRING exclude = NULL;
+            double tune_x = 0;
+            double tune_y = 0;
+            long n_iterations = 5;
+            double correction_fraction = 0.9;
+            double tolerance = 0;
+            long step_up_interval = 0;
+            double max_correction_fraction = 0.9;
+            double delta_correction_fraction = 0.1;
+            long update_orbit = 0;
+            STRING strength_log = NULL;
+            long change_defined_values = 0;
+            long use_perturbed_matrix = 0;
+            double dK1_weight = 1;
+        &end
+        ''')
+
+    #----------------------------------------------------------------------
+    def _parse_floor_coordinates(self):
+        """"""
+
+        # Elegant Manual Section 7.22
+        self._parse_block_def('''
+        &floor_coordinates
+            STRING filename = NULL;
+            double X0 = 0.0;
+            double Z0 = 0.0;
+            double theta0 = 0.0;
+            long include_vertices = 0;
+            long vertices_only = 0;
+            long magnet_centers = 0;
+            long store_vertices = 0;
+        &end
+        ''')
+
+        d = self.info['floor_coordinates']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('filename')][3] = '%s.flr'
+
+    #----------------------------------------------------------------------
+    def _parse_frequency_map(self):
+        """"""
+
+        # Elegant Manual Section 7.23
+        self._parse_block_def('''
+        &frequency_map
+            STRING output = NULL;
+            double xmin = -0.1;
+            double xmax = 0.1;
+            double ymin = 1e-6;
+            double ymax = 0.1;
+            double delta_min = 0;
+            double delta_max = 0;
+            long nx = 21;
+            long ny = 21;
+            long ndelta = 1;
+            long verbosity = 1;
+            long include_changes = 0;
+            long quadratic_spacing = 0;
+            long full_grid_output = 0;
+        &end
+        ''')
+
+        d = self.info['frequency_map']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('output')][3] = '%s.fma'
+
+    #----------------------------------------------------------------------
+    def _parse_load_parameters(self):
+        """"""
+
+        # Elegant Manual Section 7.33
+        self._parse_block_def('''
+        &load_parameters
+            STRING filename = NULL;
+            STRING filename_list = NULL;
+            STRING include_name_pattern = NULL;
+            STRING exclude_name_pattern = NULL;
+            STRING include_item_pattern = NULL;
+            STRING exclude_item_pattern = NULL;
+            STRING include_type_pattern = NULL;
+            STRING exclude_type_pattern = NULL;
+            STRING edit_name_command = NULL;
+            long change_defined_values = 0;
+            long clear_settings = 0;
+            long allow_missing_elements = 0;
+            long allow_missing_parameters = 0;
+            long allow_missing_files = 0;
+            long force_occurence_data = 0;
+            long verbose = 0;
+            long skip_pages = 0;
+            long use_first = 0;
+        &end
+        ''')
+
+    #----------------------------------------------------------------------
+    def _parse_optimize(self):
+        """"""
+
+        # Elegant Manual Section 7.38
+        self._parse_block_def('''
+        &optimize
+            long summarize_setup = 0;
+        &end
+        ''')
+
+    #----------------------------------------------------------------------
+    def _parse_optimization_covariable(self):
+        """"""
+
+        # Elegant Manual Section 7.40
+        self._parse_block_def('''
+        &optimization_covariable
+            STRING name = NULL;
+            STRING item = NULL;
+            STRING equation = NULL;
+            long disable = 0;
+        &end
+        ''')
+
+    #----------------------------------------------------------------------
+    def _parse_optimization_setup(self):
+        """"""
+
+        # Elegant Manual Section 7.41
+        self._parse_block_def('''
+        &optimization_setup
+            STRING equation = NULL;
+            STRING mode = "minimize";
+            STRING method = "simplex";
+            double tolerance = -0.01;
+            double target = 0;
+            long center_on_orbit = 0;
+            long center_momentum_also = 1;
+            long soft_failure = 1;
+            long n_passes = 2;
+            long n_evaluations = 500;
+            long n_restarts = 0;
+            long matrix_order = 1;
+            STRING log_file = NULL;
+            STRING term_log_file = NULL;
+            long output_sparsing_factor = 0;
+            long balance_terms = 0;
+            double restart_worst_term_factor = 1;
+            long restart_worst_terms = 1;
+            long verbose = 1;
+            long balance_terms = 0;
+            double simplex_divisor = 3;
+            double simplex_pass_range_factor = 1;
+            long include_simplex_1d_scans = 1;
+            long start_from_simplex_vertex1 = 0;
+            long restart_random_numbers = 0;
+            STRING interrupt_file = "%s.interrupt";
+            long interrupt_file_check_interval = 0;
+        &end
+        ''')
+
+        d = self.info['optimization_setup']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('term_log_file')][3] = '%s.tlog'
+        d[keys.index('interrupt_file')][3] = '%s.interrupt'
+
+    #----------------------------------------------------------------------
+    def _parse_parallel_optimization_setup(self):
+        """"""
+
+        # Elegant Manual Section 7.42
+        self._parse_block_def('''
+        &parallel_optimization_setup
+            STRING method = "simplex";
+            double hybrid_simplex_tolerance = -0.01;
+            double hybrid_simplex_tolerance_count = 2;
+            long hybrid_simplex_comparison_interval = 0;
+            double random_factor = 1
+            long n_iterations = 10000;
+            long max_no_change = 10000;
+            long population_size = 100;
+            STRING population_log = NULL;
+            long print_all_individuals = 0;
+            long output_sparsing_factor = 1;
+            STRING crossover = "twopoint";
+            STRING simplex_log = NULL;
+            long simplex_log_interval = 1;
+        &end
+        ''')
+
+        d = self.info['parallel_optimization_setup']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('population_log')][3] = '%s.pop'
+        d[keys.index('simplex_log')][3] = '%s.simlog'
+
+    #----------------------------------------------------------------------
+    def _parse_optimization_term(self):
+        """"""
+
+        # Elegant Manual Section 7.43
+        self._parse_block_def('''
+        &optimization_term
+            STRING term = NULL;
+            double weight = 1.0;
+            STRING field_string = NULL;
+            long field_initial_value = 0;
+            long field_final_value = 0;
+            long field_interval = 1;
+            STRING input_file = NULL;
+            STRING input_column = NULL;
+            long verbose = 0;
+        &end
+        ''')
+
+    #----------------------------------------------------------------------
+    def _parse_optimization_variable(self):
+        """"""
+
+        # Elegant Manual Section 7.44
+        self._parse_block_def('''
+        &optimization_variable
+            STRING name = NULL;
+            STRING item = NULL;
+            double lower_limit = 0;
+            double upper_limit = 0;
+            double step_size = 1;
+            long disable = 0;
+            long force_inside = 0;
+        &end
+        ''')
+
+    #----------------------------------------------------------------------
+    def _parse_rpn_load(self):
+        """"""
+
+        # Elegant Manual Section 7.50
+        self._parse_block_def('''
+        &rpn_load
+            STRING tag = NULL;
+            STRING filename = NULL;
+            STRING match_column = NULL;
+            STRING match_column_value = NULL;
+            long matching_row_number = -1;
+            STRING match_parameter = NULL;
+            STRING match_parameter_value = NULL;
+            long use_row = -1;
+            long use_page = -1;
+            long load_parameters = 0;
+        &end
+        ''')
+
+    #----------------------------------------------------------------------
+    def _parse_run_control(self):
+        """"""
+
+        # Elegant Manual Section 7.51
+        self._parse_block_def('''
+        &run_control
+            long n_steps = 1;
+            double bunch_frequency = 0;
+            long n_indices = 0;
+            long n_passes = 1;
+            long n_passes_fiducial = 0;
+            long reset_rf_for_each_step = 1;
+            long first_is_fiducial = 0;
+            long restrict_fiducialization = 0;
+        &end
+        ''')
+
+    #----------------------------------------------------------------------
+    def _parse_run_setup(self):
+        """"""
+
+        # Elegant Manual Section 7.52
+        self._parse_block_def('''
+        &run_setup
+            STRING lattice = NULL;
+            STRING use_beamline = NULL;
+            STRING rootname = NULL;
+            STRING output = NULL;
+            STRING centroid = NULL;
+            STRING sigma = NULL;
+            STRING final = NULL;
+            STRING acceptance = NULL;
+            STRING losses = NULL;
+            STRING magnets = NULL;
+            STRING semaphore_file = NULL;
+            STRING parameters = NULL;
+            long combine_bunch_statistics = 0;
+            long wrap_around = 1;
+            long final_pass = 0;
+            long default_order = 2;
+            long concat_order = 0;
+            long print_statistics = 0;
+            long show_element_timing = 0;
+            long monitor_memory_usage = 0;
+            long random_number_seed = 987654321;
+            long correction_iterations = 1;
+            double p_central = 0.0;
+            double p_central_mev = 0.0;
+            long always_change_p0 = 0;
+            STRING expand_for = NULL;
+            long tracking_updates = 1;
+            long echo_lattice = 0;
+            STRING search_path = NULL;
+            long element_divisions = 0;
+            long load_balancing_on = 0;
+        &end
+        ''')
+
+        d = self.info['run_setup']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('output')][3] = '%s.out'
+        d[keys.index('centroid')][3] = '%s.cen'
+        d[keys.index('sigma')][3] = '%s.sig'
+        d[keys.index('final')][3] = '%s.fin'
+        d[keys.index('acceptance')][3] = '%s.acc'
+        d[keys.index('losses')][3] = '%s.lost'
+        d[keys.index('magnets')][3] = '%s.mag'
+        d[keys.index('semaphore_file')][3] = '%s.done'
+        d[keys.index('parameters')][3] = '%s.param'
+
+
+    #----------------------------------------------------------------------
+    def _parse_save_lattice(self):
+        """"""
+
+        # Elegant Manual Section 7.54
+        self._parse_block_def('''
+        &save_lattice
+            STRING filename = NULL;
+            long output_seq = 0;
+        &end
+        ''')
+
+        d = self.info['save_lattice']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('filename')][3] = '%s.new'
+
+    #----------------------------------------------------------------------
+    def _parse_transmute_elements(self):
+        """"""
+
+        # Elegant Manual Section 7.62
+        self._parse_block_def('''
+        &transmute_elements
+            STRING name = NULL;
+            STRING type = NULL;
+            STRING exclude = NULL;
+            STRING new_type = "DRIF";
+            long disable = 0;
+            long clear = 0;
+        &end
+        ''')
+        # Note that the following has been modified from the original in the PDF
+        # manual to make regex finding consistent, by changing "," to ";":
+        #
+        #&transmute_elements
+            #STRING name = NULL, => ;
+            #STRING type = NULL, => ;
+            #STRING exclude = NULL, => ;
+            #STRING new_type = "DRIF", => ;
+            #long disable = 0;
+            #long clear = 0;
+        #&end
+
+    #----------------------------------------------------------------------
+    def _parse_twiss_output(self):
+        """"""
+
+        # Elegant Manual Section 7.65
+        self._parse_block_def('''
+        &twiss_output
+            STRING filename = NULL;
+            long matched = 1;
+            long output_at_each_step = 0;
+            long output_before_tune_correction = 0;
+            long final_values_only = 0;
+            long statistics = 0;
+            long radiation_integrals = 0;
+            long concat_order = 3;
+            long higher_order_chromaticity = 0;
+            long higher_order_chromaticity_points = 5;
+            double higher_order_chromaticity_range = 4e-4;
+            double chromatic_tune_spread_half_range = 0;
+            long quick_higher_order_chromaticity = 0;
+            double beta_x = 1;
+            double alpha_x = 0;
+            double eta_x = 0;
+            double etap_x = 0;
+            double beta_y = 1;
+            double alpha_y = 0;
+            double eta_y = 0;
+            double etap_y = 0;
+            STRING reference_file = NULL;
+            STRING reference_element = NULL;
+            long reference_element_occurrence = 0;
+            long reflect_reference_values = 0;
+            long cavities_are_drifts_if_matched = 1;
+            long compute_driving_terms = 0;
+            long leading_order_driving_terms_only = 0;
+            STRING s_dependent_driving_terms_file = NULL;
+            long local_dispersion = 1;
+        &end
+        ''')
+
+        d = self.info['twiss_output']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('filename')][3] = '%s.twi'
+
+    #----------------------------------------------------------------------
+    def _parse_track(self):
+        """"""
+
+        # Elegant Manual Section 7.66
+        self._parse_block_def('''
+        &track
+            long center_on_orbit = 0;
+            long center_momentum_also = 1;
+            long offset_by_orbit = 0;
+            long offset_momentum_also = 1;
+            long soft_failure = 1;
+            long stop_tracking_particle_limit = -1;
+            long check_beam_structure = 0;
+            STRING interrupt_file = "%s.interrupt";
+        &end
+        ''')
+
+class EleDesigner():
     """"""
 
     def __init__(self, double_format='.12g'):
         """Constructor"""
 
-        self.text = ''
+        self.clear()
 
         self.double_format = double_format
 
-        self.rootname = None
-        self.output_filepath_list = []
-        self.actual_output_filepath_list = []
+        self.blocks = EleBlocks()
 
     def clear(self):
         """"""
 
         self.text = ''
-
-        self.double_format = '.12g'
 
         self.rootname = None
         self.output_filepath_list = []
@@ -476,12 +684,12 @@ class EleContents():
         util.robust_text_file_write(
             output_ele_filepath, self.text, nMaxTry=nMaxTry, sleep=sleep)
 
-    def newline(self):
+    def add_newline(self):
         """"""
 
         self.text += '\n'
 
-    def comment(self, comment):
+    def add_comment(self, comment):
         """"""
 
         self.text += '!' + comment + '\n'
@@ -502,18 +710,34 @@ class EleContents():
     def _get_block_str(self, block_header, **kwargs):
         """"""
 
-        keywords, dtypes, default_vals, recommended = zip(*ELE_BLOCK_INFO[block_header])
+        if block_header not in self.blocks.info:
+
+            print('* Valid block names are the following:')
+            print('\n'.join(self.blocks.get_avail_blocks()))
+
+            raise ValueError(f'Unexpected block name "{block_header}".')
+
+        keywords, dtypes, default_vals, recommended = zip(
+            *self.blocks.info[block_header])
 
         block = []
         for k, v in kwargs.items():
+
+            if k not in keywords:
+
+                print(f'* Valid keys for Block "{block_header}" are the following:')
+                print('\n'.join(sorted(keywords)))
+
+                raise ValueError(f'Unexpected key "{k}" for Block "{block_header}"')
+
             i = keywords.index(k)
             if dtypes[i] == 'STRING':
                 if v is None:
                     continue
                 else:
                     block.append(f'{k} = "{v}"')
-                if (block_header in ELE_OUTPUT_FILEPATHS) and \
-                   (k in ELE_OUTPUT_FILEPATHS[block_header]):
+                if (block_header in self.blocks.output_filepaths) and \
+                   (k in self.blocks.output_filepaths[block_header]):
                     self.output_filepath_list.append(v)
                 if (block_header == 'run_setup') and (k == 'rootname'):
                     self.rootname = v
@@ -557,105 +781,13 @@ class EleContents():
         self.actual_output_filepath_list = np.unique(
             self.actual_output_filepath_list).tolist()
 
-    def run_setup(self, **kwargs):
+    #----------------------------------------------------------------------
+    def add_block(self, block_name, **kwargs):
         """"""
 
-        self.text += self._get_block_str('run_setup', **kwargs)
+        self.text += self._get_block_str(block_name, **kwargs)
 
-    def load_parameters(self, **kwargs):
-        """"""
 
-        self.text += self._get_block_str('load_parameters', **kwargs)
-
-    def twiss_output(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('twiss_output', **kwargs)
-
-    def floor_coordinates(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('floor_coordinates', **kwargs)
-
-    def rpn_load(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('rpn_load', **kwargs)
-
-    def run_control(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('run_control', **kwargs)
-
-    def optimization_setup(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('optimization_setup', **kwargs)
-
-    def parallel_optimization_setup(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('parallel_optimization_setup', **kwargs)
-
-    def optimization_variable(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('optimization_variable', **kwargs)
-
-    def optimization_covariable(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('optimization_covariable', **kwargs)
-
-    def optimization_term(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('optimization_term', **kwargs)
-
-    def optimize(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('optimize', **kwargs)
-
-    def bunched_beam(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('bunched_beam', **kwargs)
-
-    def save_lattice(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('save_lattice', **kwargs)
-
-    def alter_elements(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('alter_elements', **kwargs)
-
-    def correct_tunes(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('correct_tunes', **kwargs)
-
-    def chromaticity(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('chromaticity', **kwargs)
-
-    def track(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('track', **kwargs)
-
-    def frequency_map(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('frequency_map', **kwargs)
-
-    def transmute_elements(self, **kwargs):
-        """"""
-
-        self.text += self._get_block_str('transmute_elements', **kwargs)
 
 
 
