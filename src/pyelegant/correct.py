@@ -1,6 +1,7 @@
 import os
 import tempfile
 
+from . import std_print_enabled
 from . import elebuilder
 from .local import run
 from .remote import remote
@@ -10,7 +11,7 @@ def tunes(
     ele_filepath=None, del_tmp_files=True,
     quadrupoles=None, exclude=None, tune_x=0.0, tune_y=0.0, n_iterations=5,
     correction_fraction=0.9, tolerance=0.0,
-    run_local=True, remote_opts=None, print_stdout=True, print_stderr=True):
+    run_local=True, remote_opts=None):
     """"""
 
     if quadrupoles is None:
@@ -61,7 +62,8 @@ def tunes(
     # Run Elegant
     if run_local:
         run(ele_filepath, print_cmd=False,
-            print_stdout=print_stdout, print_stderr=print_stderr)
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'])
     else:
         if remote_opts is None:
             remote_opts = dict(use_sbatch=False)
@@ -77,7 +79,8 @@ def tunes(
         #   access file /.../tmp*.twi--file is locked (SDDS_InitializeOutput)"
 
         remote.run(remote_opts, ele_filepath, print_cmd=True,
-                   print_stdout=print_stdout, print_stderr=print_stderr,
+                   print_stdout=std_print_enabled['out'],
+                   print_stderr=std_print_enabled['err'],
                    output_filepaths=None)
 
     if del_tmp_files:
@@ -96,7 +99,7 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
     ele_filepath=None, del_tmp_files=True,
     sextupoles=None, exclude=None, dnux_dp=0.0, dnuy_dp=0.0, n_iterations=5,
     correction_fraction=0.9, tolerance=0.0,
-    run_local=True, remote_opts=None, print_stdout=True, print_stderr=True):
+    run_local=True, remote_opts=None):
     """"""
 
     if sextupoles is None:
@@ -148,7 +151,8 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
     # Run Elegant
     if run_local:
         run(ele_filepath, print_cmd=False,
-            print_stdout=print_stdout, print_stderr=print_stderr)
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'])
     else:
         if remote_opts is None:
             remote_opts = dict(use_sbatch=False)
@@ -164,7 +168,8 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
         #   access file /.../tmp*.twi--file is locked (SDDS_InitializeOutput)"
 
         remote.run(remote_opts, ele_filepath, print_cmd=True,
-                   print_stdout=print_stdout, print_stderr=print_stderr,
+                   print_stdout=std_print_enabled['out'],
+                   print_stderr=std_print_enabled['err'],
                    output_filepaths=None)
 
     if del_tmp_files:

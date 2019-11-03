@@ -3,6 +3,8 @@ import matplotlib.pylab as plt
 plt.rcParams['mathtext.fontset'] = 'cm'
 plt.rcParams['mathtext.rm'] = 'serif'
 
+std_print_enabled = dict(out=True, err=True)
+
 from . import local
 #from . import remote
 from . import twiss

@@ -4,7 +4,8 @@ import shlex
 from . import sdds
 from .remote import remote
 
-def run(ele_filepath, macros=None, print_cmd=False, print_stdout=True, print_stderr=True):
+def run(ele_filepath, macros=None, print_cmd=False,
+        print_stdout=True, print_stderr=True):
     """"""
 
     cmd_list = ['elegant', ele_filepath]

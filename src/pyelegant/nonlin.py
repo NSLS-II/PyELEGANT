@@ -6,6 +6,7 @@ import h5py
 
 from .local import run
 from .remote import remote
+from . import std_print_enabled
 from . import elebuilder
 from . import util
 from . import sdds
@@ -15,7 +16,7 @@ def calc_fma_xy(
     n_turns=1024, delta_offset=0.0, quadratic_spacing=False, full_grid_output=False,
     use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
     output_file_type=None, del_tmp_files=True,
-    run_local=False, remote_opts=None, print_stdout=True, print_stderr=True):
+    run_local=False, remote_opts=None):
     """"""
 
     with open(LTE_filepath, 'r') as f:
@@ -134,7 +135,8 @@ def calc_fma_xy(
     # Run Elegant
     if run_local:
         run(ele_filepath, print_cmd=False,
-            print_stdout=print_stdout, print_stderr=print_stderr)
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'])
     else:
         if remote_opts is None:
             remote_opts = dict(
@@ -143,7 +145,8 @@ def calc_fma_xy(
                 partition='normal', ntasks=50)
 
         remote.run(remote_opts, ele_filepath, print_cmd=True,
-                   print_stdout=print_stdout, print_stderr=print_stderr,
+                   print_stdout=std_print_enabled['out'],
+                   print_stderr=std_print_enabled['err'],
                    output_filepaths=None)
 
     tmp_filepaths = dict(fma=fma_output_filepath)
