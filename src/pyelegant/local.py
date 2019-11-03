@@ -1,8 +1,29 @@
 from subprocess import Popen, PIPE
 import shlex
 
+from . import std_print_enabled
 from . import sdds
 from .remote import remote
+
+def enable_stdout():
+    """"""
+
+    std_print_enabled['out'] = True
+
+def disable_stdout():
+    """"""
+
+    std_print_enabled['out'] = False
+
+def enable_stderr():
+    """"""
+
+    std_print_enabled['err'] = True
+
+def disable_stderr():
+    """"""
+
+    std_print_enabled['err'] = False
 
 def run(ele_filepath, macros=None, print_cmd=False,
         print_stdout=True, print_stderr=True):
