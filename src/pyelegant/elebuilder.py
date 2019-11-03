@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from . import util
 from . import sdds
+from . import notation
 
 ########################################################################
 class EleBlocks():
@@ -664,18 +665,31 @@ class InfixEquation():
     """"""
 
     #----------------------------------------------------------------------
-    def __init__(self, variable_str_repr):
+    def __init__(self, variable_str_repr, rpn_conv_post_repl=None):
         """Constructor"""
 
         self.equation_repr = variable_str_repr
+
+        if rpn_conv_post_repl is None:
+            self.rpn_conv_post_repl = []
+        else:
+            self.rpn_conv_post_repl = rpn_conv_post_repl
 
     #----------------------------------------------------------------------
     def copy(self):
         """"""
 
-        copy = InfixEquation(self.equation_repr)
+        copy = InfixEquation(self.equation_repr,
+                             rpn_conv_post_repl=self.rpn_conv_post_repl)
 
         return copy
+
+    #----------------------------------------------------------------------
+    def torpn(self):
+        """"""
+
+        return notation.convert_infix_to_rpn(
+            self.equation_repr, post_repl=self.rpn_conv_post_repl)
 
     #----------------------------------------------------------------------
     def __repr__(self):
@@ -708,6 +722,8 @@ class InfixEquation():
         if isinstance(other, (int, float, str)):
             copy.equation_repr = f'{self.equation_repr} + {other}'
         elif isinstance(other, InfixEquation):
+            copy.rpn_conv_post_repl = list(set(
+                self.rpn_conv_post_repl + other.rpn_conv_post_repl))
             copy.equation_repr = f'{self.equation_repr} + {other.equation_repr}'
         else:
             raise NotImplementedError(f'__add__ for type "{type(other)}"')
@@ -723,6 +739,8 @@ class InfixEquation():
         if isinstance(left, (int, float, str)):
             copy.equation_repr = f'{left} + {self.equation_repr}'
         elif isinstance(left, InfixEquation):
+            copy.rpn_conv_post_repl = list(set(
+                self.rpn_conv_post_repl + left.rpn_conv_post_repl))
             copy.equation_repr = f'{left.equation_repr} + {self.equation_repr}'
         else:
             raise NotImplementedError(f'__radd__ for type "{type(left)}"')
@@ -738,6 +756,8 @@ class InfixEquation():
         if isinstance(other, (int, float, str)):
             copy.equation_repr = f'{self.equation_repr} - {other}'
         elif isinstance(other, InfixEquation):
+            copy.rpn_conv_post_repl = list(set(
+                self.rpn_conv_post_repl + other.rpn_conv_post_repl))
             copy.equation_repr = f'{self.equation_repr} - {other.equation_repr}'
         else:
             raise NotImplementedError(f'__sub__ for type "{type(other)}"')
@@ -753,6 +773,8 @@ class InfixEquation():
         if isinstance(left, (int, float, str)):
             copy.equation_repr = f'{left} - {self.equation_repr}'
         elif isinstance(left, InfixEquation):
+            copy.rpn_conv_post_repl = list(set(
+                self.rpn_conv_post_repl + left.rpn_conv_post_repl))
             copy.equation_repr = f'{left.equation_repr} - {self.equation_repr}'
         else:
             raise NotImplementedError(f'__rsub__ for type "{type(left)}"')
@@ -768,6 +790,8 @@ class InfixEquation():
         if isinstance(other, (int, float, str)):
             copy.equation_repr = f'({self.equation_repr}) * ({other})'
         elif isinstance(other, InfixEquation):
+            copy.rpn_conv_post_repl = list(set(
+                self.rpn_conv_post_repl + other.rpn_conv_post_repl))
             copy.equation_repr = f'({self.equation_repr}) * ({other.equation_repr})'
         else:
             raise NotImplementedError(f'__mul__ for type "{type(other)}"')
@@ -783,6 +807,8 @@ class InfixEquation():
         if isinstance(left, (int, float, str)):
             copy.equation_repr = f'({left}) * ({self.equation_repr})'
         elif isinstance(left, InfixEquation):
+            copy.rpn_conv_post_repl = list(set(
+                self.rpn_conv_post_repl + left.rpn_conv_post_repl))
             copy.equation_repr = f'({left.equation_repr}) * ({self.equation_repr})'
         else:
             raise NotImplementedError(f'__rmul__ for type "{type(left)}"')
@@ -798,6 +824,8 @@ class InfixEquation():
         if isinstance(other, (int, float, str)):
             copy.equation_repr = f'({self.equation_repr}) / ({other})'
         elif isinstance(other, InfixEquation):
+            copy.rpn_conv_post_repl = list(set(
+                self.rpn_conv_post_repl + other.rpn_conv_post_repl))
             copy.equation_repr = f'({self.equation_repr}) / ({other.equation_repr})'
         else:
             raise NotImplementedError(f'__truediv__ for type "{type(other)}"')
@@ -813,6 +841,8 @@ class InfixEquation():
         if isinstance(left, (int, float, str)):
             copy.equation_repr = f'({left}) / ({self.equation_repr})'
         elif isinstance(left, InfixEquation):
+            copy.rpn_conv_post_repl = list(set(
+                self.rpn_conv_post_repl + left.rpn_conv_post_repl))
             copy.equation_repr = f'({left.equation_repr}) / ({self.equation_repr})'
         else:
             raise NotImplementedError(f'__rtruediv__ for type "{type(left)}"')
@@ -840,6 +870,8 @@ class InfixEquation():
         if isinstance(exponent, (int, float, str)):
             copy.equation_repr = f'({self.equation_repr})**({exponent})'
         elif isinstance(exponent, InfixEquation):
+            copy.rpn_conv_post_repl = list(set(
+                self.rpn_conv_post_repl + exponent.rpn_conv_post_repl))
             copy.equation_repr = f'({self.equation_repr})**({exponent.equation_repr})'
         else:
             raise NotImplementedError(f'__pow__ for type "{type(exponent)}"')
@@ -855,11 +887,16 @@ class InfixEquation():
         if isinstance(base, (int, float, str)):
             copy.equation_repr = f'({base})**({self.equation_repr})'
         elif isinstance(base, InfixEquation):
+            copy.rpn_conv_post_repl = list(set(
+                self.rpn_conv_post_repl + base.rpn_conv_post_repl))
             copy.equation_repr = f'({base.equation_repr})**({self.equation_repr})'
         else:
             raise NotImplementedError(f'__rpow__ for type "{type(base)}"')
 
         return copy
+
+AST_COMPATIBLE_REPL = [('/', '__SLASH__'), ('.', '__DOT__'), ('#', '__POUND__')]
+RPN_CONV_POST_REPL = [(_temp, _orig) for _orig, _temp in AST_COMPATIBLE_REPL]
 
 ########################################################################
 class RPNVariableDatabase():
@@ -906,12 +943,17 @@ class RPNVariableDatabase():
 
         for var_name in self._vars + self._builtin_vars:
 
-            self.dict[var_name] = var_name
+            ast_compatible_var_name = var_name
+            for _orig, _temp in AST_COMPATIBLE_REPL:
+                ast_compatible_var_name = ast_compatible_var_name.replace(
+                    _orig, _temp)
 
-            namespace_key = var_name.replace(
-                '/', '__SLASH__').replace('.', '__DOT__').replace('#', '__POUND__')
+            eq_obj = InfixEquation(ast_compatible_var_name,
+                                   rpn_conv_post_repl=RPN_CONV_POST_REPL)
 
-            self.namespace.__dict__[namespace_key] = var_name
+            self.dict[var_name] = eq_obj
+
+            self.namespace.__dict__[ast_compatible_var_name] = eq_obj
 
     #----------------------------------------------------------------------
     def _clear(self):
@@ -936,8 +978,9 @@ class RPNFunctionDatabase():
         """"""
 
         if not isinstance(x, InfixEquation):
-            return InfixEquation(f'{x}')
+            return InfixEquation(f'{x}', rpn_conv_post_repl=RPN_CONV_POST_REPL)
         else:
+            x.rpn_conv_post_repl = RPN_CONV_POST_REPL
             return x
 
     #----------------------------------------------------------------------
@@ -948,7 +991,8 @@ class RPNFunctionDatabase():
 
         args_repr = ', '.join([eq.equation_repr for eq in eq_obj_list])
 
-        return InfixEquation(f'{func_name}({args_repr})')
+        return InfixEquation(f'{func_name}({args_repr})',
+                             rpn_conv_post_repl=RPN_CONV_POST_REPL)
 
     #----------------------------------------------------------------------
     def ln(self, x):

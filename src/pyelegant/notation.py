@@ -164,7 +164,7 @@ class PrefixVisitor(Visitor):
         for arg in node.args:
             self.visit(arg)
 
-def convert_infix_to_rpn(infix_expression, temp_repl=None):
+def convert_infix_to_rpn(infix_expression, temp_repl=None, post_repl=None):
     """"""
 
     mod_infix = infix_expression
@@ -179,6 +179,9 @@ def convert_infix_to_rpn(infix_expression, temp_repl=None):
     if temp_repl is not None:
         for _original, _temp in temp_repl:
             rpn_expr = rpn_expr.replace(_temp, _original)
+    if post_repl is not None:
+        for current, new in post_repl:
+            rpn_expr = rpn_expr.replace(current, new)
 
     return rpn_expr
 
