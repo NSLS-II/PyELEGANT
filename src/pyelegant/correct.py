@@ -23,40 +23,40 @@ def tunes(
         ele_filepath = os.path.abspath(tmp.name)
         tmp.close()
 
-    eb = elebuilder.EleContents(double_format='.12g')
+    ed = elebuilder.EleDesigner(double_format='.12g')
 
-    eb.run_setup(
+    ed.add_block('run_setup',
         lattice=init_LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline)
 
-    eb.newline()
+    ed.add_newline()
 
-    eb.run_control()
+    ed.add_block('run_control')
 
-    eb.newline()
+    ed.add_newline()
 
-    eb.correct_tunes(
+    ed.add_block('correct_tunes',
         quadrupoles=used_quads_str, exclude=exclude, tune_x=tune_x, tune_y=tune_y,
         n_iterations=n_iterations, correction_fraction=correction_fraction,
         tolerance=tolerance, change_defined_values=True)
 
-    eb.newline()
+    ed.add_newline()
 
-    eb.twiss_output()
+    ed.add_block('twiss_output')
 
-    eb.newline()
+    ed.add_newline()
 
-    eb.bunched_beam()
+    ed.add_block('bunched_beam')
 
-    eb.newline()
+    ed.add_newline()
 
-    eb.track()
+    ed.add_block('track')
 
-    eb.save_lattice(filename=corrected_LTE_filepath)
+    ed.add_block('save_lattice', filename=corrected_LTE_filepath)
 
-    eb.write(ele_filepath)
+    ed.write(ele_filepath)
 
-    eb.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
-    #print(eb.actual_output_filepath_list)
+    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    #print(ed.actual_output_filepath_list)
 
     # Run Elegant
     if run_local:
@@ -81,7 +81,7 @@ def tunes(
                    output_filepaths=None)
 
     if del_tmp_files:
-        for fp in eb.actual_output_filepath_list + [ele_filepath]:
+        for fp in ed.actual_output_filepath_list + [ele_filepath]:
             if fp.startswith('/dev'):
                 continue
             elif fp == corrected_LTE_filepath:
@@ -109,41 +109,41 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
         ele_filepath = os.path.abspath(tmp.name)
         tmp.close()
 
-    eb = elebuilder.EleContents(double_format='.12g')
+    ed = elebuilder.EleDesigner(double_format='.12g')
 
-    eb.run_setup(
+    ed.add_block('run_setup',
         lattice=init_LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline)
 
-    eb.newline()
+    ed.add_newline()
 
-    eb.run_control()
+    ed.add_block('run_control')
 
-    eb.newline()
+    ed.add_newline()
 
-    eb.chromaticity(
+    ed.add_block('chromaticity',
         sextupoles=used_sexts_str, exclude=exclude,
         dnux_dp=dnux_dp, dnuy_dp=dnuy_dp,
         n_iterations=n_iterations, correction_fraction=correction_fraction,
         tolerance=tolerance, change_defined_values=True)
 
-    eb.newline()
+    ed.add_newline()
 
-    eb.twiss_output()
+    ed.add_block('twiss_output')
 
-    eb.newline()
+    ed.add_newline()
 
-    eb.bunched_beam()
+    ed.add_block('bunched_beam')
 
-    eb.newline()
+    ed.add_newline()
 
-    eb.track()
+    ed.add_block('track')
 
-    eb.save_lattice(filename=corrected_LTE_filepath)
+    ed.add_block('save_lattice', filename=corrected_LTE_filepath)
 
-    eb.write(ele_filepath)
+    ed.write(ele_filepath)
 
-    eb.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
-    #print(eb.actual_output_filepath_list)
+    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    #print(ed.actual_output_filepath_list)
 
     # Run Elegant
     if run_local:
@@ -168,7 +168,7 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
                    output_filepaths=None)
 
     if del_tmp_files:
-        for fp in eb.actual_output_filepath_list + [ele_filepath]:
+        for fp in ed.actual_output_filepath_list + [ele_filepath]:
             if fp.startswith('/dev'):
                 continue
             elif fp == corrected_LTE_filepath:
