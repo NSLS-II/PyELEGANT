@@ -1,7 +1,9 @@
 import re
 import numpy as np
+from types import SimpleNamespace
 
 from . import util
+from . import sdds
 
 ########################################################################
 class EleBlocks():
@@ -657,18 +659,494 @@ class EleBlocks():
         &end
         ''')
 
+########################################################################
+class InfixEquation():
+    """"""
+
+    #----------------------------------------------------------------------
+    def __init__(self, variable_str_repr):
+        """Constructor"""
+
+        self.equation_repr = variable_str_repr
+
+    #----------------------------------------------------------------------
+    def copy(self):
+        """"""
+
+        copy = InfixEquation(self.equation_repr)
+
+        return copy
+
+    #----------------------------------------------------------------------
+    def __str__(self):
+        """"""
+
+        return self.equation_repr
+
+    #----------------------------------------------------------------------
+    def __neg__(self):
+        """"""
+
+        copy = self.copy()
+
+        copy.equation_repr = f'-({self.equation_repr})'
+
+        return copy
+
+    #----------------------------------------------------------------------
+    def __add__(self, other):
+        """"""
+
+        copy = self.copy()
+
+        if isinstance(other, (int, float, str)):
+            copy.equation_repr = f'{self.equation_repr} + {other}'
+        elif isinstance(other, InfixEquation):
+            copy.equation_repr = f'{self.equation_repr} + {other.equation_repr}'
+        else:
+            raise NotImplementedError(f'__add__ for type "{type(other)}"')
+
+        return copy
+
+    #----------------------------------------------------------------------
+    def __radd__(self, left):
+        """"""
+
+        copy = self.copy()
+
+        if isinstance(left, (int, float, str)):
+            copy.equation_repr = f'{left} + {self.equation_repr}'
+        elif isinstance(left, InfixEquation):
+            copy.equation_repr = f'{left.equation_repr} + {self.equation_repr}'
+        else:
+            raise NotImplementedError(f'__radd__ for type "{type(left)}"')
+
+        return copy
+
+    #----------------------------------------------------------------------
+    def __sub__(self, other):
+        """"""
+
+        copy = self.copy()
+
+        if isinstance(other, (int, float, str)):
+            copy.equation_repr = f'{self.equation_repr} - {other}'
+        elif isinstance(other, InfixEquation):
+            copy.equation_repr = f'{self.equation_repr} - {other.equation_repr}'
+        else:
+            raise NotImplementedError(f'__sub__ for type "{type(other)}"')
+
+        return copy
+
+    #----------------------------------------------------------------------
+    def __rsub__(self, left):
+        """"""
+
+        copy = self.copy()
+
+        if isinstance(left, (int, float, str)):
+            copy.equation_repr = f'{left} - {self.equation_repr}'
+        elif isinstance(left, InfixEquation):
+            copy.equation_repr = f'{left.equation_repr} - {self.equation_repr}'
+        else:
+            raise NotImplementedError(f'__rsub__ for type "{type(left)}"')
+
+        return copy
+
+    #----------------------------------------------------------------------
+    def __mul__(self, other):
+        """"""
+
+        copy = self.copy()
+
+        if isinstance(other, (int, float, str)):
+            copy.equation_repr = f'({self.equation_repr}) * ({other})'
+        elif isinstance(other, InfixEquation):
+            copy.equation_repr = f'({self.equation_repr}) * ({other.equation_repr})'
+        else:
+            raise NotImplementedError(f'__mul__ for type "{type(other)}"')
+
+        return copy
+
+    #----------------------------------------------------------------------
+    def __rmul__(self, left):
+        """"""
+
+        copy = self.copy()
+
+        if isinstance(left, (int, float, str)):
+            copy.equation_repr = f'({left}) * ({self.equation_repr})'
+        elif isinstance(left, InfixEquation):
+            copy.equation_repr = f'({left.equation_repr}) * ({self.equation_repr})'
+        else:
+            raise NotImplementedError(f'__rmul__ for type "{type(left)}"')
+
+        return copy
+
+    #----------------------------------------------------------------------
+    def __truediv__(self, other):
+        """"""
+
+        copy = self.copy()
+
+        if isinstance(other, (int, float, str)):
+            copy.equation_repr = f'({self.equation_repr}) / ({other})'
+        elif isinstance(other, InfixEquation):
+            copy.equation_repr = f'({self.equation_repr}) / ({other.equation_repr})'
+        else:
+            raise NotImplementedError(f'__truediv__ for type "{type(other)}"')
+
+        return copy
+
+    #----------------------------------------------------------------------
+    def __rtruediv__(self, left):
+        """"""
+
+        copy = self.copy()
+
+        if isinstance(left, (int, float, str)):
+            copy.equation_repr = f'({left}) / ({self.equation_repr})'
+        elif isinstance(left, InfixEquation):
+            copy.equation_repr = f'({left.equation_repr}) / ({self.equation_repr})'
+        else:
+            raise NotImplementedError(f'__rtruediv__ for type "{type(left)}"')
+
+        return copy
+
+    #----------------------------------------------------------------------
+    def __floordiv__(self, other):
+        """"""
+
+        raise ArithmeticError('There is no floor division operand in RPN')
+
+    #----------------------------------------------------------------------
+    def __rfloordiv__(self, other):
+        """"""
+
+        raise ArithmeticError('There is no floor division operand in RPN')
+
+    #----------------------------------------------------------------------
+    def __pow__(self, exponent):
+        """"""
+
+        copy = self.copy()
+
+        if isinstance(exponent, (int, float, str)):
+            copy.equation_repr = f'({self.equation_repr})**({exponent})'
+        elif isinstance(exponent, InfixEquation):
+            copy.equation_repr = f'({self.equation_repr})**({exponent.equation_repr})'
+        else:
+            raise NotImplementedError(f'__pow__ for type "{type(exponent)}"')
+
+        return copy
+
+    #----------------------------------------------------------------------
+    def __rpow__(self, base):
+        """"""
+
+        copy = self.copy()
+
+        if isinstance(base, (int, float, str)):
+            copy.equation_repr = f'({base})**({self.equation_repr})'
+        elif isinstance(base, InfixEquation):
+            copy.equation_repr = f'({base.equation_repr})**({self.equation_repr})'
+        else:
+            raise NotImplementedError(f'__rpow__ for type "{type(base)}"')
+
+        return copy
+
+########################################################################
+class RPNVariableDatabase():
+    """
+    See ".defns.rpn"
+    """
+
+    #----------------------------------------------------------------------
+    def __init__(self):
+        """Constructor"""
+
+        self._vars = []
+        self.dict = {}
+        self.namespace = SimpleNamespace(**self.dict)
+
+        self._builtin_vars = [
+            'pi', # PI = 3.14...
+            'log_10', # ln(10)
+            'HUGE', # largest number possible
+            'on_div_by_zero', # == HUGE
+            #
+            # physical constants
+            'c_cgs', 'c_mks', 'e_cgs', 'e_mks', 'me_cgs', 'me_mks',
+            're_cgs', 're_mks', 'kb_cgs', 'kb_mks', 'mev',
+            'hbar_mks', 'hbar_MeVs', 'mp_mks', 'mu_o', 'eps_o'
+        ]
+
+    #----------------------------------------------------------------------
+    def _update(self):
+        """"""
+
+        names_conflict_w_builtins = [
+            name for name in self._vars if name in self._builtin_vars]
+        if names_conflict_w_builtins != []:
+            for var_name in names_conflict_w_builtins:
+                print(f'* WARNING: RPN variable: name conflict with built-in '
+                      f'variable name  "{var_name}".')
+
+        u_vars = set(self._vars)
+        if len(self._vars) != len(u_vars):
+            names_dup = [name for name in u_vars if self._vars.count(name) != 1]
+            for var_name in names_dup:
+                print(f'* WARNING: RPN variable: duplicate name found  "{var_name}".')
+
+        for var_name in self._vars + self._builtin_vars:
+
+            self.dict[var_name] = var_name
+
+            namespace_key = var_name.replace(
+                '/', '__SLASH__').replace('.', '__DOT__').replace('#', '__POUND__')
+
+            self.namespace.__dict__[namespace_key] = var_name
+
+    #----------------------------------------------------------------------
+    def _clear(self):
+        """"""
+
+        self._vars.clear()
+        self.dict.clear()
+        self.namespace.__dict__.clear()
+
+########################################################################
+class RPNFunctionDatabase():
+    """
+    See ".defns.rpn"
+    """
+
+    #----------------------------------------------------------------------
+    def __init__(self):
+        """Constructor"""
+
+    #----------------------------------------------------------------------
+    def _ensure_InfixEquation_type(self, x):
+        """"""
+
+        if not isinstance(x, InfixEquation):
+            return InfixEquation(f'{x}')
+        else:
+            return x
+
+    #----------------------------------------------------------------------
+    def _simple_multi_args_func(self, func_name, *args):
+        """"""
+
+        eq_obj_list = [self._ensure_InfixEquation_type(x) for x in args]
+
+        args_repr = ', '.join([eq.equation_repr for eq in eq_obj_list])
+
+        return InfixEquation(f'{func_name}({args_repr})')
+
+    #----------------------------------------------------------------------
+    def ln(self, x):
+        """ Natural Log := np.log(x) """
+        return self._simple_multi_args_func('ln', x)
+    #----------------------------------------------------------------------
+    def exp(self, x):
+        """ Exponential Function := exp(x) """
+        return self._simple_multi_args_func('exp', x)
+    #----------------------------------------------------------------------
+    def pow(self, x, y):
+        """ Power Function := x**y """
+        return self._simple_multi_args_func('pow', x, y)
+    #----------------------------------------------------------------------
+    def ceil(self, x):
+        """ Ceil := np.ceil(x) """
+        return self._simple_multi_args_func('ceil', x)
+    #----------------------------------------------------------------------
+    def floor(self, x):
+        """ Floor := np.floor(x) """
+        return self._simple_multi_args_func('floor', x)
+    #----------------------------------------------------------------------
+    def int(self, x):
+        """ Take integer part := x - np.floor(x) """
+        return self._simple_multi_args_func('int', x)
+    #----------------------------------------------------------------------
+    def sin(self, x):
+        """ Sine := np.sin(x) """
+        return self._simple_multi_args_func('sin', x)
+    #----------------------------------------------------------------------
+    def cos(self, x):
+        """ Cosine := np.cos(x) """
+        return self._simple_multi_args_func('cos', x)
+    #----------------------------------------------------------------------
+    def tan(self, x):
+        """ Tangent := np.tan(x) """
+        return self._simple_multi_args_func('tan', x)
+    #----------------------------------------------------------------------
+    def asin(self, x):
+        """ Arc Sine [rad] := np.arcsin(x) """
+        return self._simple_multi_args_func('asin', x)
+    #----------------------------------------------------------------------
+    def acos(self, x):
+        """ Arc Cosine [rad] := np.arccos(x) """
+        return self._simple_multi_args_func('acos', x)
+    #----------------------------------------------------------------------
+    def atan(self, x):
+        """ Arc Tangent [rad] := np.arctan(x) """
+        return self._simple_multi_args_func('atan', x)
+    #----------------------------------------------------------------------
+    def atan2(self, x, y):
+        """ Arc Tangent [rad] := np.arctan2(y, x)
+        Note the order difference between this "atan2" and "np.arctan2".
+        """
+        return self._simple_multi_args_func('atan2', x, y)
+    #----------------------------------------------------------------------
+    def dsin(self, x):
+        """ Sine := np.sin(np.deg2rad(x)) """
+        return self._simple_multi_args_func('dsin', x)
+    #----------------------------------------------------------------------
+    def dcos(self, x):
+        """ Cosine := np.cos(np.deg2rad(x)) """
+        return self._simple_multi_args_func('dcos', x)
+    #----------------------------------------------------------------------
+    def dtan(self, x):
+        """ Tangent := np.tan(np.deg2rad(x)) """
+        return self._simple_multi_args_func('dtan', x)
+    #----------------------------------------------------------------------
+    def dasin(self, x):
+        """ Arc Sine [deg] := np.rad2deg(np.arcsin(x)) """
+        return self._simple_multi_args_func('dasin', x)
+    #----------------------------------------------------------------------
+    def dacos(self, x):
+        """ Arc Cosine [deg] := np.rad2deg(np.arccos(x)) """
+        return self._simple_multi_args_func('dacos', x)
+    #----------------------------------------------------------------------
+    def datan(self, x):
+        """ Arc Tangent [deg] := np.rad2deg(np.arctan(x)) """
+        return self._simple_multi_args_func('datan', x)
+    #----------------------------------------------------------------------
+    def sinh(self, x):
+        """ Hyperbolic Sine := np.sinh(x) """
+        return self._simple_multi_args_func('sinh', x)
+    #----------------------------------------------------------------------
+    def cosh(self, x):
+        """ Hyperbolic Cosine := np.cosh(x) """
+        return self._simple_multi_args_func('cosh', x)
+    #----------------------------------------------------------------------
+    def tanh(self, x):
+        """ Hyperbolic Tangent := np.tanh(x) """
+        return self._simple_multi_args_func('tanh', x)
+    #----------------------------------------------------------------------
+    def asinh(self, x):
+        """ Inverse Hyperbolic Sine := np.arcsinh(x) """
+        return self._simple_multi_args_func('asinh', x)
+    #----------------------------------------------------------------------
+    def acosh(self, x):
+        """ Inverse Hyperbolic Cosine := np.arccosh(x) """
+        return self._simple_multi_args_func('acosh', x)
+    #----------------------------------------------------------------------
+    def atanh(self, x):
+        """ Inverse Hyperbolic Tangent := np.arctanh(x) """
+        return self._simple_multi_args_func('atanh', x)
+    #----------------------------------------------------------------------
+    def sqr(self, x):
+        """ Square := x**2 """
+        return self._simple_multi_args_func('sqr', x)
+    #----------------------------------------------------------------------
+    def sqrt(self, x):
+        """ Square Root := np.sqrt(x) """
+        return self._simple_multi_args_func('sqrt', x)
+    #----------------------------------------------------------------------
+    def abs(self, x):
+        """ Absolute := np.abs(x) """
+        return self._simple_multi_args_func('abs', x)
+    #----------------------------------------------------------------------
+    def segt(self, v1, v2, tol):
+        """ Soft-edge "greater-than" :=
+            if v1 < v2: 0
+            else      : ((v1 - v2) / tol)**2
+        """
+        return self._simple_multi_args_func('segt', v1, v2, tol)
+    #----------------------------------------------------------------------
+    def selt(self, v1, v2, tol):
+        """ Soft-edge "less-than" :=
+            if v1 > v2: 0
+            else      : ((v1 - v2) / tol)**2
+        """
+        return self._simple_multi_args_func('selt', v1, v2, tol)
+    #----------------------------------------------------------------------
+    def sene(self, v1, v2, tol):
+        """ Soft-edge "not-equal-to" :=
+            if np.abs(v1 - v2) < tol: 0
+            else:
+                if v1 > v2: ((v1 - (v2 + tol)) / tol)**2
+                else      : ((v2 - (v1 + tol)) / tol)**2
+        """
+        return self._simple_multi_args_func('sene', v1, v2, tol)
+    #----------------------------------------------------------------------
+    def chs(self, x):
+        """ Change sign := x * (-1) """
+        return self._simple_multi_args_func('chs', x)
+    #----------------------------------------------------------------------
+    def rec(self, x):
+        """ Take reciprocal := 1 / x """
+        return self._simple_multi_args_func('rec', x)
+    #----------------------------------------------------------------------
+    def rtod(self, x):
+        """ Convert radians to degrees := np.rad2deg(x) """
+        return self._simple_multi_args_func('rtod', x)
+    #----------------------------------------------------------------------
+    def dtor(self, x):
+        """ Convert degrees to radians := np.deg2rad(x) """
+        return self._simple_multi_args_func('dtor', x)
+    #----------------------------------------------------------------------
+    def hypot(self, x, y):
+        """ hypot function := np.sqrt(x**2 + y**2) """
+        return self._simple_multi_args_func('hypot', x, y)
+    #----------------------------------------------------------------------
+    def max2(self, x, y):
+        """ Maximum of top 2 items on stack := np.max([x, y]) """
+        return self._simple_multi_args_func('max2', x, y)
+    #----------------------------------------------------------------------
+    def min2(self, x, y):
+        """ Minimum of top 2 items on stack := np.min([x, y]) """
+        x = self._ensure_InfixEquation_type(x)
+        y = self._ensure_InfixEquation_type(y)
+        return self._simple_multi_args_func('min2', x, y)
+    #----------------------------------------------------------------------
+    def maxn(self, *args):
+        """ Maximum of top N items on stack := np.max([x0, x1, ...]) """
+        n = len(args)
+        mod_args = list(args) + [n]
+        return self._simple_multi_args_func('maxn', *mod_args)
+    #----------------------------------------------------------------------
+    def min(self, *args):
+        """ Minimum of top N items on stack := np.min([x0, x1, ...]) """
+        n = len(args)
+        mod_args = list(args) + [n]
+        return self._simple_multi_args_func('minn', *mod_args)
+
+
+########################################################################
 class EleDesigner():
     """"""
 
+    #----------------------------------------------------------------------
     def __init__(self, double_format='.12g'):
         """Constructor"""
+
+        self.blocks = EleBlocks()
+
+        self.rpnfuncs = RPNFunctionDatabase()
+
+        self.rpnvars = RPNVariableDatabase()
+        # Variables that will be available within the definition of
+        #   "term" in "&optimization_term"
+        #   "equation" in "&optimization_covariable"
 
         self.clear()
 
         self.double_format = double_format
 
-        self.blocks = EleBlocks()
-
+    #----------------------------------------------------------------------
     def clear(self):
         """"""
 
@@ -678,22 +1156,28 @@ class EleDesigner():
         self.output_filepath_list = []
         self.actual_output_filepath_list = []
 
+        self.rpnvars._clear()
+
+    #----------------------------------------------------------------------
     def write(self, output_ele_filepath, nMaxTry=10, sleep=10.0):
         """"""
 
         util.robust_text_file_write(
             output_ele_filepath, self.text, nMaxTry=nMaxTry, sleep=sleep)
 
+    #----------------------------------------------------------------------
     def add_newline(self):
         """"""
 
         self.text += '\n'
 
+    #----------------------------------------------------------------------
     def add_comment(self, comment):
         """"""
 
         self.text += '!' + comment + '\n'
 
+    #----------------------------------------------------------------------
     def _should_be_inline_block(self, block_body_line_list):
         """"""
 
@@ -707,6 +1191,7 @@ class EleDesigner():
 
         return single_line
 
+    #----------------------------------------------------------------------
     def _get_block_str(self, block_header, **kwargs):
         """"""
 
@@ -762,8 +1247,46 @@ class EleDesigner():
             '\n'.join([' ' * n_indent + line for line in block]) +
             final_line)
 
+        if block_header == 'optimization_variable':
+            self.rpnvars._vars.extend([f'{kwargs["name"]}.{kwargs["item"]}',
+                                   f'{kwargs["name"]}.{kwargs["item"]}0'])
+            self.rpnvars._update()
+
+        elif block_header == 'rpn_load':
+            tag = kwargs.get('tag', '')
+            tag_dot = tag + '.' if tag != '' else ''
+            [_, meta] = sdds.sdds2dicts(kwargs['filename'])
+            for col_name, _d in meta['columns'].items():
+                if _d['TYPE'] == 'double':
+                    self.rpnvars._vars.append(f'{tag_dot}{col_name}')
+            self.rpnvars._update()
+
+        elif (block_header == 'twiss_output') and \
+             kwargs.get('output_at_each_step', False):
+            self.rpnvars._vars.extend([
+                'nux', 'nuy', 'dnux/dp', 'dnuy/dp', 'alphac', 'alphac2',
+            ])
+            if kwargs.get('radiation_integrals', False):
+                self.rpnvars._vars.extend([
+                    'ex0', 'Sdelta0', 'Jx', 'Jy', 'Jdelta', 'taux', 'tauy',
+                    'taudelta', 'I1', 'I2', 'I3', 'I4', 'I5'])
+            if kwargs.get('compute_driving_terms', False):
+                self.rpnvars._vars.extend([
+                    'h11001', 'h00111', 'h20001', 'h00201', 'h10002', 'h21000',
+                    'h30000', 'h10110', 'h10020', 'h10200', 'h22000', 'h11110',
+                    'h00220', 'h31000', 'h40000', 'h20110', 'h11200', 'h20020',
+                    'h20200', 'h00310', 'h00400', 'dnux/dJx', 'dnux/dJy', 'dnuy/dJy'
+                ])
+            self.rpnvars._update()
+
+        elif block_header == 'run_setup':
+            self.rpnvars._update()
+            # TODO
+            #self.optim_markers = {} # for MARKER elements with FITPOINT=1 & beam position monitors with CO_FITPOINT=1
+
         return block_str
 
+    #----------------------------------------------------------------------
     def update_output_filepaths(self, ele_filepath_wo_ext):
         """"""
 
