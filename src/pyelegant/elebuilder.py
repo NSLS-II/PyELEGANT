@@ -935,11 +935,11 @@ class RPNVariableDatabase():
                 print(f'* WARNING: RPN variable: name conflict with built-in '
                       f'variable name  "{var_name}".')
 
-        u_vars = set(self._vars)
-        if len(self._vars) != len(u_vars):
-            names_dup = [name for name in u_vars if self._vars.count(name) != 1]
-            for var_name in names_dup:
-                print(f'* WARNING: RPN variable: duplicate name found  "{var_name}".')
+        #u_vars = set(self._vars)
+        #if len(self._vars) != len(u_vars):
+            #names_dup = [name for name in u_vars if self._vars.count(name) != 1]
+            #for var_name in names_dup:
+                #print(f'* WARNING: RPN variable: duplicate name found  "{var_name}".')
 
         for var_name in self._vars + self._builtin_vars:
 
