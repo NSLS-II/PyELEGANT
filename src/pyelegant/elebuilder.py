@@ -1313,9 +1313,16 @@ class EleDesigner():
 
         elif (block_header == 'twiss_output') and \
              kwargs.get('output_at_each_step', False):
+
             self.rpnvars._vars.extend([
                 'nux', 'nuy', 'dnux/dp', 'dnuy/dp', 'alphac', 'alphac2',
             ])
+
+            for statistic in ['min', 'max', 'ave', 'p99', 'p98', 'p96']:
+                for twiss_param_name in ['betax', 'alphax', 'betay', 'alphay',
+                                         'etax', 'etaxp', 'etay', 'etayp']:
+                    self.rpnvars._vars.append(f'{statistic}.{twiss_param_name}')
+
             if kwargs.get('radiation_integrals', False):
                 self.rpnvars._vars.extend([
                     'ex0', 'Sdelta0', 'Jx', 'Jy', 'Jdelta', 'taux', 'tauy',
