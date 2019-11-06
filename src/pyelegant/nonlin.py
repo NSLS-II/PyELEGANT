@@ -484,7 +484,7 @@ def _plot_fma(
         cb.ax.title.set_position((0.5, 1.02))
         plt.tight_layout()
 
-def calc_find_aperture_nlines(
+def calc_find_aper_nlines(
     output_filepath, LTE_filepath, E_MeV, xmax=0.1, ymax=0.1, ini_ndiv=21,
     n_lines=11, neg_y_search=False,
     n_turns=1024, use_beamline=None, N_KICKS=None, transmute_elements=None,
