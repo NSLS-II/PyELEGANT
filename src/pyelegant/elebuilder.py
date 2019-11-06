@@ -26,6 +26,7 @@ class EleBlocks():
         self._parse_bunched_beam()
         self._parse_chromaticity()
         self._parse_correct_tunes()
+        self._parse_find_aperture()
         self._parse_floor_coordinates()
         self._parse_frequency_map()
         self._parse_load_parameters()
@@ -238,6 +239,47 @@ class EleBlocks():
             double dK1_weight = 1;
         &end
         ''')
+
+    #----------------------------------------------------------------------
+    def _parse_find_aperture(self):
+        """"""
+
+        # Elegant Manual Section 7.21
+        self._parse_block_def('''
+        &find_aperture
+            STRING output = NULL;
+            STRING search_output = NULL;
+            STRING boundary = NULL;
+            STRING mode = "many-particle";
+            double xmin = -0.1;
+            double xmax = 0.1;
+            double xpmin = 0.0;
+            double xpmax = 0.0;
+            double ymin = 0.0;
+            double ymax = 0.1;
+            double ypmin = 0.0;
+            double ypmax = 0.0;
+            long nx = 21;
+            long ny = 11;
+            long n_splits = 0;
+            double split_fraction = 0.5;
+            double desired_resolution = 0.01;
+            long assume_nonincreasing = 0;
+            long verbosity = 0;
+            long offset_by_orbit = 0;
+            long n_lines = 11;
+            long optimization_mode = 0;
+            long full_plane = 0;
+        &end
+        ''')
+
+        d = self.info['find_aperture']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('output')][3] = '%s.aper'
+        d[keys.index('search_output')][3] = '%s.apso'
+        d[keys.index('boundary')][3] = '%s.bnd'
 
     #----------------------------------------------------------------------
     def _parse_floor_coordinates(self):
