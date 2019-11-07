@@ -1,9 +1,12 @@
 import sys
 import os
 import numpy as np
+import scipy.constants as PHYSCONST
 import matplotlib.pylab as plt
 import tempfile
 import h5py
+import shlex
+from subprocess import Popen, PIPE
 
 from .local import run
 from .remote import remote
@@ -11,6 +14,7 @@ from . import std_print_enabled
 from . import elebuilder
 from . import util
 from . import sdds
+from . import twiss
 
 def _auto_check_output_file_type(output_filepath, output_file_type):
     """"""
@@ -872,4 +876,180 @@ def plot_mom_aper(output_filepath, title='', slim=None, deltalim=None):
         plt.title('\n'.join([title, mmap_info_title]), size=font_sz)
     else:
         plt.title(mmap_info_title, size=font_sz)
+    plt.tight_layout()
+
+def calc_Touschek_lifetime(
+    output_filepath, LTE_filepath, E_MeV, mmap_filepath, charge_C, emit_ratio,
+    RFvolt, RFharm, max_mom_aper_percent=None, ignoreMismatch=True,
+    use_beamline=None, output_file_type=None, del_tmp_files=True, print_cmd=False):
+    """"""
+
+    with open(LTE_filepath, 'r') as f:
+        file_contents = f.read()
+
+    nElectrons = int(np.round(charge_C / PHYSCONST.e))
+
+    input_dict = dict(
+        LTE_filepath=os.path.abspath(LTE_filepath), E_MeV=E_MeV,
+        mmap_filepath=mmap_filepath, charge_C=charge_C, nElectrons=nElectrons,
+        emit_ratio=emit_ratio, RFvolt=RFvolt, RFharm=RFharm,
+        max_mom_aper_percent=max_mom_aper_percent, ignoreMismatch=ignoreMismatch,
+        use_beamline=use_beamline, del_tmp_files=del_tmp_files,
+        lattice_file_contents=file_contents,
+        timestamp_ini=util.get_current_local_time_str(),
+    )
+
+    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    input_dict['output_file_type'] = output_file_type
+
+    if output_file_type in ('hdf5', 'h5'):
+        _save_input_to_hdf5(output_filepath, input_dict)
+
+    tmp = tempfile.NamedTemporaryFile(
+        dir=os.getcwd(), delete=False, prefix=f'tmpTau_', suffix='.pgz')
+    twi_pgz_filepath = os.path.abspath(tmp.name)
+    life_filepath = '.'.join(twi_pgz_filepath.split('.')[:-1] + ['life'])
+    tmp.close()
+
+    tmp_filepaths = twiss.calc_ring_twiss(
+        twi_pgz_filepath, LTE_filepath, E_MeV, use_beamline=use_beamline,
+        parameters=None, radiation_integrals=True, run_local=True,
+        del_tmp_files=False)
+    tmp_filepaths['twi_pgz'] = twi_pgz_filepath
+    #print(tmp_filepaths)
+
+    #twi = util.load_pgz_file(twi_pgz_filepath)
+    #try:
+        #os.remove(twi_pgz_filepath)
+    #except:
+        #pass
+
+    try:
+        sdds.sdds2dicts(mmap_filepath)
+        # "mmap_filepath" is a valid SDDS file
+        mmap_sdds_filepath = mmap_filepath
+    except:
+        # "mmap_filepath" is NOT a valid SDDS file, and most likely an HDF5
+        # file generated from an SDDS file. Try to convert it back to a valid
+        # SDDS file.
+        d = util.load_sdds_hdf5_file(mmap_filepath)
+        mmap_d = d[0]['mmap']
+        mmap_sdds_filepath = '.'.join(twi_pgz_filepath.split('.')[:-1] + ['mmap'])
+        sdds.dicts2sdds(
+            mmap_sdds_filepath, params=mmap_d['scalars'],
+            columns=mmap_d['arrays'], outputMode='binary')
+        tmp_filepaths['mmap'] = mmap_sdds_filepath
+
+    cmd_str = (
+        f'touschekLifetime {life_filepath} -twiss={tmp_filepaths["twi"]} '
+        f'-aperture={mmap_sdds_filepath} -particles={nElectrons:d} '
+        f'-coupling={emit_ratio:.9g} '
+        f'-RF=Voltage={RFvolt/1e6:.9g},harmonic={RFharm:d},limit ')
+
+    if max_mom_aper_percent is not None:
+        cmd_str += f'-deltaLimit={max_mom_aper_percent:.9g} '
+
+    if ignoreMismatch:
+        cmd_str += '-ignoreMismatch'
+
+    cmd_list = shlex.split(cmd_str)
+    if print_cmd:
+        print('\n$ ' + ' '.join(cmd_list) + '\n')
+
+    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+    if std_print_enabled['out']:
+        print(out)
+    if std_print_enabled['err'] and err:
+        print('ERROR:')
+        print(err)
+
+    output_tmp_filepaths = dict(life=life_filepath)
+    output, meta = {}, {}
+    for k, v in output_tmp_filepaths.items():
+        try:
+            output[k], meta[k] = sdds.sdds2dicts(v)
+        except:
+            continue
+
+    timestamp_fin = util.get_current_local_time_str()
+
+    if output_file_type in ('hdf5', 'h5'):
+        util.robust_sdds_hdf5_write(
+            output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
+        f = h5py.File(output_filepath)
+        f['timestamp_fin'] = timestamp_fin
+        f.close()
+
+    elif output_file_type == 'pgz':
+        mod_output = {}
+        for k, v in output.items():
+            mod_output[k] = {}
+            if 'params' in v:
+                mod_output[k]['scalars'] = v['params']
+            if 'columns' in v:
+                mod_output[k]['arrays'] = v['columns']
+        mod_meta = {}
+        for k, v in meta.items():
+            mod_meta[k] = {}
+            if 'params' in v:
+                mod_meta[k]['scalars'] = v['params']
+            if 'columns' in v:
+                mod_meta[k]['arrays'] = v['columns']
+        util.robust_pgz_file_write(
+            output_filepath, dict(data=mod_output, meta=mod_meta,
+                                  input=input_dict, timestamp_fin=timestamp_fin),
+            nMaxTry=10, sleep=10.0)
+    else:
+        raise ValueError()
+
+    tmp_filepaths.update(output_tmp_filepaths)
+    if del_tmp_files:
+        for fp in tmp_filepaths.values():
+            if fp.startswith('/dev'):
+                continue
+            else:
+                try:
+                    os.remove(fp)
+                except:
+                    print(f'Failed to delete "{fp}"')
+
+    return output_filepath
+
+def plot_Touschek_lifetime(output_filepath, title='', slim=None):
+    """"""
+
+    try:
+        d = util.load_pgz_file(output_filepath)
+        tau_hr = d['data']['life']['scalars']['tLifetime']
+        g = d['data']['life']['arrays']
+        FN = g['FN']
+        FP = g['FP']
+        s = g['s']
+
+    except:
+        f = h5py.File(output_filepath, 'r')
+        tau_hr = f['life']['scalars']['tLifetime'][()]
+        g = f['life']['arrays']
+        FN = g['FN'][()]
+        FP = g['FP'][()]
+        s = g['s'][()]
+        f.close()
+
+    font_sz = 18
+
+    plt.figure()
+    plt.plot(s, FN, 'b-', label=r'$\delta < 0$')
+    plt.plot(s, FP, 'r-', label=r'$\delta > 0$')
+    plt.axhline(0, color='k')
+    plt.xlabel(r'$s\, [\mathrm{m}]$', size=font_sz)
+    plt.ylabel(r'$f_{+}, f_{-}\, [\mathrm{s}^{-1}]$', size=font_sz)
+    if slim is not None:
+        plt.xlim([v for v in slim])
+    tau_info_title = fr'$\tau_{{\mathrm{{Touschek}}}} = {tau_hr:.6g} [\mathrm{{hr}}]$'
+    if title != '':
+        plt.title('\n'.join([title, tau_info_title]), size=font_sz)
+    else:
+        plt.title(tau_info_title, size=font_sz)
+    plt.legend(loc='best')
     plt.tight_layout()

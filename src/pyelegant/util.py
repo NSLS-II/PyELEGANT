@@ -143,8 +143,14 @@ def load_sdds_hdf5_file(hdf5_filepath):
     meta = {}
 
     f = h5py.File(hdf5_filepath, 'r')
-    for sdds_file_type in f.keys():
+    for sdds_file_type in list(f):
         g1 = f[sdds_file_type]
+
+        try:
+            'scalars' in g1
+        except TypeError:
+            # Definitely not an SDDS file group
+            continue
 
         d2 = d[sdds_file_type] = {}
         m2 = meta[sdds_file_type] = {}
@@ -154,7 +160,7 @@ def load_sdds_hdf5_file(hdf5_filepath):
             d3 = d2['scalars'] = {}
             m3 = m2['scalars'] = {}
 
-            for k2 in g2.keys():
+            for k2 in list(g2):
                 if isinstance(g2[k2], h5py.Dataset):
                     d3[k2] = g2[k2][()]
                     if isinstance(d3[k2], bytes):
@@ -165,7 +171,7 @@ def load_sdds_hdf5_file(hdf5_filepath):
                         m3[k2][mk] = mv
 
                 else:
-                    for k3 in g2[k2].keys():
+                    for k3 in list(g2[k2]):
                         d3[f'{k2}/{k3}'] = g2[k2][k3][()]
                         if isinstance(d3[f'{k2}/{k3}'], bytes):
                             d3[f'{k2}/{k3}'] = d3[f'{k2}/{k3}'].decode('utf-8')
@@ -179,7 +185,7 @@ def load_sdds_hdf5_file(hdf5_filepath):
             d3 = d2['arrays'] = {}
             m3 = m2['arrays'] = {}
 
-            for k2 in g2.keys():
+            for k2 in list(g2):
                 d3[k2] = g2[k2][()]
 
                 if isinstance(d3[k2][0], bytes):
