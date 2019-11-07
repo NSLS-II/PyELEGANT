@@ -1,3 +1,4 @@
+import sys
 import os
 import numpy as np
 import matplotlib.pylab as plt
@@ -661,6 +662,10 @@ def plot_find_aper_nlines(output_filepath, title='', xlim=None, ylim=None):
     plt.plot(x * 1e3, y * 1e3, 'b.-')
     plt.xlabel(r'$x\, [\mathrm{mm}]$', size=font_sz)
     plt.ylabel(r'$y\, [\mathrm{mm}]$', size=font_sz)
+    if xlim is not None:
+        plt.xlim([v * 1e3 for v in xlim])
+    if ylim is not None:
+        plt.ylim([v * 1e3 for v in ylim])
     area_info_title = (fr'$(x_{{\mathrm{{min}}}}={np.min(x)*1e3:.1f}, '
                        fr'x_{{\mathrm{{max}}}}={np.max(x)*1e3:.1f}, ')
     if neg_y_search:
@@ -669,4 +674,202 @@ def plot_find_aper_nlines(output_filepath, title='', xlim=None, ylim=None):
     area_info_title += fr'\mathrm{{Area}}={area*1e6:.1f}\, [\mathrm{{mm}}^2]$'
     if title != '':
         plt.title('\n'.join([title, area_info_title]), size=font_sz)
+    else:
+        plt.title(area_info_title, size=font_sz)
+    plt.tight_layout()
+
+def calc_mom_aper(
+    output_filepath, LTE_filepath, E_MeV, x_initial=1e-5, y_initial=1e-5,
+    delta_negative_start=-1e-3, delta_negative_limit=-5e-2,
+    delta_positive_start=+1e-3, delta_positive_limit=+5e-2,
+    init_delta_step_size=5e-3, s_start=0.0, s_end=None, include_name_pattern=None,
+    n_turns=1024, use_beamline=None, N_KICKS=None, transmute_elements=None,
+    ele_filepath=None, output_file_type=None, del_tmp_files=True,
+    run_local=False, remote_opts=None):
+    """"""
+
+    with open(LTE_filepath, 'r') as f:
+        file_contents = f.read()
+
+    input_dict = dict(
+        LTE_filepath=os.path.abspath(LTE_filepath), E_MeV=E_MeV, n_turns=n_turns,
+        use_beamline=use_beamline,
+        N_KICKS=N_KICKS, transmute_elements=transmute_elements,
+        ele_filepath=ele_filepath,
+        del_tmp_files=del_tmp_files, run_local=run_local,
+        remote_opts=remote_opts,
+        lattice_file_contents=file_contents,
+        timestamp_ini=util.get_current_local_time_str(),
+    )
+    input_dict['s_start'] = s_start
+    input_dict['s_end'] = s_end
+
+    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    input_dict['output_file_type'] = output_file_type
+
+    if output_file_type in ('hdf5', 'h5'):
+        _save_input_to_hdf5(output_filepath, input_dict)
+
+    if ele_filepath is None:
+        tmp = tempfile.NamedTemporaryFile(
+            dir=os.getcwd(), delete=False, prefix=f'tmpMomAper_', suffix='.ele')
+        ele_filepath = os.path.abspath(tmp.name)
+        tmp.close()
+
+    ed = elebuilder.EleDesigner(double_format='.12g')
+
+    _add_transmute_blocks(ed, transmute_elements)
+
+    ed.add_newline()
+
+    ed.add_block('run_setup',
+        lattice=LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline,
+        semaphore_file='%s.done')
+
+    ed.add_newline()
+
+    ed.add_block('run_control', n_passes=n_turns)
+
+    ed.add_newline()
+
+    _add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+
+    ed.add_newline()
+
+    _block_opts = dict(
+        output='%s.mmap', x_initial=x_initial, y_initial=y_initial,
+        delta_negative_start=delta_negative_start, delta_negative_limit=delta_negative_limit,
+        delta_positive_start=delta_positive_start, delta_positive_limit=delta_positive_limit,
+        delta_step_size=init_delta_step_size, include_name_pattern=include_name_pattern,
+        s_start=s_start, s_end=(s_end if s_end is not None else sys.float_info.max),
+        fiducialize=True, verbosity=True,
+    )
+    if include_name_pattern is not None:
+        _block_opts['include_name_pattern'] = include_name_pattern
+    ed.add_block('momentum_aperture', **_block_opts)
+
+    ed.write(ele_filepath)
+
+    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    #print(ed.actual_output_filepath_list)
+
+    for fp in ed.actual_output_filepath_list:
+        if fp.endswith('.mmap'):
+            mmap_output_filepath = fp
+        elif fp.endswith('.done'):
+            done_filepath = fp
+        else:
+            raise ValueError('This line should not be reached.')
+
+    # Run Elegant
+    if run_local:
+        run(ele_filepath, print_cmd=False,
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'])
+    else:
+        if remote_opts is None:
+            remote_opts = dict(
+                use_sbatch=False, pelegant=True, job_name='momaper',
+                output='momaper.%J.out', error='momaper.%J.err',
+                partition='normal', ntasks=50)
+
+        remote.run(remote_opts, ele_filepath, print_cmd=True,
+                   print_stdout=std_print_enabled['out'],
+                   print_stderr=std_print_enabled['err'],
+                   output_filepaths=None)
+
+    tmp_filepaths = dict(mmap=mmap_output_filepath)
+    output, meta = {}, {}
+    for k, v in tmp_filepaths.items():
+        try:
+            output[k], meta[k] = sdds.sdds2dicts(v)
+        except:
+            continue
+
+    timestamp_fin = util.get_current_local_time_str()
+
+    if output_file_type in ('hdf5', 'h5'):
+        util.robust_sdds_hdf5_write(
+            output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
+        f = h5py.File(output_filepath)
+        f['timestamp_fin'] = timestamp_fin
+        f.close()
+
+    elif output_file_type == 'pgz':
+        mod_output = {}
+        for k, v in output.items():
+            mod_output[k] = {}
+            if 'params' in v:
+                mod_output[k]['scalars'] = v['params']
+            if 'columns' in v:
+                mod_output[k]['arrays'] = v['columns']
+        mod_meta = {}
+        for k, v in meta.items():
+            mod_meta[k] = {}
+            if 'params' in v:
+                mod_meta[k]['scalars'] = v['params']
+            if 'columns' in v:
+                mod_meta[k]['arrays'] = v['columns']
+        util.robust_pgz_file_write(
+            output_filepath, dict(data=mod_output, meta=mod_meta,
+                                  input=input_dict, timestamp_fin=timestamp_fin),
+            nMaxTry=10, sleep=10.0)
+    else:
+        raise ValueError()
+
+    if del_tmp_files:
+        for fp in ed.actual_output_filepath_list + [ele_filepath]:
+            if fp.startswith('/dev'):
+                continue
+            else:
+                try:
+                    os.remove(fp)
+                except:
+                    print(f'Failed to delete "{fp}"')
+
+    return output_filepath
+
+def plot_mom_aper(output_filepath, title='', slim=None, deltalim=None):
+    """"""
+
+    try:
+        d = util.load_pgz_file(output_filepath)
+        g = d['data']['mmap']['arrays']
+        deltaNegative = g['deltaNegative']
+        deltaPositive = g['deltaPositive']
+        s = g['s']
+
+    except:
+        f = h5py.File(output_filepath, 'r')
+        g = f['mmap']['arrays']
+        deltaNegative = g['deltaNegative'][()]
+        deltaPositive = g['deltaPositive'][()]
+        s = g['s'][()]
+        f.close()
+
+    font_sz = 18
+
+    sort_inds = np.argsort(s)
+    s = s[sort_inds]
+    deltaNegative = deltaNegative[sort_inds]
+    deltaPositive = deltaPositive[sort_inds]
+
+    plt.figure()
+    plt.plot(s, deltaNegative * 1e2, 'b-')
+    plt.plot(s, deltaPositive * 1e2, 'r-')
+    plt.axhline(0, color='k')
+    plt.xlabel(r'$s\, [\mathrm{m}]$', size=font_sz)
+    plt.ylabel(r'$\delta_{+}, \delta_{-}\, [\%]$', size=font_sz)
+    if slim is not None:
+        plt.xlim([v for v in slim])
+    if deltalim is not None:
+        plt.ylim([v * 1e2 for v in deltalim])
+    mmap_info_title = r'${},\, {}\, [\%]$'.format(
+        fr'{np.min(deltaPositive)*1e2:.2f} < \delta_{{+}} < {np.max(deltaPositive)*1e2:.2f}',
+        fr'{np.min(deltaNegative)*1e2:.2f} < \delta_{{-}} < {np.max(deltaNegative)*1e2:.2f}',
+    )
+    if title != '':
+        plt.title('\n'.join([title, mmap_info_title]), size=font_sz)
+    else:
+        plt.title(mmap_info_title, size=font_sz)
     plt.tight_layout()

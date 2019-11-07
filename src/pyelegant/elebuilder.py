@@ -1,3 +1,4 @@
+import sys
 import re
 import numpy as np
 from types import SimpleNamespace
@@ -30,6 +31,7 @@ class EleBlocks():
         self._parse_floor_coordinates()
         self._parse_frequency_map()
         self._parse_load_parameters()
+        self._parse_momentum_aperture()
         self._parse_optimize()
         self._parse_optimization_covariable()
         self._parse_optimization_setup()
@@ -63,7 +65,7 @@ class EleBlocks():
             #print(rest)
             #print(re.findall(r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-,\{\}\s%]+);', rest))
             for dtype, key, default_val in re.findall(
-                r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-,\{\}\s%]+);', rest):
+                r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-\+,\{\}\s%]+);', rest):
                 self.info[block_header].append([key, dtype, default_val, None])
             #print('*********')
 
@@ -362,6 +364,44 @@ class EleBlocks():
             long use_first = 0;
         &end
         ''')
+
+    #----------------------------------------------------------------------
+    def _parse_momentum_aperture(self):
+        """"""
+
+        # Elegant Manual Section 7.37
+        self._parse_block_def('''
+        &momentum_aperture
+            STRING output = NULL;
+            double x_initial = 0;
+            double y_initial = 0;
+            double delta_negative_start = 0.0;
+            double delta_positive_start = 0.0;
+            double delta_negative_limit = -0.10;
+            double delta_positive_limit = 0.10;
+            double delta_step_size = 0.01;
+            long steps_back = 1;
+            long splits = 2;
+            long split_step_divisor = 10;
+            long skip_elements = 0;
+            long process_elements = 2147483647;
+            double s_start = 0;
+            double s_end = DBL_MAX;
+            STRING include_name_pattern = NULL;
+            STRING include_type_pattern = NULL;
+            long fiducialize = 0;
+            long verbosity = 1;
+            long soft_failure = 0;
+            long output_mode = 0;
+            long forbid_resonance_crossing = 0;
+        &end
+        '''.replace('DBL_MAX', str(sys.float_info.max)))
+
+        d = self.info['momentum_aperture']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('output')][3] = '%s.mmap'
 
     #----------------------------------------------------------------------
     def _parse_optimize(self):
