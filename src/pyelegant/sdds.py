@@ -1,9 +1,11 @@
 import os, sys
+from pathlib import Path
 from subprocess import Popen, PIPE
 import re
 import numpy as np
 import tempfile
 import shlex
+import collections
 
 #----------------------------------------------------------------------
 def strfind(string, pattern):
@@ -191,7 +193,8 @@ def printout(sdds_filepath, param_name_list=None,
             param_dict = dict(zip(param_name_list,param_val_list))
             #print(param_dict)
         else:
-            param_dict = {}
+            #param_dict = {}
+            param_dict = collections.defaultdict(list)
             for k, v_str in re.findall(
                 #'([\w /\(\)\$]+)[ ]+=[ ]+([nae\d\.\+\-]+)[ \n]?',
                 '([\w /\(\)\$]+)[ ]*=[ ]*([naife\d\.\+\-]+)[ \n]?',
@@ -210,9 +213,11 @@ def printout(sdds_filepath, param_name_list=None,
                 k_stripped = k_stripped.split()[-1]
 
                 if param_info_dict[k_stripped]['TYPE'] == 'double':
-                    param_dict[k_stripped] = float(v_str)
+                    #param_dict[k_stripped] = float(v_str)
+                    param_dict[k_stripped].append(float(v_str))
                 elif param_info_dict[k_stripped]['TYPE'] == 'long':
-                    param_dict[k_stripped] = int(v_str)
+                    #param_dict[k_stripped] = int(v_str)
+                    param_dict[k_stripped].append(int(v_str))
                 elif param_info_dict[k_stripped]['TYPE'] == 'string':
                     pass
                 else:
@@ -232,18 +237,45 @@ def printout(sdds_filepath, param_name_list=None,
                         continue
 
                     _extracted = re.findall(f'{param_name}[ ]*=[ ]*(.+)[=\n]', output)
-                    assert len(_extracted) == 1
-                    val = _extracted[0].split('=')[0].strip()
+                    if False: # old version before dealing with SDDS "pages"
+                        assert len(_extracted) == 1
+                        val = _extracted[0].split('=')[0].strip()
 
-                    try:
-                        next_param_name = ordered_param_name_list[
-                            ordered_param_name_list.index(param_name)+1]
-                        val = val.replace(next_param_name, '').strip()
-                    except IndexError:
-                        pass
+                        try:
+                            next_param_name = ordered_param_name_list[
+                                ordered_param_name_list.index(param_name)+1]
+                            val = val.replace(next_param_name, '').strip()
+                        except IndexError:
+                            pass
 
-                    #print([param_name, val])
-                    param_dict[param_name] = val
+                        #print([param_name, val])
+                        param_dict[param_name] = val
+                    else:
+                        vals = [v.split('=')[0].strip() for v in _extracted]
+
+                        try:
+                            next_param_name = ordered_param_name_list[
+                                ordered_param_name_list.index(param_name)+1]
+                            vals = [v.replace(next_param_name, '').strip()
+                                    for v in vals]
+                        except IndexError:
+                            pass
+
+                        param_dict[param_name] = vals
+
+            len_list = [len(v) for _, v in param_dict.items()]
+            assert len(set(len_list)) == 1 # i.e., having save length
+            _temp_dict = {}
+            if len_list[0] == 1:
+                # Only single "page"
+                for k, v in param_dict.items():
+                    _temp_dict[k] = v[0]
+            else:
+                # Multiple "pages"
+                for k, v in param_dict.items():
+                    _temp_dict[k] = v # keep it as a list
+            param_dict = _temp_dict
+
 
     # Check if all the specified parameters have been correctly extracted
     _extracted_param_names = list(param_dict)
@@ -313,18 +345,42 @@ def printout(sdds_filepath, param_name_list=None,
         else:
             rows = [s.strip() for s in output.split('\n') if s.strip() != '']
 
-            column_dict = dict.fromkeys(column_name_list)
-            for col_name in column_name_list:
-                column_dict[col_name] = []
+            if False: # old version before dealing with SDDS "pages"
+                column_dict = dict.fromkeys(column_name_list)
+                for col_name in column_name_list:
+                    column_dict[col_name] = []
 
-            col_title_rowind = 1
-            for row in rows[(col_title_rowind+1):]:
-                for col_name, v in zip(column_name_list, row.split("','")):
-                    column_dict[col_name].append(v.strip())
+                col_title_rowind = 1
+                for row in rows[(col_title_rowind+1):]:
+                    for col_name, v in zip(column_name_list, row.split("','")):
+                        column_dict[col_name].append(v.strip())
 
-            for col_name in column_name_list:
-                if column_info_dict[col_name]['TYPE'] == 'double':
-                    column_dict[col_name] = str2num(column_dict[col_name])
+                for col_name in column_name_list:
+                    if column_info_dict[col_name]['TYPE'] == 'double':
+                        column_dict[col_name] = str2num(column_dict[col_name])
+
+            else:
+                column_dict = collections.defaultdict(list)
+
+                col_title_rowind = 1
+                for row in rows[(col_title_rowind+1):]:
+                    for col_name, v in zip(column_name_list, row.split("','")):
+                        if col_name != v:
+                            column_dict[col_name].append(v.strip())
+                        else:
+                            # "col_name" and "v" is the same, which means, this
+                            # is a tile line in the case of having multiple
+                            # SDDS "pages". So, skip this line.
+                            pass
+
+                _temp_dict = {}
+                for col_name in column_name_list:
+                    if column_info_dict[col_name]['TYPE'] == 'double':
+                        _temp_dict[col_name] = str2num(column_dict[col_name])
+                    else:
+                        _temp_dict[col_name] = column_dict[col_name]
+                column_dict = _temp_dict
+
 
     # Check if all the specified columns have been correctly extracted
     _extracted_column_names = list(column_dict)
@@ -371,13 +427,17 @@ def sdds2dicts(sdds_filepath):
     return output, meta
 
 def dicts2sdds(
-    sdds_output_filepath, params=None, columns=None, outputMode='ascii',
+    sdds_output_pathobj, params=None, columns=None, outputMode='ascii',
     suppress_err_msg=True):
     """"""
 
+    sdds_output_pathobj = Path(sdds_output_pathobj)
+    sdds_output_filepath = str(sdds_output_pathobj)
+
     tmp = tempfile.NamedTemporaryFile(
-        dir=os.getcwd(), delete=False, prefix='tmpDicts2sdds_', suffix='.txt')
-    plaindata_txt_filepath = os.path.abspath(tmp.name)
+        dir=Path.cwd(), delete=False, prefix='tmpDicts2sdds_', suffix='.txt')
+    plaindata_txt_filepath = str(Path(tmp.name).resolve())
+    tmp.close()
 
     lines = []
 
