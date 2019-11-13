@@ -4,6 +4,7 @@ import gzip
 import pickle
 import h5py
 import numpy as np
+import itertools
 
 def get_current_local_time_str():
     """"""
@@ -240,3 +241,167 @@ def get_run_setup_output_abspaths(
         filepath_dict['parameters'] = get_abspath(parameters, ele_filepath, rootname=rootname)
 
     return filepath_dict
+
+########################################################################
+class ResonanceDiagram():
+    """
+    """
+
+    #----------------------------------------------------------------------
+    def __init__(self):
+        """Constructor"""
+
+    #----------------------------------------------------------------------
+    def getResonanceCoeffs(self, norder):
+        """"""
+
+        assert norder >= 1
+
+        n = norder
+
+        xy_coeffs = list(set(filter(
+            lambda nxy: np.abs(nxy[0]) + np.abs(nxy[1]) == n,
+            itertools.product(range(-n,n+1), range(-n,n+1)))))
+
+        return xy_coeffs
+
+    #----------------------------------------------------------------------
+    def getLineSegment(self, nx, ny, r, nuxlim, nuylim):
+        """
+        nx * nux + ny * nuy = r
+        """
+
+        if nx == 0:
+            # Horizontal Line
+            nuy_const = r / ny
+            return [[nuxlim[0], nuy_const],
+                    [nuxlim[1], nuy_const]]
+
+        elif ny == 0:
+            # Vertical Line
+            nux_const = r / nx
+            return [[nux_const, nuylim[0]],
+                    [nux_const, nuylim[1]]]
+
+        else:
+
+            line_seg = []
+
+            # Intersecting Coords. @ Left Boundary
+            nux = nuxlim[0]
+            nuy = (r - nx * nux) / ny
+            if nuylim[0] <= nuy <= nuylim[1]:
+                line_seg.append([nux, nuy])
+
+            # Intersecting Coords. @ Right Boundary
+            nux = nuxlim[1]
+            nuy = (r - nx * nux) / ny
+            if nuylim[0] <= nuy <= nuylim[1]:
+                line_seg.append([nux, nuy])
+
+            if len(line_seg) == 2:
+                return line_seg
+
+            # Intersecting Coords. @ Bottom Boundary
+            nuy = nuylim[0]
+            nux = (r - ny * nuy) / nx
+            if nuxlim[0] <= nux <= nuxlim[1]:
+                line_seg.append([nux, nuy])
+
+            if len(line_seg) == 2:
+                return line_seg
+
+            # Intersecting Coords. @ Top Boundary
+            nuy = nuylim[1]
+            nux = (r - ny * nuy) / nx
+            if nuxlim[0] <= nux <= nuxlim[1]:
+                line_seg.append([nux, nuy])
+
+            return line_seg
+
+    #----------------------------------------------------------------------
+    def getResonanceLines(self, nuxlim, nuylim, resonance_coeffs):
+        """"""
+
+        nux_min, nux_max = nuxlim
+        nuy_min, nuy_max = nuylim
+
+        line_list = []
+        intersecting_resonance_coeffs_list = []
+
+        for nx, ny in resonance_coeffs:
+            # nx * nux + ny * nuy = r
+            r_list = [
+                nx * nux_min + ny * nuy_min, nx * nux_min + ny * nuy_max,
+                nx * nux_max + ny * nuy_min, nx * nux_max + ny * nuy_max,
+            ]
+
+            rmin = np.min(r_list)
+            rmax = np.max(r_list)
+
+            gcd_nx_ny = np.gcd(nx, ny)
+
+            for r_int in range(int(np.floor(rmin)), int(np.ceil(rmax))):
+
+                if r_int < rmin:
+                    continue
+
+                if np.gcd(gcd_nx_ny, r_int) != 1:
+                    continue
+
+                line = self.getLineSegment(nx, ny, r_int, nuxlim, nuylim)
+
+                nVertexes = len(line)
+                if nVertexes == 2:
+                    # Found intersecting line segment
+                    line_list.append(line)
+                    intersecting_resonance_coeffs_list.append((nx, ny, r_int))
+
+        return line_list, intersecting_resonance_coeffs_list
+
+    #----------------------------------------------------------------------
+    def getResonanceCoeffsAndLines(self, norder, nuxlim, nuylim):
+        """"""
+
+        all_resonance_coeffs = self.getResonanceCoeffs(norder)
+
+        lines, matching_resonance_coeffs = self.getResonanceLines(
+            nuxlim, nuylim, all_resonance_coeffs)
+
+        return dict(
+            coeffs=matching_resonance_coeffs, lines=lines)
+
+    #----------------------------------------------------------------------
+    def getResonanceCoeffLabelString(self, nx, ny):
+        """"""
+
+        if nx == 0:
+            label = ''
+        elif nx == 1:
+            label = r'\nu_x '
+        elif nx == -1:
+            label = r'-\nu_x '
+        else:
+            label = fr'{nx:d} \nu_x '
+
+        if ny == 0:
+            pass
+        elif ny == 1:
+            if label == '':
+                label += r'\nu_y '
+            else:
+                label += r'+ \nu_y '
+        elif ny == -1:
+            label += r'- \nu_y '
+        else:
+            if label == '':
+                label += fr'{ny:d} \nu_y '
+            else:
+                label += fr'{ny:+d} \nu_y '
+
+        return f'${label}$'
+
+
+
+
+

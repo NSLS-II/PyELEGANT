@@ -1053,3 +1053,258 @@ def plot_Touschek_lifetime(output_filepath, title='', slim=None):
         plt.title(tau_info_title, size=font_sz)
     plt.legend(loc='best')
     plt.tight_layout()
+
+def calc_chrom_twiss(
+    output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, ndelta,
+    use_beamline=None, transmute_elements=None, ele_filepath=None,
+    output_file_type=None, del_tmp_files=True, print_cmd=False,
+    run_local=True, remote_opts=None):
+    """"""
+
+    with open(LTE_filepath, 'r') as f:
+        file_contents = f.read()
+
+    input_dict = dict(
+        LTE_filepath=os.path.abspath(LTE_filepath), E_MeV=E_MeV,
+        delta_min=delta_min, delta_max=delta_max, ndelta=ndelta,
+        use_beamline=use_beamline, transmute_elements=transmute_elements,
+        ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
+        run_local=run_local, remote_opts=remote_opts,
+        lattice_file_contents=file_contents,
+        timestamp_ini=util.get_current_local_time_str(),
+    )
+
+    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    input_dict['output_file_type'] = output_file_type
+
+    if output_file_type in ('hdf5', 'h5'):
+        _save_input_to_hdf5(output_filepath, input_dict)
+
+    if ele_filepath is None:
+        tmp = tempfile.NamedTemporaryFile(
+            dir=os.getcwd(), delete=False, prefix=f'tmpChromTwiss_', suffix='.ele')
+        ele_filepath = os.path.abspath(tmp.name)
+        tmp.close()
+
+    ed = elebuilder.EleDesigner(double_format='.12g')
+
+    _add_transmute_blocks(ed, transmute_elements)
+
+    ed.add_newline()
+
+    ed.add_block('run_setup',
+        lattice=LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline,
+    )
+
+    ed.add_newline()
+
+    ed.add_block('run_control')
+
+    ed.add_newline()
+
+    temp_malign_elem_name = 'ELEGANT_CHROM_TWISS_MAL'
+    temp_malign_elem_def = f'{temp_malign_elem_name}: MALIGN'
+
+    ed.add_block('insert_elements',
+        name='*', exclude='*', add_at_start=True, element_def=temp_malign_elem_def
+    )
+
+    ed.add_newline()
+
+    ed.add_block('alter_elements',
+        name=temp_malign_elem_name, type='MALIGN', item='DP', value='<delta>')
+
+    ed.add_newline()
+
+    ed.add_block('twiss_output', filename='%s.twi')
+
+    ed.write(ele_filepath)
+
+    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    #print(ed.actual_output_filepath_list)
+
+    for fp in ed.actual_output_filepath_list:
+        if fp.endswith('.twi'):
+            twi_filepath = fp
+        else:
+            raise ValueError('This line should not be reached.')
+
+    delta_array = np.linspace(delta_min, delta_max, ndelta)
+
+    # Run Elegant
+    if run_local:
+        nuxs = np.full(ndelta, np.nan)
+        nuys = np.full(ndelta, np.nan)
+        for i, delta in enumerate(delta_array):
+            run(ele_filepath, print_cmd=print_cmd,
+                macros=dict(delta=f'{delta:.12g}'),
+                print_stdout=std_print_enabled['out'],
+                print_stderr=std_print_enabled['err'])
+
+            output, _ = sdds.sdds2dicts(twi_filepath)
+
+            nuxs[i] = output['params']['nux']
+            nuys[i] = output['params']['nuy']
+    else:
+        raise NotImplementedError
+
+    timestamp_fin = util.get_current_local_time_str()
+
+    if output_file_type in ('hdf5', 'h5'):
+        _kwargs = dict(compression='gzip')
+        f = h5py.File(output_filepath)
+        f.create_dataset('deltas', data=delta_array, **_kwargs)
+        f.create_dataset('nuxs', data=nuxs, **_kwargs)
+        f.create_dataset('nuys', data=nuys, **_kwargs)
+        f['timestamp_fin'] = timestamp_fin
+        f.close()
+
+    elif output_file_type == 'pgz':
+        util.robust_pgz_file_write(
+            output_filepath, dict(deltas=delta_array, nuxs=nuxs, nuys=nuys,
+                                  input=input_dict, timestamp_fin=timestamp_fin),
+            nMaxTry=10, sleep=10.0)
+    else:
+        raise ValueError()
+
+    if del_tmp_files:
+        for fp in ed.actual_output_filepath_list + [ele_filepath]:
+            if fp.startswith('/dev'):
+                continue
+            else:
+                try:
+                    os.remove(fp)
+                except:
+                    print(f'Failed to delete "{fp}"')
+
+    return output_filepath
+
+def plot_chrom(
+    output_filepath, max_chrom_order=3, title='', deltalim=None,
+    nuxlim=None, nuylim=None, max_resonance_line_order=5):
+    """"""
+
+    assert max_resonance_line_order <= 5
+
+    try:
+        d = util.load_pgz_file(output_filepath)
+        deltas = d['deltas']
+        nuxs = d['nuxs']
+        nuys = d['nuys']
+    except:
+        f = h5py.File(output_filepath, 'r')
+        deltas = f['deltas'][()]
+        nuxs = f['nuxs'][()]
+        nuys = f['nuys'][()]
+        f.close()
+
+    coeffs = dict(x=np.polyfit(deltas, nuxs, max_chrom_order),
+                  y=np.polyfit(deltas, nuys, max_chrom_order))
+
+    fit_label = {}
+    for plane in ['x', 'y']:
+        fit_label[plane] = fr'\nu_{plane} = '
+        for i, c in zip(range(max_chrom_order + 1)[::-1], coeffs[plane]):
+            coeff_str = f'{c:+.3g} '
+            if 'e' in coeff_str:
+                s1, s2 = coeff_str.split('e')
+                coeff_str = fr'{s1} \times 10^{int(s2):d} '
+            fit_label[plane] += coeff_str
+            if i == 1:
+                fit_label[plane] += r'\delta '
+            elif i >= 2:
+                fit_label[plane] += fr'\delta^{i:d} '
+
+        fit_label[plane] = '${}$'.format(fit_label[plane].strip())
+
+    is_nuxlim_frac = False
+    if nuxlim is not None:
+        if (0.0 <= nuxlim[0] <= 1.0) and (0.0 <= nuxlim[1] <= 1.0):
+            is_nuxlim_frac = True
+    is_nuylim_frac = False
+    if nuylim is not None:
+        if (0.0 <= nuylim[0] <= 1.0) and (0.0 <= nuylim[1] <= 1.0):
+            is_nuylim_frac = True
+
+    font_sz = 22
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    if is_nuxlim_frac:
+        offset = np.floor(nuxs)
+    else:
+        offset = np.zeros(nuxs.shape)
+    lines1 = ax1.plot(deltas * 1e2, nuxs - offset, 'b.', label=r'$\nu_x$')
+    fit_lines1 = ax1.plot(
+        deltas * 1e2, np.poly1d(coeffs['x'])(deltas) - offset, 'b-',
+        label=fit_label['x'])
+    ax2 = ax1.twinx()
+    if is_nuxlim_frac:
+        offset = np.floor(nuys)
+    else:
+        offset = np.zeros(nuys.shape)
+    lines2 = ax2.plot(deltas * 1e2, nuys - offset, 'r.', label=r'$\nu_y$')
+    fit_lines2 = ax2.plot(
+        deltas * 1e2, np.poly1d(coeffs['y'])(deltas) - offset, 'r-',
+        label=fit_label['y'])
+    ax1.set_xlabel(r'$\delta\, [\%]$', size=font_sz)
+    ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
+    ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
+    if deltalim is not None:
+        ax1.set_xlim([v * 1e2 for v in deltalim])
+    if nuxlim is not None:
+        ax1.set_ylim(nuxlim)
+    else:
+        nuxlim = ax1.get_ylim()
+    if nuylim is not None:
+        ax2.set_ylim(nuylim)
+    else:
+        nuylim = ax2.get_ylim()
+    if title != '':
+        plt.title(title, size=font_sz, pad=60)
+    combined_lines = fit_lines1 + fit_lines2
+    leg = ax2.legend(combined_lines, [L.get_label() for L in combined_lines],
+                     loc='upper center', bbox_to_anchor=(0.5, 1.3),
+                     fancybox=True, shadow=True, prop=dict(size=12))
+    plt.tight_layout()
+
+    frac_nuxs = nuxs - np.floor(nuxs)
+    frac_nuys = nuys - np.floor(nuys)
+
+    frac_nuxlim = [v - np.floor(v) for v in nuxlim]
+    frac_nuylim = [v - np.floor(v) for v in nuylim]
+
+    fig = plt.figure()
+    fig.add_subplot(111)
+    plt.scatter(frac_nuxs, frac_nuys, s=10, c=deltas * 1e2, marker='o', cmap='jet')
+    plt.xlim(frac_nuxlim)
+    plt.ylim(frac_nuylim)
+    plt.xlabel(r'$\nu_x$', size=font_sz)
+    plt.ylabel(r'$\nu_y$', size=font_sz)
+    #
+    rd = util.ResonanceDiagram()
+    lineprops = dict(
+        color    =['k',  'k', 'g', 'm', 'm'],
+        linestyle=['-', '--', '-', '-', ':'],
+        linewidth=[  2,    2, 0.5, 0.5, 0.5],
+    )
+    for n in range(1, max_resonance_line_order):
+        d = rd.getResonanceCoeffsAndLines(n, frac_nuxlim, frac_nuylim)
+        prop = {k: lineprops[k][n-1] for k in ['color', 'linestyle', 'linewidth']}
+        assert len(d['lines']) == len(d['coeffs'])
+        for ((nux1, nuy1), (nux2, nuy2)), (nx, ny, _) in zip(d['lines'], d['coeffs']):
+            _x = np.array([nux1, nux2])
+            _x -= np.floor(_x)
+            _y = np.array([nuy1, nuy2])
+            _y -= np.floor(_y)
+            plt.plot(_x, _y, label=rd.getResonanceCoeffLabelString(nx, ny), **prop)
+    #leg = plt.legend(loc='best')
+    #leg.set_draggable(True, use_blit=True)
+    #
+    cb = plt.colorbar()
+    cb.ax.set_title(r'$\delta\, [\%]$', size=16)
+    if title != '':
+        plt.title(title, size=font_sz)
+    plt.tight_layout()
+
+

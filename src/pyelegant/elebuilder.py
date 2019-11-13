@@ -30,6 +30,7 @@ class EleBlocks():
         self._parse_find_aperture()
         self._parse_floor_coordinates()
         self._parse_frequency_map()
+        self._parse_insert_elements()
         self._parse_load_parameters()
         self._parse_momentum_aperture()
         self._parse_optimize()
@@ -63,9 +64,9 @@ class EleBlocks():
             #print(block_header)
             self.info[block_header] = []
             #print(rest)
-            #print(re.findall(r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-,\{\}\s%]+);', rest))
+            #print(re.findall(r'(\w+)\s+([\w\d\[\]]+)\s*=\s*([\w"\.\-,\{\}\s%]+);', rest))
             for dtype, key, default_val in re.findall(
-                r'(\w+)\s+([\w\d\[\]]+)\s+=\s+([\w"\.\-\+,\{\}\s%]+);', rest):
+                r'(\w+)\s+([\w\d\[\]]+)\s*=\s*([\w"\.\-\+,\{\}\s%]+);', rest):
                 self.info[block_header].append([key, dtype, default_val, None])
             #print('*********')
 
@@ -336,6 +337,29 @@ class EleBlocks():
         # Fill recommended values
         keys = [v[0] for v in d]
         d[keys.index('output')][3] = '%s.fma'
+
+    #----------------------------------------------------------------------
+    def _parse_insert_elements(self):
+        """"""
+
+        # Elegant Manual Section 7.27
+        self._parse_block_def('''
+        &insert_elements
+            STRING name = NULL;
+            STRING type = NULL;
+            STRING exclude = NULL;
+            double s_start = -1;
+            double s_end = -1;
+            long skip = 1;
+            long disable = 0;
+            long insert_before = 0;
+            long add_at_end = 0;
+            long add_at_start = 0;
+            STRING element_def = NULL;
+            long total_occurrences = 0;
+            long occurrence[100]={0};
+        &end
+        ''')
 
     #----------------------------------------------------------------------
     def _parse_load_parameters(self):
@@ -1361,7 +1385,14 @@ class EleDesigner():
             elif dtypes[i] == 'long':
                 block.append(f'{k} = {v:d}')
             elif dtypes[i] == 'double':
-                block.append(('{k} = {v:%s}' % self.double_format).format(k=k, v=v))
+                try:
+                    block.append(('{k} = {v:%s}' % self.double_format).format(k=k, v=v))
+                except ValueError:
+                    if v.startswith('<') and v.endswith('>'): # macro definition
+                        block.append(f'{k} = {v}')
+                    else:
+                        raise
+
             else:
                 raise ValueError('Unexpected data type: {}'.format(dtypes[i]))
 
