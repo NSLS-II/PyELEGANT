@@ -1,5 +1,6 @@
 import sys
 import os
+from pathlib import Path
 import numpy as np
 import scipy.constants as PHYSCONST
 import matplotlib.pylab as plt
@@ -7,6 +8,7 @@ import tempfile
 import h5py
 import shlex
 from subprocess import Popen, PIPE
+import time
 
 from .local import run
 from .remote import remote
@@ -15,6 +17,7 @@ from . import elebuilder
 from . import util
 from . import sdds
 from . import twiss
+from . import sigproc
 
 def _auto_check_output_file_type(output_filepath, output_file_type):
     """"""
@@ -59,12 +62,13 @@ def _add_transmute_blocks(ed, transmute_elements):
     ed := EleDesigner object
     """
 
-    default_transmute_elems = dict(
-        SBEN='CSBEN', RBEN='CSBEN', QUAD='KQUAD', SEXT='KSEXT',
-        RFCA='MARK', SREFFECTS='MARK')
+    if transmute_elements is None:
 
-    actual_transmute_elems = default_transmute_elems
-    if transmute_elements is not None:
+        actual_transmute_elems = dict(
+            SBEN='CSBEN', RBEN='CSBEN', QUAD='KQUAD', SEXT='KSEXT',
+            RFCA='MARK', SREFFECTS='MARK')
+    else:
+
         actual_transmute_elems = {}
         for old_type, new_type in transmute_elements.items():
             actual_transmute_elems[old_type] = new_type
@@ -1088,6 +1092,9 @@ def calc_chrom_twiss(
 
     ed = elebuilder.EleDesigner(double_format='.12g')
 
+    if transmute_elements is None:
+        transmute_elements = dict(RFCA='MARK', SREFFECTS='MARK')
+
     _add_transmute_blocks(ed, transmute_elements)
 
     ed.add_newline()
@@ -1150,6 +1157,207 @@ def calc_chrom_twiss(
 
     timestamp_fin = util.get_current_local_time_str()
 
+    _save_chrom_data(
+        output_filepath, output_file_type, delta_array, nuxs, nuys,
+        timestamp_fin, input_dict)
+
+    if del_tmp_files:
+        for fp in ed.actual_output_filepath_list + [ele_filepath]:
+            if fp.startswith('/dev'):
+                continue
+            else:
+                try:
+                    os.remove(fp)
+                except:
+                    print(f'Failed to delete "{fp}"')
+
+    return output_filepath
+
+def calc_chrom_track(
+    output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, ndelta,
+    n_turns=256, x0_offset=1e-5, y0_offset=1e-5, use_beamline=None, N_KICKS=None,
+    transmute_elements=None, ele_filepath=None, output_file_type=None,
+    del_tmp_files=True, print_cmd=False,
+    run_local=True, remote_opts=None):
+    """"""
+
+    LTE_file_pathobj = Path(LTE_filepath)
+
+    file_contents = LTE_file_pathobj.read_text()
+
+    input_dict = dict(
+        LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
+        delta_min=delta_min, delta_max=delta_max, ndelta=ndelta,
+        n_turns=n_turns, x0_offset=x0_offset, y0_offset=y0_offset,
+        use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
+        ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
+        run_local=run_local, remote_opts=remote_opts,
+        lattice_file_contents=file_contents,
+        timestamp_ini=util.get_current_local_time_str(),
+    )
+
+    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    input_dict['output_file_type'] = output_file_type
+
+    if output_file_type in ('hdf5', 'h5'):
+        _save_input_to_hdf5(output_filepath, input_dict)
+
+    if ele_filepath is None:
+        tmp = tempfile.NamedTemporaryFile(
+            dir=Path.cwd(), delete=False, prefix=f'tmpChromTrack_', suffix='.ele')
+        ele_pathobj = Path(tmp.name)
+        ele_filepath = str(ele_pathobj.resolve())
+        tmp.close()
+
+    watch_pathobj = ele_pathobj.with_suffix('.wc')
+    twi_pgz_pathobj = ele_pathobj.with_suffix('.twi.pgz')
+
+    ed = elebuilder.EleDesigner(double_format='.12g')
+
+    _add_transmute_blocks(ed, transmute_elements)
+
+    ed.add_newline()
+
+    ed.add_block('run_setup',
+        lattice=LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline,
+    )
+
+    ed.add_newline()
+
+    temp_watch_elem_name = 'ELEGANT_CHROM_TRACK_WATCH'
+    temp_watch_elem_def = (
+        f'{temp_watch_elem_name}: WATCH, FILENAME="{watch_pathobj.resolve()}", '
+        'MODE=coordinate')
+
+    ed.add_block('insert_elements',
+        name='*', exclude='*', add_at_start=True, element_def=temp_watch_elem_def
+    )
+
+    ed.add_newline()
+
+    _add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+
+    ed.add_newline()
+
+    ed.add_block('run_control', n_passes=n_turns)
+
+    ed.add_newline()
+
+    centroid = {}
+    centroid[0] = x0_offset
+    centroid[2] = y0_offset
+    centroid[5] = '<delta>'
+    #
+    ed.add_block(
+        'bunched_beam', n_particles_per_bunch=1, centroid=centroid)
+
+    ed.add_newline()
+
+    ed.add_block('track')
+
+    ed.write(ele_filepath)
+
+    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    #print(ed.actual_output_filepath_list)
+
+    twiss.calc_ring_twiss(
+        str(twi_pgz_pathobj), LTE_filepath, E_MeV, use_beamline=use_beamline,
+        parameters=None, run_local=True, del_tmp_files=True)
+    _d = util.load_pgz_file(str(twi_pgz_pathobj))
+    nux0 = _d['data']['twi']['scalars']['nux']
+    nuy0 = _d['data']['twi']['scalars']['nuy']
+    twi_pgz_pathobj.unlink()
+
+    nux0_frac = nux0 - np.floor(nux0)
+    nuy0_frac = nuy0 - np.floor(nuy0)
+
+    delta_array = np.linspace(delta_min, delta_max, ndelta)
+
+    # Run Elegant
+    if run_local:
+        tbt = dict(x = np.full((n_turns, ndelta), np.nan),
+                   y = np.full((n_turns, ndelta), np.nan),
+                   xp = np.full((n_turns, ndelta), np.nan),
+                   yp = np.full((n_turns, ndelta), np.nan))
+
+        #tElapsed = dict(run_ele=0.0, sdds2dicts=0.0, tbt_population=0.0)
+
+        for i, delta in enumerate(delta_array):
+            #t0 = time.time()
+            run(ele_filepath, print_cmd=print_cmd,
+                macros=dict(delta=f'{delta:.12g}'),
+                print_stdout=std_print_enabled['out'],
+                print_stderr=std_print_enabled['err'])
+            #tElapsed['run_ele'] += time.time() - t0
+
+            #t0 = time.time()
+            output, _ = sdds.sdds2dicts(watch_pathobj)
+            #tElapsed['sdds2dicts'] += time.time() - t0
+
+            #t0 = time.time()
+            cols = output['columns']
+            for k in list(tbt):
+                tbt[k][:len(cols[k]), i] = cols[k]
+            #tElapsed['tbt_population'] += time.time() - t0
+    else:
+        raise NotImplementedError
+
+    #print(tElapsed)
+
+    #t0 = time.time()
+    # Estimate tunes from TbT data
+    neg_delta_array = delta_array[delta_array < 0.0]
+    neg_sort_inds = np.argsort(np.abs(neg_delta_array))
+    sorted_neg_delta_inds = np.where(delta_array < 0.0)[0][neg_sort_inds]
+    pos_delta_array = delta_array[delta_array >= 0.0]
+    pos_sort_inds = np.argsort(pos_delta_array)
+    sorted_pos_delta_inds = np.where(delta_array >= 0.0)[0][pos_sort_inds]
+    sorted_neg_delta_inds, sorted_pos_delta_inds
+    #
+    nus = dict(x=np.full(delta_array.shape, np.nan),
+               y=np.full(delta_array.shape, np.nan))
+    #
+    opts = dict(window='sine', resolution=1e-8)
+    for sorted_delta_inds in [sorted_neg_delta_inds, sorted_pos_delta_inds]:
+        init_nux = nux0_frac
+        init_nuy = nuy0_frac
+        for i in sorted_delta_inds:
+            xarray = tbt['x'][:, i]
+            yarray = tbt['y'][:, i]
+
+            if np.any(np.isnan(xarray)) or np.any(np.isnan(yarray)):
+                # Particle lost at some point.
+                continue
+
+            out = sigproc.getDftPeak(xarray, init_nux, **opts)
+            nus['x'][i] = out['nu']
+            init_nux = out['nu']
+
+            out = sigproc.getDftPeak(yarray, init_nuy, **opts)
+            nus['y'][i] = out['nu']
+            init_nuy = out['nu']
+    #
+    nuxs = nus['x']
+    nuys = nus['y']
+    #print('* Time elapsed for tune estimation: {:.3f}'.format(time.time() - t0))
+
+    timestamp_fin = util.get_current_local_time_str()
+
+    _save_chrom_data(
+        output_filepath, output_file_type, delta_array, nuxs, nuys,
+        timestamp_fin, input_dict)
+
+    if del_tmp_files:
+        util.delete_temp_files(
+            ed.actual_output_filepath_list + [ele_filepath, str(watch_pathobj)])
+
+    return output_filepath
+
+def _save_chrom_data(
+    output_filepath, output_file_type, delta_array, nuxs, nuys, timestamp_fin,
+    input_dict):
+    """"""
+
     if output_file_type in ('hdf5', 'h5'):
         _kwargs = dict(compression='gzip')
         f = h5py.File(output_filepath)
@@ -1166,18 +1374,6 @@ def calc_chrom_twiss(
             nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
-
-    if del_tmp_files:
-        for fp in ed.actual_output_filepath_list + [ele_filepath]:
-            if fp.startswith('/dev'):
-                continue
-            else:
-                try:
-                    os.remove(fp)
-                except:
-                    print(f'Failed to delete "{fp}"')
-
-    return output_filepath
 
 def plot_chrom(
     output_filepath, max_chrom_order=3, title='', deltalim=None,

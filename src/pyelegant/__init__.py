@@ -11,6 +11,7 @@ from . import twiss
 from . import elebuilder
 from . import util
 from . import sdds
+from . import sigproc
 
 from .local import run
 from .remote import remote

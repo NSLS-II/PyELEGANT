@@ -67,7 +67,14 @@ class EleBlocks():
             #print(re.findall(r'(\w+)\s+([\w\d\[\]]+)\s*=\s*([\w"\.\-,\{\}\s%]+);', rest))
             for dtype, key, default_val in re.findall(
                 r'(\w+)\s+([\w\d\[\]]+)\s*=\s*([\w"\.\-\+,\{\}\s%]+);', rest):
-                self.info[block_header].append([key, dtype, default_val, None])
+                if '[' in key:
+                    key, size_sq_bracket_end = key.split('[')
+                    assert size_sq_bracket_end[-1] == ']'
+                    array_size = int(size_sq_bracket_end[:-1])
+                else:
+                    array_size = 0 # which means "scalar"
+                self.info[block_header].append(
+                    [key, dtype, default_val, None, array_size])
             #print('*********')
 
             if iBlock != 0:
@@ -1358,7 +1365,7 @@ class EleDesigner():
 
             raise ValueError(f'Unexpected block name "{block_header}".')
 
-        keywords, dtypes, default_vals, recommended = zip(
+        keywords, dtypes, default_vals, recommended, array_sizes = zip(
             *self.blocks.info[block_header])
 
         block = []
@@ -1372,6 +1379,9 @@ class EleDesigner():
                 raise ValueError(f'Unexpected key "{k}" for Block "{block_header}"')
 
             i = keywords.index(k)
+
+            is_scalar = (array_sizes[i] == 0)
+
             if dtypes[i] == 'STRING':
                 if v is None:
                     continue
@@ -1385,13 +1395,30 @@ class EleDesigner():
             elif dtypes[i] == 'long':
                 block.append(f'{k} = {v:d}')
             elif dtypes[i] == 'double':
-                try:
-                    block.append(('{k} = {v:%s}' % self.double_format).format(k=k, v=v))
-                except ValueError:
-                    if v.startswith('<') and v.endswith('>'): # macro definition
-                        block.append(f'{k} = {v}')
-                    else:
-                        raise
+                if is_scalar:
+                    try:
+                        block.append(('{k} = {v:%s}' % self.double_format).format(k=k, v=v))
+                    except ValueError:
+                        if v.startswith('<') and v.endswith('>'): # macro definition
+                            block.append(f'{k} = {v}')
+                        else:
+                            raise
+                else:
+                    max_array_size = array_sizes[i]
+                    for array_index, scalar_val in v.items():
+                        assert 0 <= array_index < max_array_size
+                        try:
+                            block.append(
+                                ('{k}[{array_index:d}] = {v:%s}'
+                                 % self.double_format).format(
+                                     k=k, v=v[array_index], array_index=array_index))
+                        except ValueError:
+                            v_str = v[array_index]
+                            if v_str.startswith('<') and v_str.endswith('>'): # macro definition
+                                block.append(f'{k}[{array_index:d}] = {v_str}')
+                            else:
+                                raise
+
 
             else:
                 raise ValueError('Unexpected data type: {}'.format(dtypes[i]))

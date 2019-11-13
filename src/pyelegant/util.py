@@ -5,6 +5,7 @@ import pickle
 import h5py
 import numpy as np
 import itertools
+from pathlib import Path
 
 def get_current_local_time_str():
     """"""
@@ -241,6 +242,18 @@ def get_run_setup_output_abspaths(
         filepath_dict['parameters'] = get_abspath(parameters, ele_filepath, rootname=rootname)
 
     return filepath_dict
+
+def delete_temp_files(filepath_list):
+    """"""
+
+    for fp in np.unique(filepath_list):
+        if fp.startswith('/dev'):
+            continue
+        else:
+            try:
+                Path(fp).unlink()
+            except:
+                print(f'Failed to delete "{fp}"')
 
 ########################################################################
 class ResonanceDiagram():
