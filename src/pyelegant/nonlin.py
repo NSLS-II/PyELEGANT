@@ -1225,8 +1225,12 @@ def calc_chrom_track(
     ed.add_newline()
 
     temp_watch_elem_name = 'ELEGANT_CHROM_TRACK_WATCH'
+    if run_local:
+        watch_filepath = str(watch_pathobj.resolve())
+    else:
+        watch_filepath = watch_pathobj.name
     temp_watch_elem_def = (
-        f'{temp_watch_elem_name}: WATCH, FILENAME="{watch_pathobj.resolve()}", '
+        f'{temp_watch_elem_name}: WATCH, FILENAME="{watch_filepath}", '
         'MODE=coordinate')
 
     ed.add_block('insert_elements',
@@ -1277,8 +1281,9 @@ def calc_chrom_track(
     if run_local:
         tbt = dict(x = np.full((n_turns, ndelta), np.nan),
                    y = np.full((n_turns, ndelta), np.nan),
-                   xp = np.full((n_turns, ndelta), np.nan),
-                   yp = np.full((n_turns, ndelta), np.nan))
+                   #xp = np.full((n_turns, ndelta), np.nan),
+                   #yp = np.full((n_turns, ndelta), np.nan),
+                   )
 
         #tElapsed = dict(run_ele=0.0, sdds2dicts=0.0, tbt_population=0.0)
 
@@ -1300,7 +1305,37 @@ def calc_chrom_track(
                 tbt[k][:len(cols[k]), i] = cols[k]
             #tElapsed['tbt_population'] += time.time() - t0
     else:
-        raise NotImplementedError
+
+        if remote_opts is None:
+            remote_opts = dict(ntasks=20)
+            #remote_opts = dict(
+                #use_sbatch=True, pelegant=False, job_name='chrom',
+                #output='chrom.%J.out', error='chrom.%J.err',
+                #partition='short', ntasks=50)
+
+        delta_sub_array_list, reverse_mapping = util.chunk_list(
+            delta_array, remote_opts['ntasks'])
+
+        module_name = 'pyelegant.nonlin'
+        func_name = '_calc_chrom_track_get_tbt'
+        chunked_results = remote.run_mpi_python(
+            remote_opts, module_name, func_name, delta_sub_array_list,
+            (ele_pathobj.read_text(), ele_pathobj.name, watch_pathobj.name,
+             print_cmd, std_print_enabled['out'], std_print_enabled['err']),
+        )
+
+        tbt_chunked_list = dict()
+        tbt_flat_list = dict()
+        for plane in ['x', 'y']:
+            tbt_chunked_list[plane] = [_d[plane] for _d in chunked_results]
+            tbt_flat_list[plane] = util.unchunk_list_of_lists(
+                tbt_chunked_list[plane], reverse_mapping)
+
+        tbt = dict(x = np.full((n_turns, ndelta), np.nan),
+                   y = np.full((n_turns, ndelta), np.nan))
+        for plane in ['x', 'y']:
+            for iDelta, array in enumerate(tbt_flat_list[plane]):
+                tbt[plane][:len(array), iDelta] = array
 
     #print(tElapsed)
 
@@ -1345,7 +1380,7 @@ def calc_chrom_track(
 
     _save_chrom_data(
         output_filepath, output_file_type, delta_array, nuxs, nuys,
-        timestamp_fin, input_dict)
+        timestamp_fin, input_dict, xtbt=tbt['x'], ytbt=tbt['y'])
 
     if del_tmp_files:
         util.delete_temp_files(
@@ -1353,9 +1388,46 @@ def calc_chrom_track(
 
     return output_filepath
 
+def _calc_chrom_track_get_tbt(
+    delta_sub_array, ele_contents, ele_filename, watch_filename,
+    print_cmd, print_stdout, print_stderr, tempdir_path='/tmp'):
+    """"""
+
+    if not Path(tempdir_path).exists():
+        tempdir_path = Path.cwd()
+
+    sub_tbt = dict(x=[], y=[])
+
+    with tempfile.TemporaryDirectory(
+        prefix='tmpCalcChrom_', dir=tempdir_path) as tmpdirname:
+
+        ele_pathobj = Path(tmpdirname).joinpath(ele_filename)
+        watch_pathobj = Path(tmpdirname).joinpath(watch_filename)
+
+        ele_contents = ele_contents.replace(
+            watch_filename, str(watch_pathobj.resolve()))
+
+        ele_pathobj.write_text(ele_contents)
+
+        ele_filepath = str(ele_pathobj.resolve())
+
+        for delta in delta_sub_array:
+
+            run(ele_filepath, print_cmd=print_cmd,
+                macros=dict(delta=f'{delta:.12g}'),
+                print_stdout=print_stdout, print_stderr=print_stderr)
+
+            output, _ = sdds.sdds2dicts(watch_pathobj)
+
+            cols = output['columns']
+            for k in list(sub_tbt):
+                sub_tbt[k].append(cols[k])
+
+    return sub_tbt
+
 def _save_chrom_data(
     output_filepath, output_file_type, delta_array, nuxs, nuys, timestamp_fin,
-    input_dict):
+    input_dict, xtbt=None, ytbt=None):
     """"""
 
     if output_file_type in ('hdf5', 'h5'):
@@ -1364,14 +1436,21 @@ def _save_chrom_data(
         f.create_dataset('deltas', data=delta_array, **_kwargs)
         f.create_dataset('nuxs', data=nuxs, **_kwargs)
         f.create_dataset('nuys', data=nuys, **_kwargs)
+        if xtbt is not None:
+            f.create_dataset('xtbt', data=xtbt, **_kwargs)
+        if ytbt is not None:
+            f.create_dataset('ytbt', data=ytbt, **_kwargs)
         f['timestamp_fin'] = timestamp_fin
         f.close()
 
     elif output_file_type == 'pgz':
-        util.robust_pgz_file_write(
-            output_filepath, dict(deltas=delta_array, nuxs=nuxs, nuys=nuys,
-                                  input=input_dict, timestamp_fin=timestamp_fin),
-            nMaxTry=10, sleep=10.0)
+        d = dict(deltas=delta_array, nuxs=nuxs, nuys=nuys,
+                 input=input_dict, timestamp_fin=timestamp_fin)
+        if xtbt is not None:
+            d['xtbt'] = xtbt
+        if ytbt is not None:
+            d['ytbt'] = ytbt
+        util.robust_pgz_file_write(output_filepath, d, nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
 

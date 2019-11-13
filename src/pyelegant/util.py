@@ -251,9 +251,44 @@ def delete_temp_files(filepath_list):
             continue
         else:
             try:
-                Path(fp).unlink()
+                fp_pathobj = Path(fp)
+                if fp_pathobj.exists():
+                    fp_pathobj.unlink()
             except:
                 print(f'Failed to delete "{fp}"')
+
+def chunk_list(full_flat_list, ncores):
+    """"""
+
+    n = len(full_flat_list)
+
+    full_inds = np.array(range(n))
+
+    chunked_list = []
+    reverse_mapping = np.full((n, 2), np.nan)
+    # ^ 1st column will contain the core index on which each task is performed.
+    #   2nd column will contain the task index within each core task list
+    for iCore in range(ncores):
+
+        chunked_list.append(full_flat_list[iCore::ncores])
+
+        assigned_flat_inds = full_inds[iCore::ncores]
+        reverse_mapping[assigned_flat_inds, 0] = iCore
+        reverse_mapping[assigned_flat_inds, 1] = np.array(range(
+            len(assigned_flat_inds)))
+
+    assert np.all(~np.isnan(reverse_mapping))
+
+    return chunked_list, reverse_mapping.astype(int)
+
+def unchunk_list_of_lists(chunked_list, reverse_mapping):
+    """"""
+
+    full_flat_list = []
+    for iCore, sub_task_index in reverse_mapping:
+        full_flat_list.append(chunked_list[iCore][sub_task_index])
+
+    return full_flat_list
 
 ########################################################################
 class ResonanceDiagram():

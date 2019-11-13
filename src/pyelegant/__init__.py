@@ -12,6 +12,7 @@ from . import elebuilder
 from . import util
 from . import sdds
 from . import sigproc
+from . import nonlin
 
 from .local import run
 from .remote import remote

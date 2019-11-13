@@ -1,6 +1,3 @@
-from __future__ import print_function, division, absolute_import
-from __future__ import unicode_literals
-
 import sys
 import os
 import time
@@ -9,21 +6,35 @@ from copy import deepcopy
 from subprocess import Popen, PIPE
 import tempfile
 import glob
+from pathlib import Path
+
+from . import util
 
 try:
     from mpi4py import MPI
 except:
     pass
+import dill
 
-#import gzip
-#try:
-    #from six.moves import cPickle as pickle
-#except:
-    #print('Package "six" could not be found.')
-    #import cPickle as pickle
+_ABS_TIME_LIMIT = None
+#_ABS_TIME_LIMIT = '2019-10-24T05-50-00'
+SLURM_ABS_TIME_LIMIT = {}
+for _k in ['normal', 'tiny', 'short', 'low', 'high', 'long', 'longlong', 'debug',
+           'risky']:
+    SLURM_ABS_TIME_LIMIT[_k] = _ABS_TIME_LIMIT
 
-
-from . import util
+SLURM_EXCL_NODES = None
+#SLURM_EXCL_NODES = ['apcpu-005',]
+#SLURM_EXCL_NODES = ['cpu-019', 'cpu-020', 'cpu-021',]
+#SLURM_EXCL_NODES = [f'cpu-{n:03d}' for n in range(19, 26+1)] # exclude GPFS nodes
+#SLURM_EXCL_NODES = [f'cpu-{n:03d}' for n in
+                    #list(range(2, 5+1)) + list(range(7, 15+1))] # exclude NFS nodes
+#SLURM_EXCL_NODES = [
+    #f'cpu-{n:03d}' for n in list(range(19, 26+1)) + list(range(2, 5+1)) +
+    #list(range(7, 15+1))] # exclude both GPFS & NFS nodes
+#SLURM_EXCL_NODES = [f'apcpu-{n:03d}' for n in range(1, 5+1)] + [
+    #f'cpu-{n:03d}' for n in list(range(2, 5+1)) +
+    #list(range(7, 15+1))] # exclude both apcpu & NFS nodes, i.e., including only GPFS nodes
 
 MODULE_LOAD_CMD_STR = 'elegant-latest'
 #MODULE_LOAD_CMD_STR = 'elegant-latest elegant/2019.2.1'
@@ -856,3 +867,140 @@ proc SubmitRunScript {args} {
 
     with open('geneticOptimizer.local', 'w') as f:
         f.write(contents)
+
+def run_mpi_python(remote_opts, module_name, func_name, param_list, args):
+    """
+    Example:
+        module_name = 'pyelegant.nonlin'
+        func_name = '_calc_chrom_track_get_tbt'
+    """
+
+    d = dict(module_name=module_name, func_name=func_name,
+             param_list=param_list, args=args)
+
+    job_name = remote_opts.get('job_name', 'job')
+
+    input_filepath, output_filepath, mpi_sub_sh_filepath = gen_mpi_submit_script(
+        job_name=job_name,
+        partition=remote_opts.get('partition', 'normal'),
+        ntasks=remote_opts.get('ntasks', 50), x11=remote_opts.get('x11', False),
+        spread_job=remote_opts.get('spread_job', False))
+
+    d['output_filepath'] = output_filepath
+
+    with open(input_filepath, 'wb') as f:
+        dill.dump(d, f, protocol=-1)
+
+    # Add re-try functionality in case of "sbatch: error: Slurm controller not responding, sleeping and retrying."
+    err_counter = 0
+    while True:
+        p = Popen('sbatch {0}'.format(mpi_sub_sh_filepath),
+                  stdout=PIPE, stderr=PIPE, shell=True)
+        out, err = p.communicate()
+        out = out.decode()
+        err = err.decode()
+        print(out)
+        if err:
+            err_counter += 1
+
+            if err_counter >= 10:
+                print(err)
+                raise RuntimeError('Encountered error during main job submission')
+            else:
+                print(err)
+                sys.stdout.flush()
+                time.sleep(30.0)
+                continue
+        else:
+            break
+
+    job_ID_str = out.replace('Submitted batch job', '').strip()
+
+    err_log_check = None
+    if err_log_check is not None:
+        err_log_check['job_name'] = job_name
+
+    wait_for_completion(
+        job_ID_str, remote_opts.get('status_check_interval', 3.0),
+        err_log_check=err_log_check)
+
+    results = util.load_pgz_file(output_filepath)
+
+    if remote_opts.get('del_input_file', True):
+        try: os.remove(input_filepath)
+        except: pass
+    if remote_opts.get('del_sub_sh_file', True):
+        try: os.remove(mpi_sub_sh_filepath)
+        except: pass
+    if remote_opts.get('del_output_file', True):
+        try: os.remove(output_filepath)
+        except: pass
+    if remote_opts.get('del_job_out_file', True):
+        try: os.remove(f'{job_name}.{job_ID_str}.out')
+        except: pass
+    if remote_opts.get('del_job_err_file', True):
+        try: os.remove(f'{job_name}.{job_ID_str}.err')
+        except: pass
+
+    return results
+
+#----------------------------------------------------------------------
+def gen_mpi_submit_script(
+    job_name='job', partition='normal', ntasks=10, x11=False, spread_job=False):
+    """"""
+
+    tmp = tempfile.NamedTemporaryFile(dir=os.getcwd(), delete=False,
+                                      prefix='tmpInput_', suffix='.pgz')
+    input_filepath = os.path.abspath(tmp.name)
+    output_filepath = os.path.abspath(tmp.name.replace('tmpInput_', 'tmpOutput_'))
+    mpi_sub_sh_filepath = os.path.abspath(
+        tmp.name.replace('tmpInput_', 'tmpMpiSub_').replace('.pgz', '.sh'))
+
+    # CRITICAL: The line "#!/bin/bash" must come on the first line, not the second or later.
+    contents_template = '''#!/bin/bash
+#
+#SBATCH --job-name={job_name}
+#
+#SBATCH --error={job_name}.%J.err
+#SBATCH --output={job_name}.%J.out
+
+#SBATCH --partition={partition}
+
+{timelimit_str}
+
+#SBATCH --ntasks={ntasks:d}
+
+# #SBATCH --nodelist=apcpu-001,apcpu-002
+# SBATCH --nodelist=apcpu-003,apcpu-004
+
+{exclude}
+{spread_job}
+
+{x11}
+srun python -m mpi4py.futures {main_script_path} _mpi_starmap {input_filepath}
+    '''
+
+    abs_timelimit = SLURM_ABS_TIME_LIMIT[partition]
+
+    if abs_timelimit is None:
+        timelimit_str = ''
+    else:
+        timelimit = get_constrained_timelimit_str(abs_timelimit, partition)
+        if timelimit is None:
+            timelimit_str = ''
+        else:
+            timelimit_str = '#SBATCH --time={}'.format(timelimit)
+
+    contents = contents_template.format(
+        main_script_path=__file__[:-3]+'_mpi_script.py', input_filepath=input_filepath,
+        job_name=job_name, partition=partition, ntasks=ntasks,
+        timelimit_str=timelimit_str,
+        x11=('' if not x11 else 'export MPLBACKEND="agg"'),
+        exclude=('' if SLURM_EXCL_NODES is None else '#SBATCH --exclude={}'.format(
+            ','.join(SLURM_EXCL_NODES))),
+        spread_job=('' if not spread_job else '#SBATCH --spread-job')
+    )
+
+    Path(mpi_sub_sh_filepath).write_text(contents)
+
+    return input_filepath, output_filepath, mpi_sub_sh_filepath
