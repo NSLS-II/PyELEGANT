@@ -1341,37 +1341,7 @@ def calc_chrom_track(
 
     #t0 = time.time()
     # Estimate tunes from TbT data
-    neg_delta_array = delta_array[delta_array < 0.0]
-    neg_sort_inds = np.argsort(np.abs(neg_delta_array))
-    sorted_neg_delta_inds = np.where(delta_array < 0.0)[0][neg_sort_inds]
-    pos_delta_array = delta_array[delta_array >= 0.0]
-    pos_sort_inds = np.argsort(pos_delta_array)
-    sorted_pos_delta_inds = np.where(delta_array >= 0.0)[0][pos_sort_inds]
-    sorted_neg_delta_inds, sorted_pos_delta_inds
-    #
-    nus = dict(x=np.full(delta_array.shape, np.nan),
-               y=np.full(delta_array.shape, np.nan))
-    #
-    opts = dict(window='sine', resolution=1e-8)
-    for sorted_delta_inds in [sorted_neg_delta_inds, sorted_pos_delta_inds]:
-        init_nux = nux0_frac
-        init_nuy = nuy0_frac
-        for i in sorted_delta_inds:
-            xarray = tbt['x'][:, i]
-            yarray = tbt['y'][:, i]
-
-            if np.any(np.isnan(xarray)) or np.any(np.isnan(yarray)):
-                # Particle lost at some point.
-                continue
-
-            out = sigproc.getDftPeak(xarray, init_nux, **opts)
-            nus['x'][i] = out['nu']
-            init_nux = out['nu']
-
-            out = sigproc.getDftPeak(yarray, init_nuy, **opts)
-            nus['y'][i] = out['nu']
-            init_nuy = out['nu']
-    #
+    nus = calc_chrom_from_tbt(delta_array, tbt['x'], tbt['y'], nux0, nuy0)
     nuxs = nus['x']
     nuys = nus['y']
     #print('* Time elapsed for tune estimation: {:.3f}'.format(time.time() - t0))
@@ -1380,13 +1350,74 @@ def calc_chrom_track(
 
     _save_chrom_data(
         output_filepath, output_file_type, delta_array, nuxs, nuys,
-        timestamp_fin, input_dict, xtbt=tbt['x'], ytbt=tbt['y'])
+        timestamp_fin, input_dict, xtbt=tbt['x'], ytbt=tbt['y'], nux0=nux0, nuy0=nuy0)
 
     if del_tmp_files:
         util.delete_temp_files(
             ed.actual_output_filepath_list + [ele_filepath, str(watch_pathobj)])
 
     return output_filepath
+
+def calc_chrom_from_tbt(delta_array, xtbt, ytbt, nux0, nuy0):
+    """"""
+
+    frac_nux0 = nux0 - np.floor(nux0)
+    frac_nuy0 = nuy0 - np.floor(nuy0)
+
+    neg_delta_array = delta_array[delta_array < 0.0]
+    neg_sort_inds = np.argsort(np.abs(neg_delta_array))
+    sorted_neg_delta_inds = np.where(delta_array < 0.0)[0][neg_sort_inds]
+    pos_delta_array = delta_array[delta_array >= 0.0]
+    pos_sort_inds = np.argsort(pos_delta_array)
+    sorted_pos_delta_inds = np.where(delta_array >= 0.0)[0][pos_sort_inds]
+    sorted_neg_delta_inds, sorted_pos_delta_inds
+
+    nus = dict(x=np.full(delta_array.shape, np.nan),
+               y=np.full(delta_array.shape, np.nan))
+
+    n_turns = xtbt.shape[0]
+    nu_vec = np.fft.fftfreq(n_turns)
+
+    opts = dict(window='sine', resolution=1e-8)
+    for sorted_delta_inds in [sorted_neg_delta_inds, sorted_pos_delta_inds]:
+        init_nux = frac_nux0
+        init_nuy = frac_nuy0
+        for i in sorted_delta_inds:
+            xarray = xtbt[:, i]
+            yarray = ytbt[:, i]
+
+            if np.any(np.isnan(xarray)) or np.any(np.isnan(yarray)):
+                # Particle lost at some point.
+                continue
+
+            if False:
+                # This algorithm does NOT work too well if tune change
+                # between neighboring delta points are too large.
+                out = sigproc.getDftPeak(xarray, init_nux, **opts)
+                nus['x'][i] = out['nu']
+                init_nux = out['nu']
+
+                out = sigproc.getDftPeak(yarray, init_nuy, **opts)
+                nus['y'][i] = out['nu']
+                init_nuy = out['nu']
+            else:
+                # Find the rough peak first
+                ff_rect = np.fft.fft(xarray - np.mean(xarray))
+                A_arb = np.abs(ff_rect)
+                init_nux = nu_vec[np.argmax(A_arb[:(n_turns//2)])]
+                # Then fine-tune
+                out = sigproc.getDftPeak(xarray, init_nux, **opts)
+                nus['x'][i] = out['nu']
+
+                # Find the rough peak first
+                ff_rect = np.fft.fft(yarray - np.mean(yarray))
+                A_arb = np.abs(ff_rect)
+                init_nuy = nu_vec[np.argmax(A_arb[:(n_turns//2)])]
+                # Then fine-tune
+                out = sigproc.getDftPeak(yarray, init_nuy, **opts)
+                nus['y'][i] = out['nu']
+
+    return nus
 
 def _calc_chrom_track_get_tbt(
     delta_sub_array, ele_contents, ele_filename, watch_filename,
@@ -1427,8 +1458,10 @@ def _calc_chrom_track_get_tbt(
 
 def _save_chrom_data(
     output_filepath, output_file_type, delta_array, nuxs, nuys, timestamp_fin,
-    input_dict, xtbt=None, ytbt=None):
-    """"""
+    input_dict, xtbt=None, ytbt=None, nux0=None, nuy0=None):
+    """
+    nux0, nuy0: on-momentum tunes
+    """
 
     if output_file_type in ('hdf5', 'h5'):
         _kwargs = dict(compression='gzip')
@@ -1440,6 +1473,10 @@ def _save_chrom_data(
             f.create_dataset('xtbt', data=xtbt, **_kwargs)
         if ytbt is not None:
             f.create_dataset('ytbt', data=ytbt, **_kwargs)
+        if nux0 is not None:
+            f['nux0'] = nux0
+        if nuy0 is not None:
+            f['nuy0'] = nuy0
         f['timestamp_fin'] = timestamp_fin
         f.close()
 
@@ -1450,6 +1487,10 @@ def _save_chrom_data(
             d['xtbt'] = xtbt
         if ytbt is not None:
             d['ytbt'] = ytbt
+        if nux0 is not None:
+            d['nux0'] = nux0
+        if nuy0 is not None:
+            d['nuy0'] = nuy0
         util.robust_pgz_file_write(output_filepath, d, nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
