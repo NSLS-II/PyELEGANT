@@ -290,6 +290,19 @@ def unchunk_list_of_lists(chunked_list, reverse_mapping):
 
     return full_flat_list
 
+def pprint_sci_notation(float_val, format):
+    """"""
+
+    raw_str = f'{float_val:{format}}'
+
+    if 'e' in raw_str:
+        s1, s2 = raw_str.split('e')
+        pretty_str = fr'{s1} \times 10^{{{int(s2):d}}} '
+    else:
+        pretty_str = raw_str
+
+    return pretty_str
+
 ########################################################################
 class ResonanceDiagram():
     """
