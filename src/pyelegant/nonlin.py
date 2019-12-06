@@ -54,7 +54,10 @@ def _save_input_to_hdf5(output_filepath, input_dict):
                 except:
                     g2[k2] = np.array(v2, dtype='S')
         else:
-            g[k] = v
+            try:
+                g[k] = v
+            except:
+                g[k] = np.array(v, dtype='S')
     f.close()
 
 def _add_transmute_blocks(ed, transmute_elements):
@@ -90,7 +93,8 @@ def _add_N_KICKS_alter_elements_blocks(ed, N_KICKS):
             raise ValueError(f'The key "{k}" in N_KICKS dict is invalid. '
                              f'Must be one of KQUAD, KSEXT, or CSBEND')
         ed.add_block('alter_elements',
-                     name='*', type=k.upper(), item='N_KICKS', value=v)
+                     name='*', type=k.upper(), item='N_KICKS', value=v,
+                     allow_missing_elements=True)
 
 def calc_fma_xy(
     output_filepath, LTE_filepath, E_MeV, xmin, xmax, ymin, ymax, nx, ny,
@@ -2182,5 +2186,166 @@ def plot_tswa(
         plt.title(title, size=font_sz)
     plt.tight_layout()
 
+def track(
+    output_filepath, LTE_filepath, E_MeV, n_turns,
+    x0=0.0, xp0=0.0, y0=0.0, yp0=0.0, delta0=0.0,
+    output_coordinates=('x', 'xp', 'y', 'yp', 'delta'),
+    use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
+    output_file_type=None, del_tmp_files=True, print_cmd=False,
+    run_local=True, remote_opts=None):
+    """"""
 
+    LTE_file_pathobj = Path(LTE_filepath)
+
+    file_contents = LTE_file_pathobj.read_text()
+
+    input_dict = dict(
+        LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
+        n_turns=n_turns, x0=x0, xp0=xp0, y0=y0, yp0=yp0, delta0=delta0,
+        output_coordinates=output_coordinates,
+        use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
+        ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
+        run_local=run_local, remote_opts=remote_opts,
+        lattice_file_contents=file_contents,
+        timestamp_ini=util.get_current_local_time_str(),
+    )
+
+    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    input_dict['output_file_type'] = output_file_type
+
+    if output_file_type in ('hdf5', 'h5'):
+        _save_input_to_hdf5(output_filepath, input_dict)
+
+    if ele_filepath is None:
+        tmp = tempfile.NamedTemporaryFile(
+            dir=Path.cwd(), delete=False, prefix=f'tmpTrack_', suffix='.ele')
+        ele_pathobj = Path(tmp.name)
+        ele_filepath = str(ele_pathobj.resolve())
+        tmp.close()
+
+    watch_pathobj = ele_pathobj.with_suffix('.wc')
+
+    ed = elebuilder.EleDesigner(double_format='.12g')
+
+    _add_transmute_blocks(ed, transmute_elements)
+
+    ed.add_newline()
+
+    ed.add_block('run_setup',
+        lattice=LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline,
+    )
+
+    ed.add_newline()
+
+    temp_watch_elem_name = 'ELEGANT_TRACK_WATCH'
+    if run_local:
+        watch_filepath = str(watch_pathobj.resolve())
+    else:
+        watch_filepath = watch_pathobj.name
+    temp_watch_elem_def = (
+        f'{temp_watch_elem_name}: WATCH, FILENAME="{watch_filepath}", '
+        'MODE=coordinate')
+
+    ed.add_block('insert_elements',
+        name='*', exclude='*', add_at_start=True, element_def=temp_watch_elem_def
+    )
+
+    nWatch = 1
+
+    ed.add_newline()
+
+    _add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+
+    ed.add_newline()
+
+    ed.add_block('run_control', n_passes=n_turns)
+
+    ed.add_newline()
+
+    centroid = {}
+    centroid[0] = x0
+    centroid[1] = xp0
+    centroid[2] = y0
+    centroid[3] = yp0
+    centroid[5] = delta0
+    #
+    ed.add_block(
+        'bunched_beam', n_particles_per_bunch=1, centroid=centroid)
+
+    ed.add_newline()
+
+    ed.add_block('track')
+
+    ed.write(ele_filepath)
+
+    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    #print(ed.actual_output_filepath_list)
+
+    tbt = dict(x = np.full((n_turns, nWatch), np.nan),
+               y = np.full((n_turns, nWatch), np.nan),
+               xp = np.full((n_turns, nWatch), np.nan),
+               yp = np.full((n_turns, nWatch), np.nan),
+               delta = np.full((n_turns, nWatch), np.nan),
+               t = np.full((n_turns, nWatch), np.nan),
+               dt = np.full((n_turns, nWatch), np.nan),
+               )
+
+    # Run Elegant
+    if run_local:
+        run(ele_filepath, print_cmd=print_cmd,
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'])
+    else:
+
+        if remote_opts is None:
+            remote_opts = dict(use_sbatch=False)
+
+        if ('pelegant' in remote_opts) and (remote_opts['pelegant'] is not False):
+            print('"pelegant" option in `remote_opts` must be False for nonlin.track()')
+            remote_opts['pelegant'] = False
+        else:
+            remote_opts['pelegant'] = False
+
+        remote_opts['ntasks'] = 1
+        # ^ If this is more than 1, you will likely see an error like "Unable to
+        #   access file /.../tmp*.twi--file is locked (SDDS_InitializeOutput)"
+
+        remote.run(remote_opts, ele_filepath, print_cmd=print_cmd,
+                   print_stdout=std_print_enabled['out'],
+                   print_stderr=std_print_enabled['err'],
+                   output_filepaths=None)
+    #
+    output, _ = sdds.sdds2dicts(watch_pathobj)
+    #
+    cols = output['columns']
+    for k in list(tbt):
+        if k == 'delta':
+            _delta = cols['p'] / output['params']['pCentral'] - 1.0
+            tbt[k][:len(cols['p']), :] = _delta.reshape((-1,1))
+        else:
+            tbt[k][:len(cols[k]), :] = cols[k].reshape((-1,1))
+
+    timestamp_fin = util.get_current_local_time_str()
+
+    if output_file_type in ('hdf5', 'h5'):
+        _kwargs = dict(compression='gzip')
+        f = h5py.File(output_filepath)
+        for coord in output_coordinates:
+            f.create_dataset(coord, data=tbt[coord], **_kwargs)
+        f['timestamp_fin'] = timestamp_fin
+        f.close()
+
+    elif output_file_type == 'pgz':
+        d = dict(input=input_dict, timestamp_fin=timestamp_fin)
+        for coord in output_coordinates:
+            d[coord] = tbt[coord]
+        util.robust_pgz_file_write(output_filepath, d, nMaxTry=10, sleep=10.0)
+    else:
+        raise ValueError()
+
+    if del_tmp_files:
+        util.delete_temp_files(
+            ed.actual_output_filepath_list + [ele_filepath, str(watch_pathobj)])
+
+    return output_filepath
 
