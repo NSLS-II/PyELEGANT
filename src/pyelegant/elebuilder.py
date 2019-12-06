@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from . import util
 from . import sdds
 from . import notation
+from . import lteparser
 
 ########################################################################
 class EleBlocks():
@@ -663,7 +664,6 @@ class EleBlocks():
         d[keys.index('semaphore_file')][3] = '%s.done'
         d[keys.index('parameters')][3] = '%s.param'
 
-
     #----------------------------------------------------------------------
     def _parse_save_lattice(self):
         """"""
@@ -1281,7 +1281,7 @@ class RPNFunctionDatabase():
         mod_args = list(args) + [n]
         return self._simple_multi_args_func('maxn', *mod_args)
     #----------------------------------------------------------------------
-    def min(self, *args):
+    def minn(self, *args):
         """ Minimum of top N items on stack := np.min([x0, x1, ...]) """
         n = len(args)
         mod_args = list(args) + [n]
@@ -1385,6 +1385,12 @@ class EleDesigner():
             if dtypes[i] == 'STRING':
                 if v is None:
                     continue
+                elif (block_header == 'optimization_covariable') and (k == 'equation'):
+                    if isinstance(v, InfixEquation):
+                        rpn_str = v.torpn()
+                    else: # Either "str" or "EleEquation" object
+                        rpn_str = v
+                    block.append(f'{k} = "{rpn_str}"')
                 else:
                     block.append(f'{k} = "{v}"')
                 if (block_header in self.blocks.output_filepaths) and \
@@ -1438,8 +1444,8 @@ class EleDesigner():
             final_line)
 
         if block_header == 'optimization_variable':
-            self.rpnvars._vars.extend([f'{kwargs["name"]}.{kwargs["item"]}',
-                                   f'{kwargs["name"]}.{kwargs["item"]}0'])
+            name, item = kwargs['name'], kwargs['item']
+            self.rpnvars._vars.extend([f'{name}.{item}', f'{name}.{item}0'])
             self.rpnvars._update()
 
         elif block_header == 'rpn_load':
@@ -1463,10 +1469,21 @@ class EleDesigner():
                                          'etax', 'etaxp', 'etay', 'etayp']:
                     self.rpnvars._vars.append(f'{statistic}.{twiss_param_name}')
 
+            for fitpoint_name in self._fitpoint_names:
+                for twiss_param_name in [
+                    'betax', 'alphax', 'betay', 'alphay',
+                    'etax', 'etaxp', 'etapx', 'etay', 'etayp', 'etapy',
+                    'nux', 'psix', 'nuy', 'psiy']:
+                    # ^ Note that "etapx" and "etaxp" are the same, being
+                    #   alternate names for etax_prime, and the same is true for
+                    #   vertical plane.
+                    self.rpnvars._vars.append(f'{fitpoint_name}.{twiss_param_name}')
+
             if kwargs.get('radiation_integrals', False):
                 self.rpnvars._vars.extend([
                     'ex0', 'Sdelta0', 'Jx', 'Jy', 'Jdelta', 'taux', 'tauy',
                     'taudelta', 'I1', 'I2', 'I3', 'I4', 'I5'])
+
             if kwargs.get('compute_driving_terms', False):
                 self.rpnvars._vars.extend([
                     'h11001', 'h00111', 'h20001', 'h00201', 'h10002', 'h21000',
@@ -1477,9 +1494,28 @@ class EleDesigner():
             self.rpnvars._update()
 
         elif block_header == 'run_setup':
+
+            self._LTE = lteparser.Lattice(
+                LTE_filepath=kwargs.get('lattice'),
+                used_beamline_name=kwargs.get('use_beamline', ''))
+            self._fitpoint_names = []
+
+            for name, elem_type, prop_str in self._LTE.elem_defs:
+                if elem_type.upper() == 'MARK':
+                    fitpoints = [int(s) for s in re.findall(
+                        'FITPOINT\s*=\s*(\d+)', prop_str, re.IGNORECASE)]
+                    if len(fitpoints) == 0:
+                        continue
+                    elif len(fitpoints) == 1:
+                        is_fitpoint = fitpoints[0]
+                        if is_fitpoint == 1:
+                            n = self._LTE.flat_used_elem_names.count(name)
+                            self._fitpoint_names.extend(
+                                [f'{name}#{occurrence:d}' for occurrence in range(1, n+1)])
+                    else:
+                        raise RuntimeError('Unexpected error. Multiple FITPOINT specified')
+
             self.rpnvars._update()
-            # TODO
-            #self.optim_markers = {} # for MARKER elements with FITPOINT=1 & beam position monitors with CO_FITPOINT=1
 
         return block_str
 
@@ -1506,6 +1542,50 @@ class EleDesigner():
         """"""
 
         self.text += self._get_block_str(block_name, **kwargs)
+
+
+########################################################################
+class EleEquation():
+    """"""
+
+    #----------------------------------------------------------------------
+    def __init__(self, ele_designer_obj):
+        """Constructor"""
+
+        self.rpnvars = ele_designer_obj.rpnvars
+
+        self.assignment_rpn_str_list = []
+
+        self.output = InfixEquation('0.0')
+
+    def __repr__(self):
+        """"""
+
+        final_rpn_str = '\n'.join(
+            self.assignment_rpn_str_list + [self.output.torpn()])
+
+        return final_rpn_str
+
+    def assign(self, new_var_name, infix_eq_obj):
+        """"""
+
+        if new_var_name not in self.rpnvars._vars:
+            self.rpnvars._vars.append(new_var_name)
+            self.rpnvars._update()
+
+        rpn_str = f'{infix_eq_obj.torpn()} sto {new_var_name} pop'
+
+        self.assignment_rpn_str_list.append(rpn_str)
+
+    def __enter__(self):
+        """"""
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """"""
+
+
 
 
 

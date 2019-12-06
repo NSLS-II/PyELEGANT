@@ -1,0 +1,264 @@
+import re
+from pathlib import Path
+import numpy as np
+import collections
+
+########################################################################
+class Lattice():
+    """
+    """
+
+    def __init__(self, LTE_filepath='', used_beamline_name=''):
+        """Constructor"""
+
+        self.convertible_element_types = [
+            'DRIF','EDRIFT','RFCA','KQUAD','KSEXT','CSBEND','CSBEN','MULT',
+            #'UKICKMAP',
+            #'HKICK','VKICK','KICK',
+            'MARK',
+            #'MONI','SCRAPER',
+            'QUAD','SEXT','SBEN','SBEND',
+            #'SOLE',
+            'MALIGN', 'WATCH',
+            ]
+
+        if LTE_filepath != '':
+            self.load_LTE(LTE_filepath, used_beamline_name=used_beamline_name)
+
+    def load_LTE(self, LTE_filepath, used_beamline_name=''):
+        """"""
+
+        self.LTE_text = Path(LTE_filepath).read_text()
+        self.LTE_filepath = LTE_filepath
+
+        self._proc_LTE_text = '\n' + self.LTE_text
+        # ^ adding "\n" at the beginning for easier search
+
+        d = self.get_used_beamline_element_defs(
+            used_beamline_name=used_beamline_name)
+
+        self.used_beamline_name = d['used_beamline_name']
+        self.beamline_defs = d['beamline_defs']
+        self.elem_defs = d['elem_defs']
+        self.flat_used_elem_names = d['flat_used_elem_names']
+
+        inconvertible_types = self.get_inconvertible_element_types(self.elem_defs)
+        if inconvertible_types != []:
+            print('Element types that cannot be converted:')
+            print(inconvertible_types)
+
+    def remove_comments(self, text):
+        """"""
+
+        comment_char = '!'
+
+        pattern = comment_char + '.*'
+        return re.sub(pattern, '', text)
+
+    def delete_ampersands(self, text):
+        """"""
+
+        pattern = r'&.*[\n\r]+'
+        return re.sub(pattern, '', text)
+
+    def get_all_elem_defs(self, LTE_text):
+        """"""
+
+        matches = re.findall('\s+"?(\w+)"?[ \t]*:[ \t]*(\w+)[ \t]*,?(.*)',
+                             ' '+LTE_text)
+        # ^ Need to add the initial whitespace to pick up the first occurrence
+
+        elem_def = [(name.upper(), type_name.upper(), rest.strip())
+                    for (name, type_name, rest)
+                    in matches if type_name.upper() != 'LINE']
+
+        return elem_def
+
+    def get_all_beamline_defs(self, LTE_text):
+        """"""
+
+        matches = re.findall(
+            '\s+("?\w+"?)[ \t]*:[ \t]*("?\w+"?)[ \t]*,?(.*)', LTE_text)
+
+        beamline_def = []
+        for (name, type_name, rest) in matches:
+            if type_name.upper() == 'LINE':
+                rest = rest.strip().replace('=','').replace('(','').replace(')','')
+                name_list = [s.strip().upper() for s in rest.split(',') if s.strip() != '']
+                if name[0] == '"' or name[-1] == '"':
+                    assert name[0] == name[-1] == '"'
+                    name = name[1:-1]
+                beamline_def.append((name.upper(), name_list))
+
+        return beamline_def
+
+    def get_used_beamline_name(self, LTE_text):
+        """"""
+
+        matches = re.findall('\s+USE[ \t]*,[ \t"]*(\w+)[ \t\r\n"]*', LTE_text,
+                             re.IGNORECASE)
+
+        if len(matches) > 1:
+            print('Multiple "USE" lines detected. Using the last "USE" line.')
+            return matches[-1].upper()
+        elif len(matches) == 0:
+            print('No "USE" line detected.')
+            return ''
+        else:
+            return matches[0].upper()
+
+    def expand_beamline_name(
+        self, beamline_name, all_beamline_defs, all_beamline_names,
+        reverse=False, used_beamline_names=None):
+        """
+        If you want to obtain the list of used beamline names, then pass an empty
+        list to "used_beamline_names".
+        """
+
+        if beamline_name in all_beamline_names:
+
+            if used_beamline_names is not None:
+                used_beamline_names.append(beamline_name)
+
+            _, expanded_name_list = all_beamline_defs[all_beamline_names.index(beamline_name)]
+
+            if reverse:
+                expanded_name_list = expanded_name_list[::-1]
+
+            for name in expanded_name_list:
+                if '*' in name:
+                    star_ind = name.index('*')
+                    multiplier = int(name[:star_ind].strip())
+                    name = name[(star_ind+1):]
+                else:
+                    multiplier = 1
+
+                if name.startswith('-'):
+                    reverse_next = True
+                    name = name[1:]
+                else:
+                    reverse_next = False
+
+                for i in range(multiplier):
+                    for sub in self.expand_beamline_name(
+                        name, all_beamline_defs, all_beamline_names,
+                        reverse=reverse_next, used_beamline_names=used_beamline_names):
+                        yield sub
+        else:
+            yield beamline_name
+
+    def flatten_nested_list(self, L):
+        """
+        The input argument of any nested list will be flattened to a simple flat list.
+
+        Based on Cristian's answer on
+        http://stackoverflow.com/questions/2158395/flatten-an-irregular-list-of-lists-in-python
+        """
+
+        for el in L:
+            if isinstance(el, collections.Iterable) and not isinstance(el, str):
+                for sub in self.flatten_nested_list(el):
+                    yield sub
+            else:
+                yield el
+
+    def get_used_beamline_element_defs(self, used_beamline_name=''):
+        """"""
+
+        self._proc_LTE_text = self.remove_comments(self._proc_LTE_text)
+        self._proc_LTE_text = self.delete_ampersands(self._proc_LTE_text)
+
+        all_elem_defs = self.get_all_elem_defs(self._proc_LTE_text)
+        all_beamline_defs = self.get_all_beamline_defs(self._proc_LTE_text)
+
+        all_beamline_names = [name for name, _ in all_beamline_defs]
+        all_elem_names     = [name for name, _, _ in all_elem_defs]
+
+        if used_beamline_name == '':
+            used_beamline_name = self.get_used_beamline_name(self._proc_LTE_text)
+
+        if used_beamline_name == '':
+            print('Using the last defined beamline.')
+            used_beamline_name = all_beamline_names[-1]
+
+        used_beamline_name = used_beamline_name.upper()
+
+        assert used_beamline_name in all_beamline_names
+
+        assert len(all_beamline_names) == len(np.unique(all_beamline_names))
+        assert len(all_elem_names) == len(np.unique(all_elem_names))
+
+        actually_used_beamline_names = [] # placeholder
+
+        nested_used_elem_name_generator = self.expand_beamline_name(
+            used_beamline_name, all_beamline_defs, all_beamline_names,
+            used_beamline_names=actually_used_beamline_names)
+        used_elem_name_generator = self.flatten_nested_list(
+            nested_used_elem_name_generator)
+
+        flat_used_elem_name_list = list(used_elem_name_generator)
+
+        used_elem_names = [name if not name.startswith('-')
+                           else name[1:] for name in flat_used_elem_name_list]
+        used_elem_names = [name if '*' not in name else name[(name.index('*')+1):]
+                           for name in used_elem_names]
+        u_used_elem_names = np.unique(used_elem_names)
+
+        # Re-order in the order of appearance in the LTE file
+        used_elem_defs = [all_elem_defs[all_elem_names.index(elem_name)]
+                          for elem_name in all_elem_names
+                          if elem_name in u_used_elem_names]
+
+        _, u_inds = np.unique(actually_used_beamline_names, return_index=True)
+
+        # Re-order in the required order of definitions
+        used_beamline_defs = [
+            all_beamline_defs[all_beamline_names.index(beamline_name)]
+            for beamline_name in
+            np.array(actually_used_beamline_names)[sorted(u_inds)[::-1]]
+            if beamline_name in all_beamline_names
+        ]
+
+        # Separate the multiplier/reverser from beamline names
+        used_beamline_defs_w_mults = []
+        for defined_BL_name, unsep_name_list in used_beamline_defs:
+            sep_name_multiplier_list = []
+            for elem_or_BL_name in unsep_name_list:
+                if elem_or_BL_name.startswith('-'):
+                    sep_name_multiplier_list.append((elem_or_BL_name[1:], -1))
+                elif '*' in elem_or_BL_name:
+                    star_ind = elem_or_BL_name.index('*')
+                    multiplier = int(elem_or_BL_name[:star_ind].strip())
+                    name_only = elem_or_BL_name[(star_ind+1):].strip()
+                    sep_name_multiplier_list.append((name_only, multiplier))
+                else:
+                    sep_name_multiplier_list.append((elem_or_BL_name, +1))
+
+            used_beamline_defs_w_mults.append(
+                (defined_BL_name, sep_name_multiplier_list))
+
+        return dict(used_beamline_name=used_beamline_name,
+                    beamline_defs=used_beamline_defs_w_mults,
+                    elem_defs=used_elem_defs,
+                    flat_used_elem_names=flat_used_elem_name_list)
+
+    def get_inconvertible_element_types(self, elem_def_list):
+        """"""
+
+        inconv_list = [
+            type_name.upper() for (_,type_name,_) in elem_def_list
+            if type_name.upper() not in self.convertible_element_types]
+
+        return list(set(inconv_list))
+
+########################################################################
+class KQUAD():
+    """
+    10.46 KQUAD - A canonical kick quadrupole
+    """
+
+    #----------------------------------------------------------------------
+    def __init__(self, **kwargs):
+        """Constructor"""
+
+        self.L = kwargs.get('L', 0.0)
