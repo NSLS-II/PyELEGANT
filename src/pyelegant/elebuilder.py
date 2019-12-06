@@ -1495,9 +1495,13 @@ class EleDesigner():
 
         elif block_header == 'run_setup':
 
+            used_beamline_name = kwargs.get('use_beamline', '')
+            used_beamline_name = (
+                used_beamline_name if used_beamline_name is not None else '')
+
             self._LTE = lteparser.Lattice(
                 LTE_filepath=kwargs.get('lattice'),
-                used_beamline_name=kwargs.get('use_beamline', ''))
+                used_beamline_name=used_beamline_name)
             self._fitpoint_names = []
 
             for name, elem_type, prop_str in self._LTE.elem_defs:
