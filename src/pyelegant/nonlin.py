@@ -438,8 +438,11 @@ def _plot_fma(
         if title != '':
             plt.title(title, size=font_sz)
         cb = plt.colorbar()
-        cb.set_ticks(range(LB, UB+1))
-        cb.set_ticklabels([str(i) for i in range(LB, UB+1)])
+        try:
+            cb.set_ticks(range(LB, UB+1))
+            cb.set_ticklabels([str(i) for i in range(LB, UB+1)])
+        except:
+            pass
         cb.ax.set_title(DIFFUSION_EQ_STR)
         cb.ax.title.set_position((0.5, 1.02))
         plt.tight_layout()
@@ -491,8 +494,11 @@ def _plot_fma(
         if title != '':
             plt.title(title, size=font_sz)
         cb = plt.colorbar()
-        cb.set_ticks(range(LB, UB+1))
-        cb.set_ticklabels([str(i) for i in range(LB, UB+1)])
+        try:
+            cb.set_ticks(range(LB, UB+1))
+            cb.set_ticklabels([str(i) for i in range(LB, UB+1)])
+        except:
+            pass
         cb.ax.set_title(DIFFUSION_EQ_STR)
         cb.ax.title.set_position((0.5, 1.02))
         plt.tight_layout()
