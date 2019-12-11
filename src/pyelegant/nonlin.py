@@ -475,7 +475,7 @@ def _plot_fma(
             v1array.reshape((-1,1)) @ np.ones((1, v1.size)) - v1), axis=0)
         v2inds = np.argmin(np.abs(
             v2array.reshape((-1,1)) @ np.ones((1, v2.size)) - v2), axis=0)
-        flatinds = np.ravel_multi_index((v1inds, v2inds), V1.shape, order='F')
+        flatinds = np.ravel_multi_index((v1inds, v2inds), V1.T.shape, order='F')
         D_flat = D.flatten()
         D_flat[flatinds] = values
         D = D_flat.reshape(D.shape)
