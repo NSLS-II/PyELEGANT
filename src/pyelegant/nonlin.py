@@ -432,9 +432,9 @@ def _plot_fma(
         plt.xlabel(fr'${v1name}\, [{v1unitsymb}]$', size=font_sz)
         plt.ylabel(fr'${v2name}\, [{v2unitsymb}]$', size=font_sz)
         if v1lim is not None:
-            plt.xlim([v * 1e3 for v in v1lim])
+            plt.xlim([v * v1unitconv for v in v1lim])
         if v2lim is not None:
-            plt.ylim([v * 1e3 for v in v2lim])
+            plt.ylim([v * v2unitconv for v in v2lim])
         if title != '':
             plt.title(title, size=font_sz)
         cb = plt.colorbar()
@@ -488,9 +488,9 @@ def _plot_fma(
         plt.xlabel(fr'${v1name}\, [{v1unitsymb}]$', size=font_sz)
         plt.ylabel(fr'${v2name}\, [{v2unitsymb}]$', size=font_sz)
         if v1lim is not None:
-            plt.xlim([v * 1e3 for v in v1lim])
+            plt.xlim([v * v1unitconv for v in v1lim])
         if v2lim is not None:
-            plt.ylim([v * 1e3 for v in v2lim])
+            plt.ylim([v * v2unitconv for v in v2lim])
         if title != '':
             plt.title(title, size=font_sz)
         cb = plt.colorbar()
