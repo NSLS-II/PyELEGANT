@@ -27,6 +27,7 @@ class EleBlocks():
         self._parse_alter_elements()
         self._parse_bunched_beam()
         self._parse_chromaticity()
+        self._parse_closed_orbit()
         self._parse_correct_tunes()
         self._parse_find_aperture()
         self._parse_floor_coordinates()
@@ -225,6 +226,37 @@ class EleBlocks():
             double dK2_weight = 1;
         &end
         ''')
+
+    #----------------------------------------------------------------------
+    def _parse_closed_orbit(self):
+        """"""
+
+        # Elegant Manual Section 7.13
+        self._parse_block_def('''
+        &closed_orbit
+            STRING output = NULL;
+            long output_monitors_only = 0;
+            long start_from_centroid = 1;
+            long start_from_dp_centroid = 0;
+            double closed_orbit_accuracy = 1e-12;
+            long closed_orbit_iterations = 40;
+            long fixed_length = 0;
+            long start_from_recirc = 0;
+            long verbosity = 0;
+            double iteration_fraction = 0.9;
+            double fraction_multiplier = 1.05;
+            double multiplier_interval = 5;
+            long output_monitors_only = 0;
+            long tracking_turns = 0;
+            long disable = 0;
+        &end
+        ''')
+
+        d = self.info['closed_orbit']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('output')][3] = '%s.clo'
 
     #----------------------------------------------------------------------
     def _parse_correct_tunes(self):
