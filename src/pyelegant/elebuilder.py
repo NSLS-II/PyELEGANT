@@ -1713,3 +1713,36 @@ def build_block_alter_elements(alter_elements_list):
 
     return ele_contents
 
+def add_N_KICKS_alter_elements_blocks(ed: EleDesigner, N_KICKS: dict) -> None:
+    """
+    ed := EleDesigner object
+    """
+
+    if N_KICKS is None:
+        N_KICKS = dict(KQUAD=20, KSEXT=20, CSBEND=20)
+
+    for k, v in N_KICKS.items():
+        if k.upper() not in ('KQUAD', 'KSEXT', 'CSBEND'):
+            raise ValueError(f'The key "{k}" in N_KICKS dict is invalid. '
+                             f'Must be one of KQUAD, KSEXT, or CSBEND')
+        ed.add_block('alter_elements',
+                     name='*', type=k.upper(), item='N_KICKS', value=v,
+                     allow_missing_elements=True)
+
+def add_transmute_blocks(ed: EleDesigner, transmute_elements: dict) -> None:
+    """"""
+
+    if transmute_elements is None:
+
+        actual_transmute_elems = dict(
+            SBEN='CSBEN', RBEN='CSBEN', QUAD='KQUAD', SEXT='KSEXT',
+            RFCA='MARK', SREFFECTS='MARK')
+    else:
+
+        actual_transmute_elems = {}
+        for old_type, new_type in transmute_elements.items():
+            actual_transmute_elems[old_type] = new_type
+
+    for old_type, new_type in actual_transmute_elems.items():
+        ed.add_block('transmute_elements',
+                     name='*', type=old_type, new_type=new_type)

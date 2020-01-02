@@ -19,83 +19,6 @@ from . import sdds
 from . import twiss
 from . import sigproc
 
-def _auto_check_output_file_type(output_filepath, output_file_type):
-    """"""
-
-    if output_file_type is None:
-        # Auto-detect file type from "output_filepath"
-        if output_filepath.endswith(('.hdf5', '.h5')):
-            output_file_type = 'hdf5'
-        elif output_filepath.endswith('.pgz'):
-            output_file_type = 'pgz'
-        else:
-            raise ValueError(
-                ('"output_file_type" could NOT be automatically deduced from '
-                 '"output_filepath". Please specify "output_file_type".'))
-
-    if output_file_type.lower() not in ('hdf5', 'h5', 'pgz'):
-        raise ValueError('Invalid output file type: {}'.format(output_file_type))
-
-    return output_file_type.lower()
-
-def _save_input_to_hdf5(output_filepath, input_dict):
-    """"""
-
-    f = h5py.File(output_filepath, 'w')
-    g = f.create_group('input')
-    for k, v in input_dict.items():
-        if v is None:
-            continue
-        elif isinstance(v, dict):
-            g2 = g.create_group(k)
-            for k2, v2 in v.items():
-                try:
-                    g2[k2] = v2
-                except:
-                    g2[k2] = np.array(v2, dtype='S')
-        else:
-            try:
-                g[k] = v
-            except:
-                g[k] = np.array(v, dtype='S')
-    f.close()
-
-def _add_transmute_blocks(ed, transmute_elements):
-    """
-    ed := EleDesigner object
-    """
-
-    if transmute_elements is None:
-
-        actual_transmute_elems = dict(
-            SBEN='CSBEN', RBEN='CSBEN', QUAD='KQUAD', SEXT='KSEXT',
-            RFCA='MARK', SREFFECTS='MARK')
-    else:
-
-        actual_transmute_elems = {}
-        for old_type, new_type in transmute_elements.items():
-            actual_transmute_elems[old_type] = new_type
-
-    for old_type, new_type in actual_transmute_elems.items():
-        ed.add_block('transmute_elements',
-                     name='*', type=old_type, new_type=new_type)
-
-def _add_N_KICKS_alter_elements_blocks(ed, N_KICKS):
-    """
-    ed := EleDesigner object
-    """
-
-    if N_KICKS is None:
-        N_KICKS = dict(KQUAD=20, KSEXT=20, CSBEND=20)
-
-    for k, v in N_KICKS.items():
-        if k.upper() not in ('KQUAD', 'KSEXT', 'CSBEND'):
-            raise ValueError(f'The key "{k}" in N_KICKS dict is invalid. '
-                             f'Must be one of KQUAD, KSEXT, or CSBEND')
-        ed.add_block('alter_elements',
-                     name='*', type=k.upper(), item='N_KICKS', value=v,
-                     allow_missing_elements=True)
-
 def calc_fma_xy(
     output_filepath, LTE_filepath, E_MeV, xmin, xmax, ymin, ymax, nx, ny,
     n_turns=1024, delta_offset=0.0, quadratic_spacing=False, full_grid_output=False,
@@ -186,11 +109,11 @@ def _calc_fma(
             xmin=xmin, xmax=xmax, ymin=y_offset, ymax=y_offset,
             delta_min=delta_min, delta_max=delta_max, nx=nx, ny=1, ndelta=ndelta)
 
-    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
     input_dict['output_file_type'] = output_file_type
 
     if output_file_type in ('hdf5', 'h5'):
-        _save_input_to_hdf5(output_filepath, input_dict)
+        util.save_input_to_hdf5(output_filepath, input_dict)
 
     if ele_filepath is None:
         tmp = tempfile.NamedTemporaryFile(
@@ -200,7 +123,7 @@ def _calc_fma(
 
     ed = elebuilder.EleDesigner(double_format='.12g')
 
-    _add_transmute_blocks(ed, transmute_elements)
+    elebuilder.add_transmute_blocks(ed, transmute_elements)
 
     ed.add_newline()
 
@@ -214,7 +137,7 @@ def _calc_fma(
 
     ed.add_newline()
 
-    _add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+    elebuilder.add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
 
     ed.add_block('bunched_beam', n_particles_per_bunch=1)
 
@@ -532,11 +455,11 @@ def calc_find_aper_nlines(
     input_dict['n_lines'] = n_lines
     input_dict['neg_y_search'] = neg_y_search
 
-    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
     input_dict['output_file_type'] = output_file_type
 
     if output_file_type in ('hdf5', 'h5'):
-        _save_input_to_hdf5(output_filepath, input_dict)
+        util.save_input_to_hdf5(output_filepath, input_dict)
 
     if ele_filepath is None:
         tmp = tempfile.NamedTemporaryFile(
@@ -546,7 +469,7 @@ def calc_find_aper_nlines(
 
     ed = elebuilder.EleDesigner(double_format='.12g')
 
-    _add_transmute_blocks(ed, transmute_elements)
+    elebuilder.add_transmute_blocks(ed, transmute_elements)
 
     ed.add_newline()
 
@@ -560,7 +483,7 @@ def calc_find_aper_nlines(
 
     ed.add_newline()
 
-    _add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+    elebuilder.add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
 
     ed.add_newline()
 
@@ -722,11 +645,11 @@ def calc_mom_aper(
     input_dict['s_start'] = s_start
     input_dict['s_end'] = s_end
 
-    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
     input_dict['output_file_type'] = output_file_type
 
     if output_file_type in ('hdf5', 'h5'):
-        _save_input_to_hdf5(output_filepath, input_dict)
+        util.save_input_to_hdf5(output_filepath, input_dict)
 
     if ele_filepath is None:
         tmp = tempfile.NamedTemporaryFile(
@@ -736,7 +659,7 @@ def calc_mom_aper(
 
     ed = elebuilder.EleDesigner(double_format='.12g')
 
-    _add_transmute_blocks(ed, transmute_elements)
+    elebuilder.add_transmute_blocks(ed, transmute_elements)
 
     ed.add_newline()
 
@@ -750,7 +673,7 @@ def calc_mom_aper(
 
     ed.add_newline()
 
-    _add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+    elebuilder.add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
 
     ed.add_newline()
 
@@ -913,11 +836,11 @@ def calc_Touschek_lifetime(
         timestamp_ini=util.get_current_local_time_str(),
     )
 
-    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
     input_dict['output_file_type'] = output_file_type
 
     if output_file_type in ('hdf5', 'h5'):
-        _save_input_to_hdf5(output_filepath, input_dict)
+        util.save_input_to_hdf5(output_filepath, input_dict)
 
     tmp = tempfile.NamedTemporaryFile(
         dir=os.getcwd(), delete=False, prefix=f'tmpTau_', suffix='.pgz')
@@ -1088,11 +1011,11 @@ def calc_chrom_twiss(
         timestamp_ini=util.get_current_local_time_str(),
     )
 
-    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
     input_dict['output_file_type'] = output_file_type
 
     if output_file_type in ('hdf5', 'h5'):
-        _save_input_to_hdf5(output_filepath, input_dict)
+        util.save_input_to_hdf5(output_filepath, input_dict)
 
     if ele_filepath is None:
         tmp = tempfile.NamedTemporaryFile(
@@ -1105,7 +1028,7 @@ def calc_chrom_twiss(
     if transmute_elements is None:
         transmute_elements = dict(RFCA='MARK', SREFFECTS='MARK')
 
-    _add_transmute_blocks(ed, transmute_elements)
+    elebuilder.add_transmute_blocks(ed, transmute_elements)
 
     ed.add_newline()
 
@@ -1206,11 +1129,11 @@ def calc_chrom_track(
         timestamp_ini=util.get_current_local_time_str(),
     )
 
-    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
     input_dict['output_file_type'] = output_file_type
 
     if output_file_type in ('hdf5', 'h5'):
-        _save_input_to_hdf5(output_filepath, input_dict)
+        util.save_input_to_hdf5(output_filepath, input_dict)
 
     if ele_filepath is None:
         tmp = tempfile.NamedTemporaryFile(
@@ -1224,7 +1147,7 @@ def calc_chrom_track(
 
     ed = elebuilder.EleDesigner(double_format='.12g')
 
-    _add_transmute_blocks(ed, transmute_elements)
+    elebuilder.add_transmute_blocks(ed, transmute_elements)
 
     ed.add_newline()
 
@@ -1249,7 +1172,7 @@ def calc_chrom_track(
 
     ed.add_newline()
 
-    _add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+    elebuilder.add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
 
     ed.add_newline()
 
@@ -1707,11 +1630,11 @@ def _calc_tswa(
         timestamp_ini=util.get_current_local_time_str(),
     )
 
-    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
     input_dict['output_file_type'] = output_file_type
 
     if output_file_type in ('hdf5', 'h5'):
-        _save_input_to_hdf5(output_filepath, input_dict)
+        util.save_input_to_hdf5(output_filepath, input_dict)
 
     if ele_filepath is None:
         tmp = tempfile.NamedTemporaryFile(
@@ -1725,7 +1648,7 @@ def _calc_tswa(
 
     ed = elebuilder.EleDesigner(double_format='.12g')
 
-    _add_transmute_blocks(ed, transmute_elements)
+    elebuilder.add_transmute_blocks(ed, transmute_elements)
 
     ed.add_newline()
 
@@ -1750,7 +1673,7 @@ def _calc_tswa(
 
     ed.add_newline()
 
-    _add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+    elebuilder.add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
 
     ed.add_newline()
 
@@ -2216,11 +2139,11 @@ def track(
         timestamp_ini=util.get_current_local_time_str(),
     )
 
-    output_file_type = _auto_check_output_file_type(output_filepath, output_file_type)
+    output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
     input_dict['output_file_type'] = output_file_type
 
     if output_file_type in ('hdf5', 'h5'):
-        _save_input_to_hdf5(output_filepath, input_dict)
+        util.save_input_to_hdf5(output_filepath, input_dict)
 
     if ele_filepath is None:
         tmp = tempfile.NamedTemporaryFile(
@@ -2233,7 +2156,7 @@ def track(
 
     ed = elebuilder.EleDesigner(double_format='.12g')
 
-    _add_transmute_blocks(ed, transmute_elements)
+    elebuilder.add_transmute_blocks(ed, transmute_elements)
 
     ed.add_newline()
 
@@ -2260,7 +2183,7 @@ def track(
 
     ed.add_newline()
 
-    _add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+    elebuilder.add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
 
     ed.add_newline()
 

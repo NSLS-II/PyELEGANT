@@ -1,3 +1,4 @@
+from typing import Union
 import os
 import time
 import gzip
@@ -462,7 +463,47 @@ class ResonanceDiagram():
 
         return f'${label}$'
 
+def auto_check_output_file_type(
+    output_filepath: str, output_file_type: Union[None, str]) -> str:
+    """"""
 
+    if output_file_type is None:
+        # Auto-detect file type from "output_filepath"
+        if output_filepath.endswith(('.hdf5', '.h5')):
+            output_file_type = 'hdf5'
+        elif output_filepath.endswith('.pgz'):
+            output_file_type = 'pgz'
+        else:
+            raise ValueError(
+                ('"output_file_type" could NOT be automatically deduced from '
+                 '"output_filepath". Please specify "output_file_type".'))
+
+    if output_file_type.lower() not in ('hdf5', 'h5', 'pgz'):
+        raise ValueError('Invalid output file type: {}'.format(output_file_type))
+
+    return output_file_type.lower()
+
+def save_input_to_hdf5(output_filepath: Union[str, Path], input_dict: dict) -> None:
+    """"""
+
+    f = h5py.File(output_filepath, 'w')
+    g = f.create_group('input')
+    for k, v in input_dict.items():
+        if v is None:
+            continue
+        elif isinstance(v, dict):
+            g2 = g.create_group(k)
+            for k2, v2 in v.items():
+                try:
+                    g2[k2] = v2
+                except:
+                    g2[k2] = np.array(v2, dtype='S')
+        else:
+            try:
+                g[k] = v
+            except:
+                g[k] = np.array(v, dtype='S')
+    f.close()
 
 
 
