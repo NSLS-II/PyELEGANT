@@ -1537,6 +1537,7 @@ class EleDesigner():
                 LTE_filepath=kwargs.get('lattice'),
                 used_beamline_name=used_beamline_name)
             self._fitpoint_names = []
+            self._all_elem_names = [name for name, _, _ in self._LTE.elem_defs]
 
             for name, elem_type, prop_str in self._LTE.elem_defs:
                 if elem_type.upper() == 'MARK':
@@ -1556,6 +1557,35 @@ class EleDesigner():
             self.rpnvars._update()
 
         return block_str
+
+    #----------------------------------------------------------------------
+    def get_LTE_elem_info(self, elem_name: str):
+        """"""
+
+        if elem_name not in self._all_elem_names:
+            return None
+
+        matched_index = self._all_elem_names.index(elem_name)
+
+        _, elem_type, prop_str = self._LTE.elem_defs[matched_index]
+
+        return dict(elem_type=elem_type, prop_str=prop_str)
+
+    #----------------------------------------------------------------------
+    def get_LTE_all_kickers(self) -> dict:
+        """"""
+
+        kickers = {}
+
+        kickers['h'] = [
+            (name, elem_type) for name, elem_type, _ in self._LTE.elem_defs
+            if elem_type in ('HKICK', 'EHKICK', 'KICKER', 'EKICKER')]
+
+        kickers['v'] = [
+            (name, elem_type) for name, elem_type, _ in self._LTE.elem_defs
+            if elem_type in ('VKICK', 'EVKICK', 'KICKER', 'EKICKER')]
+
+        return kickers
 
     #----------------------------------------------------------------------
     def update_output_filepaths(self, ele_filepath_wo_ext):
