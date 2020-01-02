@@ -1,4 +1,4 @@
-from typing import Union, Optional, Tuple
+from typing import Union, Optional, Tuple, Iterable
 import os
 from pathlib import Path
 import numpy as np
@@ -96,8 +96,6 @@ def calc_closed_orbit(
         elebuilder.add_transmute_blocks(ed, transmute_elements)
 
         ed.add_newline()
-
-    ed.add_newline()
 
     ed.add_block('run_setup',
         lattice=LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline)
@@ -261,3 +259,204 @@ def plot_closed_orbit(clo_columns: dict, clo_params: dict) -> None:
     plt.xlabel(r'$s\, [\mathrm{m}]$', size=20)
     plt.ylabel(r'$y\, [\mathrm{mm}]$', size=20)
     plt.tight_layout()
+
+class ClosedOrbitCalculator:
+    """"""
+
+    def __init__(
+        self, LTE_filepath: str, E_MeV: float, fixed_length: bool = True,
+        output_monitors_only: bool = True, closed_orbit_accuracy: float = 1e-12,
+        closed_orbit_iterations: int = 40, iteration_fraction: float = 0.9,
+        n_turns: int = 1, use_beamline: Optional[str] = None,
+        N_KICKS: Optional[dict] = None, transmute_elements: Optional[dict] = None,
+        ele_filepath: Optional[str] = None) -> None:
+        """Constructor"""
+
+        assert n_turns >= 1
+        assert iteration_fraction <= 1.0
+
+        self.hcors = {}
+        self.vcors = {}
+
+        self.tmp_files_to_be_deleted = []
+
+        if ele_filepath is None:
+            tmp = tempfile.NamedTemporaryFile(
+                dir=os.getcwd(), delete=False, prefix=f'tmpCO_', suffix='.ele')
+            self.ele_filepath = os.path.abspath(tmp.name)
+            tmp.close()
+
+            self.tmp_files_to_be_deleted.append(self.ele_filepath)
+
+        self.ed = ed = elebuilder.EleDesigner(double_format='.12g')
+
+        if transmute_elements is not None:
+            elebuilder.add_transmute_blocks(ed, transmute_elements)
+
+            ed.add_newline()
+
+        ed.add_block('run_setup',
+            lattice=LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline)
+
+        ed.add_newline()
+
+        load_parameters = dict(
+            change_defined_values=True, allow_missing_elements=True,
+            allow_missing_parameters=True)
+        tmp = tempfile.NamedTemporaryFile(
+            dir=os.getcwd(), delete=False, prefix=f'tmpCorrSetpoints_', suffix='.sdds')
+        load_parameters['filename'] = os.path.abspath(tmp.name)
+        tmp.close()
+
+        self.corrector_params_filepath = load_parameters['filename']
+        self.tmp_files_to_be_deleted.append(self.corrector_params_filepath)
+
+        ed.add_block('load_parameters', **load_parameters)
+
+        ed.add_newline()
+
+        ed.add_block('run_control', n_passes=n_turns)
+
+        ed.add_newline()
+
+        if N_KICKS is not None:
+            elebuilder.add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+
+            ed.add_newline()
+
+        _block_opts = dict(
+            output='%s.clo', tracking_turns=(False if n_turns == 1 else True),
+            fixed_length=fixed_length, output_monitors_only=output_monitors_only,
+            closed_orbit_accuracy=closed_orbit_accuracy,
+            closed_orbit_iterations=closed_orbit_iterations,
+            iteration_fraction=iteration_fraction,
+        )
+        ed.add_block('closed_orbit', **_block_opts)
+
+        ed.add_newline()
+
+        ed.add_block('bunched_beam')
+
+        ed.add_newline()
+
+        ed.add_block('track')
+
+        ed.write(self.ele_filepath)
+
+        ed.update_output_filepaths(self.ele_filepath[:-4]) # Remove ".ele"
+        #print(ed.actual_output_filepath_list)
+
+        for fp in ed.actual_output_filepath_list:
+            if fp.endswith('.clo'):
+                self.clo_output_filepath = fp
+            else:
+                raise ValueError('This line should not be reached.')
+        self.tmp_files_to_be_deleted.append(self.clo_output_filepath)
+
+    def cleanup_tmp_files(self):
+        """"""
+
+        for fp in self.tmp_files_to_be_deleted:
+            if fp.startswith('/dev'):
+                continue
+            else:
+                try:
+                    os.remove(fp)
+                except:
+                    print(f'Failed to delete "{fp}"')
+
+    def get_all_available_kickers(self):
+        """"""
+
+        return self.ed.get_LTE_all_kickers()
+
+    def select_kickers(self, plane: str, cor_names: Iterable[str]) -> None:
+        """"""
+
+        if plane.lower() == 'h':
+
+            self.hcors['kick_prop_names'] = []
+            for elem_name in cor_names:
+                elem_type = self.ed.get_LTE_elem_info(elem_name)['elem_type']
+
+                if elem_type is None:
+                    raise ValueError(
+                        f'Element named "{elem_name}" does NOT exist in loaded LTE file.')
+
+                if elem_type in ('HKICK', 'EHKICK'):
+                    self.hcors['kick_prop_names'].append('KICK')
+                elif elem_type in ('KICKER', 'EKICKER'):
+                    self.hcors['kick_prop_names'].append('HKICK')
+                else:
+                    raise ValueError(
+                        (f'Element "{elem_name}" is of type "{elem_type}". '
+                        'Must be one of "HKICK", "EHKICK", "KICKER", "EKICKER".'))
+
+            self.hcors['names'] = np.array(cor_names)
+            self.hcors['rads'] = np.zeros(len(cor_names))
+
+        elif plane.lower() == 'v':
+
+            self.vcors['kick_prop_names'] = []
+            for elem_name in cor_names:
+                elem_type = self.ed.get_LTE_elem_info(elem_name)['elem_type']
+
+                if elem_type is None:
+                    raise ValueError(
+                        f'Element named "{elem_name}" does NOT exist in loaded LTE file.')
+
+                if elem_type in ('VKICK', 'EVKICK'):
+                    self.vcors['kick_prop_names'].append('KICK')
+                elif elem_type in ('KICKER', 'EKICKER'):
+                    self.vcors['kick_prop_names'].append('VKICK')
+                else:
+                    raise ValueError(
+                        (f'Element "{elem_name}" is of type "{elem_type}". '
+                        'Must be one of "VKICK", "EVKICK", "KICKER", "EKICKER".'))
+
+            self.vcors['names'] = np.array(cor_names)
+            self.vcors['rads'] = np.zeros(len(cor_names))
+        else:
+            raise ValueError('"plane" must be either "h" or "v".')
+
+    def get_selected_kickers(self, plane: str) -> dict:
+        """"""
+
+        if plane.lower() == 'h':
+            return self.hcors
+        elif plane.lower() == 'v':
+            return self.vcors
+        else:
+            raise ValueError('"plane" must be either "h" or "v".')
+
+    def set_kick_angles(self, hkick_rads, vkick_rads) -> None:
+        """"""
+
+        assert len(hkick_rads) == len(self.hcors['names'])
+        self.hcors['rads'] = hkick_rads
+
+        assert len(vkick_rads) == len(self.vcors['rads'])
+        self.vcors['rads'] = vkick_rads
+
+        col = dict(
+            ElementName=(self.hcors['names'].tolist() +
+                         self.vcors['names'].tolist()),
+            ElementParameter=(
+                self.hcors['kick_prop_names'] +
+                self.vcors['kick_prop_names']),
+            ParameterValue=np.append(self.hcors['rads'], self.vcors['rads']))
+
+        sdds.dicts2sdds(
+            self.corrector_params_filepath, params=None, columns=col,
+            outputMode='binary', suppress_err_msg=True)
+
+    def calc(self, run_local: bool = True, remote_opts: Optional[dict] = None,
+             ) -> dict:
+        """"""
+
+        data, meta= get_closed_orbit(
+            self.ele_filepath, self.clo_output_filepath,
+            run_local=run_local, remote_opts=remote_opts)
+
+        return dict(columns=data['clo']['columns'],
+                    params=data['clo']['params'])
