@@ -234,7 +234,7 @@ def calc_closed_orbit(
     else:
         return output_filepath
 
-def plot_closed_orbit(clo_columns, clo_params):
+def plot_closed_orbit(clo_columns: dict, clo_params: dict) -> None:
     """"""
 
     col = clo_columns
