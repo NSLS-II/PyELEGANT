@@ -246,11 +246,13 @@ class EleBlocks():
             double iteration_fraction = 0.9;
             double fraction_multiplier = 1.05;
             double multiplier_interval = 5;
-            long output_monitors_only = 0;
             long tracking_turns = 0;
             long disable = 0;
         &end
         ''')
+        # ^ There was a duplicate line in the manual PDF file for:
+        #      long output_monitors_only = 0;
+        #   So, the duplicate has been removed manually here.
 
         d = self.info['closed_orbit']
 

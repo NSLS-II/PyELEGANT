@@ -14,7 +14,8 @@ class Lattice():
         self.convertible_element_types = [
             'DRIF','EDRIFT','RFCA','KQUAD','KSEXT','CSBEND','CSBEN','MULT',
             #'UKICKMAP',
-            #'HKICK','VKICK','KICK',
+            #'HKICK','VKICK','KICKER',
+            'EHKICK','EVKICK','EKICKER',
             'MARK',
             #'MONI','SCRAPER',
             'QUAD','SEXT','SBEN','SBEND',
