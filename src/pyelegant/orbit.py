@@ -2,8 +2,7 @@ from typing import Union, Optional, Tuple
 import os
 from pathlib import Path
 import numpy as np
-import shlex
-from subprocess import Popen, PIPE
+import matplotlib.pylab as plt
 import tempfile
 
 from .local import run
@@ -235,3 +234,30 @@ def calc_closed_orbit(
     else:
         return output_filepath
 
+def plot_closed_orbit(clo_columns, clo_params):
+    """"""
+
+    col = clo_columns
+    par = clo_params
+
+    plt.figure()
+    plt.subplot(211)
+    plt.plot(col['s'], col['x'] * 1e3, '.-')
+    plt.grid(True)
+    plt.ylabel(r'$x\, [\mathrm{mm}]$', size=20)
+    plt.title((
+        r'$\delta = {dp}\, (\mathrm{{Errors\, [m]:}}\, \Delta L = {dL},$'
+        '\n'
+        r'$\Delta x = {dx}, \Delta y = {dy})$'
+        ).format(
+            dp = util.pprint_sci_notation(par['delta'], '.3g'),
+            dL = util.pprint_sci_notation(par['lengthError'], '.3g'),
+            dx = util.pprint_sci_notation(par['xError'], '.3g'),
+            dy = util.pprint_sci_notation(par['yError'], '.3g')),
+    size=16)
+    plt.subplot(212)
+    plt.plot(col['s'], col['y'] * 1e3, '.-')
+    plt.grid(True)
+    plt.xlabel(r'$s\, [\mathrm{m}]$', size=20)
+    plt.ylabel(r'$y\, [\mathrm{mm}]$', size=20)
+    plt.tight_layout()
