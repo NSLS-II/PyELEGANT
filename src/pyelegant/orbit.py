@@ -134,7 +134,7 @@ def calc_closed_orbit(
 
     ed.add_newline()
 
-    ed.add_block('track')
+    ed.add_block('track', soft_failure=False)
 
     ed.write(ele_filepath)
 
@@ -180,6 +180,10 @@ def calc_closed_orbit(
             remote_opts=remote_opts)
 
     timestamp_fin = util.get_current_local_time_str()
+
+    if output == {}:
+        print('\n*** Closed orbit file could NOT be found, '
+              'possibly due to closed orbit finding convergence failure. **\n')
 
     if output_file_type in ('hdf5', 'h5'):
         util.robust_sdds_hdf5_write(
@@ -345,7 +349,7 @@ class ClosedOrbitCalculator:
 
         ed.add_newline()
 
-        ed.add_block('track')
+        ed.add_block('track', soft_failure=False)
 
         ed.write(self.ele_filepath)
 
@@ -467,8 +471,14 @@ class ClosedOrbitCalculator:
             self.ele_filepath, self.clo_output_filepath,
             run_local=run_local, remote_opts=remote_opts)
 
-        self.clo_columns = data['clo']['columns']
-        self.clo_params = data['clo']['params']
+        if data == {}:
+            # *** Closed orbit file could NOT be found,
+            #    'possibly due to closed orbit finding convergence failure. ***
+            self.clo_columns = {}
+            self.clo_params = {}
+        else:
+            self.clo_columns = data['clo']['columns']
+            self.clo_params = data['clo']['params']
 
         return dict(columns=self.clo_columns, params=self.clo_params)
 
