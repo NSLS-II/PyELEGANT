@@ -868,7 +868,8 @@ proc SubmitRunScript {args} {
     with open('geneticOptimizer.local', 'w') as f:
         f.write(contents)
 
-def run_mpi_python(remote_opts, module_name, func_name, param_list, args):
+def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
+                   paths_to_prepend=None):
     """
     Example:
         module_name = 'pyelegant.nonlin'
@@ -889,6 +890,11 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args):
     d['output_filepath'] = output_filepath
 
     with open(input_filepath, 'wb') as f:
+
+        if paths_to_prepend is None:
+            paths_to_prepend = []
+        dill.dump(paths_to_prepend, f, protocol=-1)
+
         dill.dump(d, f, protocol=-1)
 
     # Add re-try functionality in case of "sbatch: error: Slurm controller not responding, sleeping and retrying."

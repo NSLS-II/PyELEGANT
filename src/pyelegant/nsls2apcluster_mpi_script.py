@@ -96,6 +96,11 @@ if __name__ == '__main__':
     if (len(sys.argv) == 3) and (sys.argv[1] == '_mpi_starmap'):
         input_filepath = sys.argv[2]
         with open(input_filepath, 'rb') as f:
+
+            paths_to_prepend = dill.load(f)
+            for _path in paths_to_prepend:
+                sys.path.insert(0, _path)
+
             d = dill.load(f)
 
         #mod = importlib.import_module('pyelegant.nonlin')
