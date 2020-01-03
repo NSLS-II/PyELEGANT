@@ -275,6 +275,9 @@ class ClosedOrbitCalculator:
         assert n_turns >= 1
         assert iteration_fraction <= 1.0
 
+        self.columns = None
+        self.params = None
+
         self.hcors = {}
         self.vcors = {}
 
@@ -365,10 +368,10 @@ class ClosedOrbitCalculator:
                 except:
                     print(f'Failed to delete "{fp}"')
 
-    def get_all_available_kickers(self):
+    def get_all_available_kickers(self, spos_sorted=True):
         """"""
 
-        return self.ed.get_LTE_all_kickers()
+        return self.ed.get_LTE_all_kickers(spos_sorted=spos_sorted)
 
     def select_kickers(self, plane: str, cor_names: Iterable[str]) -> None:
         """"""
@@ -458,5 +461,13 @@ class ClosedOrbitCalculator:
             self.ele_filepath, self.clo_output_filepath,
             run_local=run_local, remote_opts=remote_opts)
 
-        return dict(columns=data['clo']['columns'],
-                    params=data['clo']['params'])
+        self.clo_columns = data['clo']['columns']
+        self.clo_params = data['clo']['params']
+
+        return dict(columns=self.clo_columns, params=self.clo_params)
+
+    def plot(self):
+        """"""
+
+        plot_closed_orbit(self.clo_columns, self.clo_params)
+
