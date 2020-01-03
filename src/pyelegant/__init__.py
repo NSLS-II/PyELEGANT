@@ -7,12 +7,16 @@ std_print_enabled = dict(out=True, err=True)
 
 from . import local
 #from . import remote
-from . import twiss
+from . import correct
 from . import elebuilder
-from . import util
+from . import lteparser
+from . import nonlin
+from . import notation
+from . import orbit
 from . import sdds
 from . import sigproc
-from . import nonlin
+from . import twiss
+from . import util
 
 from .local import run
 from .remote import remote
