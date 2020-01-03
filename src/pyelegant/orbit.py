@@ -269,7 +269,8 @@ class ClosedOrbitCalculator:
         closed_orbit_iterations: int = 40, iteration_fraction: float = 0.9,
         n_turns: int = 1, use_beamline: Optional[str] = None,
         N_KICKS: Optional[dict] = None, transmute_elements: Optional[dict] = None,
-        ele_filepath: Optional[str] = None) -> None:
+        ele_filepath: Optional[str] = None, tempdir_path: Optional[str] = None,
+        ) -> None:
         """Constructor"""
 
         assert n_turns >= 1
@@ -281,15 +282,17 @@ class ClosedOrbitCalculator:
         self.hcors = {}
         self.vcors = {}
 
-        self.tmp_files_to_be_deleted = []
+        self.make_tempdir(tempdir_path=tempdir_path)
 
         if ele_filepath is None:
             tmp = tempfile.NamedTemporaryFile(
-                dir=os.getcwd(), delete=False, prefix=f'tmpCO_', suffix='.ele')
+                dir=self.tempdir.name, delete=False, prefix=f'tmpCO_',
+                suffix='.ele')
             self.ele_filepath = os.path.abspath(tmp.name)
             tmp.close()
 
-            self.tmp_files_to_be_deleted.append(self.ele_filepath)
+        else:
+            self.ele_filepath = ele_filepath
 
         self.ed = ed = elebuilder.EleDesigner(double_format='.12g')
 
@@ -307,12 +310,12 @@ class ClosedOrbitCalculator:
             change_defined_values=True, allow_missing_elements=True,
             allow_missing_parameters=True)
         tmp = tempfile.NamedTemporaryFile(
-            dir=os.getcwd(), delete=False, prefix=f'tmpCorrSetpoints_', suffix='.sdds')
+            dir=self.tempdir.name, delete=False, prefix=f'tmpCorrSetpoints_',
+            suffix='.sdds')
         load_parameters['filename'] = os.path.abspath(tmp.name)
         tmp.close()
 
         self.corrector_params_filepath = load_parameters['filename']
-        self.tmp_files_to_be_deleted.append(self.corrector_params_filepath)
 
         ed.add_block('load_parameters', **load_parameters)
 
@@ -354,19 +357,22 @@ class ClosedOrbitCalculator:
                 self.clo_output_filepath = fp
             else:
                 raise ValueError('This line should not be reached.')
-        self.tmp_files_to_be_deleted.append(self.clo_output_filepath)
 
-    def cleanup_tmp_files(self):
+    def __del__(self):
         """"""
 
-        for fp in self.tmp_files_to_be_deleted:
-            if fp.startswith('/dev'):
-                continue
-            else:
-                try:
-                    os.remove(fp)
-                except:
-                    print(f'Failed to delete "{fp}"')
+        self.remove_tempdir()
+
+    def make_tempdir(self, tempdir_path=None):
+        """"""
+
+        self.tempdir = tempfile.TemporaryDirectory(
+            prefix='tmpClosedOrb_', dir=tempdir_path)
+
+    def remove_tempdir(self):
+        """"""
+
+        self.tempdir.cleanup()
 
     def get_all_available_kickers(self, spos_sorted=True):
         """"""
