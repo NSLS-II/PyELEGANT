@@ -1572,7 +1572,7 @@ class EleDesigner():
         return dict(elem_type=elem_type, prop_str=prop_str)
 
     #----------------------------------------------------------------------
-    def get_LTE_all_kickers(self) -> dict:
+    def get_LTE_all_kickers(self, spos_sorted=False) -> dict:
         """"""
 
         kickers = {}
@@ -1584,6 +1584,28 @@ class EleDesigner():
         kickers['v'] = [
             (name, elem_type) for name, elem_type, _ in self._LTE.elem_defs
             if elem_type in ('VKICK', 'EVKICK', 'KICKER', 'EKICKER')]
+
+        if spos_sorted:
+
+            for plane in ['h', 'v']:
+                try:
+                    assert np.all(np.array(
+                        [self._LTE.flat_used_elem_names.count(name)
+                         for name, _ in kickers[plane]]) == 1)
+                except AssertionError:
+                    for name, _ in kickers[plane]:
+                        n = self._LTE.flat_used_elem_names.count(name)
+                        if n != 1:
+                            print(f'* There are {n:d} occurrences of Element "{name}"')
+
+                    print('ERROR: There cannot be multiple occurrences of kicker elements if "spos_sorted" is True.')
+                    raise
+
+            for plane in ['h', 'v']:
+                num_inds = [self._LTE.flat_used_elem_names.index(name)
+                            for name, _ in kickers[plane]]
+                sort_inds = np.argsort(num_inds)
+                kickers[plane] = [kickers[plane][i] for i in sort_inds]
 
         return kickers
 
