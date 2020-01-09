@@ -121,7 +121,7 @@ def _calc_fma(
         ele_filepath = os.path.abspath(tmp.name)
         tmp.close()
 
-    ed = elebuilder.EleDesigner(double_format='.12g')
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
     elebuilder.add_transmute_blocks(ed, transmute_elements)
 
@@ -148,9 +148,7 @@ def _calc_fma(
         full_grid_output=full_grid_output, **plane_specific_freq_map_block_opts
     )
 
-    ed.write(ele_filepath)
-
-    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    ed.write()
     #print(ed.actual_output_filepath_list)
 
     for fp in ed.actual_output_filepath_list:
@@ -467,7 +465,7 @@ def calc_find_aper_nlines(
         ele_filepath = os.path.abspath(tmp.name)
         tmp.close()
 
-    ed = elebuilder.EleDesigner(double_format='.12g')
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
     elebuilder.add_transmute_blocks(ed, transmute_elements)
 
@@ -493,9 +491,7 @@ def calc_find_aper_nlines(
         offset_by_orbit=True, # recommended according to the manual
     )
 
-    ed.write(ele_filepath)
-
-    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    ed.write()
     #print(ed.actual_output_filepath_list)
 
     for fp in ed.actual_output_filepath_list:
@@ -657,7 +653,7 @@ def calc_mom_aper(
         ele_filepath = os.path.abspath(tmp.name)
         tmp.close()
 
-    ed = elebuilder.EleDesigner(double_format='.12g')
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
     elebuilder.add_transmute_blocks(ed, transmute_elements)
 
@@ -689,9 +685,7 @@ def calc_mom_aper(
         _block_opts['include_name_pattern'] = include_name_pattern
     ed.add_block('momentum_aperture', **_block_opts)
 
-    ed.write(ele_filepath)
-
-    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    ed.write()
     #print(ed.actual_output_filepath_list)
 
     for fp in ed.actual_output_filepath_list:
@@ -1023,7 +1017,7 @@ def calc_chrom_twiss(
         ele_filepath = os.path.abspath(tmp.name)
         tmp.close()
 
-    ed = elebuilder.EleDesigner(double_format='.12g')
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
     if transmute_elements is None:
         transmute_elements = dict(RFCA='MARK', SREFFECTS='MARK')
@@ -1058,9 +1052,7 @@ def calc_chrom_twiss(
 
     ed.add_block('twiss_output', filename='%s.twi')
 
-    ed.write(ele_filepath)
-
-    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    ed.write()
     #print(ed.actual_output_filepath_list)
 
     for fp in ed.actual_output_filepath_list:
@@ -1145,7 +1137,7 @@ def calc_chrom_track(
     watch_pathobj = ele_pathobj.with_suffix('.wc')
     twi_pgz_pathobj = ele_pathobj.with_suffix('.twi.pgz')
 
-    ed = elebuilder.EleDesigner(double_format='.12g')
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
     elebuilder.add_transmute_blocks(ed, transmute_elements)
 
@@ -1192,9 +1184,7 @@ def calc_chrom_track(
 
     ed.add_block('track')
 
-    ed.write(ele_filepath)
-
-    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    ed.write()
     #print(ed.actual_output_filepath_list)
 
     twiss.calc_ring_twiss(
@@ -1646,7 +1636,7 @@ def _calc_tswa(
     watch_pathobj = ele_pathobj.with_suffix('.wc')
     twi_pgz_pathobj = ele_pathobj.with_suffix('.twi.pgz')
 
-    ed = elebuilder.EleDesigner(double_format='.12g')
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
     elebuilder.add_transmute_blocks(ed, transmute_elements)
 
@@ -1693,9 +1683,7 @@ def _calc_tswa(
 
     ed.add_block('track')
 
-    ed.write(ele_filepath)
-
-    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    ed.write()
     #print(ed.actual_output_filepath_list)
 
     twiss.calc_ring_twiss(
@@ -2154,7 +2142,7 @@ def track(
 
     watch_pathobj = ele_pathobj.with_suffix('.wc')
 
-    ed = elebuilder.EleDesigner(double_format='.12g')
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
     elebuilder.add_transmute_blocks(ed, transmute_elements)
 
@@ -2205,9 +2193,7 @@ def track(
 
     ed.add_block('track')
 
-    ed.write(ele_filepath)
-
-    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    ed.write()
     #print(ed.actual_output_filepath_list)
 
     tbt = dict(x = np.full((n_turns, nWatch), np.nan),

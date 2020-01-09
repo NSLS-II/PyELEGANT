@@ -24,7 +24,7 @@ def tunes(
         ele_filepath = os.path.abspath(tmp.name)
         tmp.close()
 
-    ed = elebuilder.EleDesigner(double_format='.12g')
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
     ed.add_block('run_setup',
         lattice=init_LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline)
@@ -54,9 +54,7 @@ def tunes(
 
     ed.add_block('save_lattice', filename=corrected_LTE_filepath)
 
-    ed.write(ele_filepath)
-
-    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    ed.write()
     #print(ed.actual_output_filepath_list)
 
     # Run Elegant
@@ -112,7 +110,7 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
         ele_filepath = os.path.abspath(tmp.name)
         tmp.close()
 
-    ed = elebuilder.EleDesigner(double_format='.12g')
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
     ed.add_block('run_setup',
         lattice=init_LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline)
@@ -143,9 +141,7 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
 
     ed.add_block('save_lattice', filename=corrected_LTE_filepath)
 
-    ed.write(ele_filepath)
-
-    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    ed.write()
     #print(ed.actual_output_filepath_list)
 
     # Run Elegant

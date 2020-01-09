@@ -90,7 +90,7 @@ def calc_closed_orbit(
         ele_filepath = os.path.abspath(tmp.name)
         tmp.close()
 
-    ed = elebuilder.EleDesigner(double_format='.12g')
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
     if transmute_elements is not None:
         elebuilder.add_transmute_blocks(ed, transmute_elements)
@@ -136,9 +136,7 @@ def calc_closed_orbit(
 
     ed.add_block('track', soft_failure=False)
 
-    ed.write(ele_filepath)
-
-    ed.update_output_filepaths(ele_filepath[:-4]) # Remove ".ele"
+    ed.write()
     #print(ed.actual_output_filepath_list)
 
     for fp in ed.actual_output_filepath_list:
@@ -298,7 +296,7 @@ class ClosedOrbitCalculator:
         else:
             self.ele_filepath = ele_filepath
 
-        self.ed = ed = elebuilder.EleDesigner(double_format='.12g')
+        self.ed = ed = elebuilder.EleDesigner(self.ele_filepath, double_format='.12g')
 
         if transmute_elements is not None:
             elebuilder.add_transmute_blocks(ed, transmute_elements)
@@ -351,9 +349,7 @@ class ClosedOrbitCalculator:
 
         ed.add_block('track', soft_failure=False)
 
-        ed.write(self.ele_filepath)
-
-        ed.update_output_filepaths(self.ele_filepath[:-4]) # Remove ".ele"
+        ed.write()
         #print(ed.actual_output_filepath_list)
 
         for fp in ed.actual_output_filepath_list:

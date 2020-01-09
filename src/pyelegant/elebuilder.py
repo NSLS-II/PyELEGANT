@@ -1327,8 +1327,10 @@ class EleDesigner():
     """"""
 
     #----------------------------------------------------------------------
-    def __init__(self, double_format='.12g'):
+    def __init__(self, ele_filepath, double_format='.12g'):
         """Constructor"""
+
+        self.ele_filepath = ele_filepath
 
         self.blocks = EleBlocks()
 
@@ -1356,11 +1358,13 @@ class EleDesigner():
         self.rpnvars._clear()
 
     #----------------------------------------------------------------------
-    def write(self, output_ele_filepath, nMaxTry=10, sleep=10.0):
+    def write(self, nMaxTry=10, sleep=10.0):
         """"""
 
+        self.update_output_filepaths()
+
         util.robust_text_file_write(
-            output_ele_filepath, self.text, nMaxTry=nMaxTry, sleep=sleep)
+            self.ele_filepath, self.text, nMaxTry=nMaxTry, sleep=sleep)
 
     #----------------------------------------------------------------------
     def add_newline(self):
@@ -1610,11 +1614,14 @@ class EleDesigner():
         return kickers
 
     #----------------------------------------------------------------------
-    def update_output_filepaths(self, ele_filepath_wo_ext):
+    def update_output_filepaths(self):
         """"""
 
         if self.rootname is not None:
             ele_filepath_wo_ext = self.rootname
+        else:
+            assert self.ele_filepath.endswith('.ele')
+            ele_filepath_wo_ext = self.ele_filepath[:-4]
 
         self.actual_output_filepath_list = []
         for template_fp in self.output_filepath_list:
