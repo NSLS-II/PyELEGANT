@@ -230,12 +230,16 @@ def plot_twiss(
     if result_file_type in ('hdf5', 'h5'):
         d, meta = util.load_sdds_hdf5_file(result_filepath)
     elif result_file_type == 'pgz':
-        d, meta = util.load_pgz_file(result_filepath)
+        _d = util.load_pgz_file(result_filepath)
+        d = _d['data']
+        meta = _d['meta']
     elif result_file_type is None:
         try:
             d, meta = util.load_sdds_hdf5_file(result_filepath)
         except OSError:
-            d, meta = util.load_pgz_file(result_filepath)
+            _d = util.load_pgz_file(result_filepath)
+            d = _d['data']
+            meta = _d['meta']
     else:
         raise ValueError('"result_file_type" must be one of "hdf5", "h5", "pgz"')
 
