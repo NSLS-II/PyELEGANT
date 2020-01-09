@@ -352,7 +352,7 @@ def run(
 def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False):
     """"""
 
-    mpi_rank_header = get_mpi_rank_header()
+    #mpi_rank_header = get_mpi_rank_header()
 
     nMaxSbatch = 3
     for iSbatch in range(nMaxSbatch):
@@ -360,7 +360,8 @@ def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False):
         out, err = p.communicate()
         out = out.decode('utf-8')
         err = err.decode('utf-8')
-        print(mpi_rank_header + out)
+        #print(mpi_rank_header + out)
+        print(out)
         if err:
             print(err)
             print('\n** Encountered error during main job submission.')
@@ -374,7 +375,7 @@ def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False):
 
     job_ID_str = out.replace('Submitted batch job', '').strip()
 
-    print('* {}'.format(mpi_rank_header))
+    #print('* {}'.format(mpi_rank_header))
 
     sys.stdout.flush()
 
