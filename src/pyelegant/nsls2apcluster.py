@@ -885,7 +885,8 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
         job_name=job_name,
         partition=remote_opts.get('partition', 'normal'),
         ntasks=remote_opts.get('ntasks', 50), x11=remote_opts.get('x11', False),
-        spread_job=remote_opts.get('spread_job', False))
+        spread_job=remote_opts.get('spread_job', False),
+        timelimit_str=remote_opts.get('timelimit_str', None))
 
     d['output_filepath'] = output_filepath
 
@@ -951,8 +952,57 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
     return results
 
 #----------------------------------------------------------------------
+def convertLocalTimeStrToSecFromUTCEpoch(
+    time_str, frac_sec=False, time_format=None):
+    """"""
+
+    if time_format is None:
+        DEF_FILENAME_TIMESTAMP_STR_FORMAT = '%Y-%m-%dT%H-%M-%S'
+
+        time_format = DEF_FILENAME_TIMESTAMP_STR_FORMAT
+
+    if not frac_sec:
+        return time.mktime(time.strptime(time_str, time_format))
+    else:
+        if '.' not in time_str:
+            time_str += '.0'
+        _sec_str, _frac_str = time_str.split('.')
+        t = time.mktime(time.strptime(_sec_str, time_format))
+        t += float(_frac_str) / (10**len(_frac_str))
+        return t
+
+#----------------------------------------------------------------------
+def get_constrained_timelimit_str(abs_timelimit, partition):
+    """
+    "abs_timelimit" must be in the format of '%Y-%m-%dT%H-%M-%S'.
+    """
+
+    dt_till_timelimit = convertLocalTimeStrToSecFromUTCEpoch(
+        abs_timelimit, time_format='%Y-%m-%dT%H-%M-%S') - time.time()
+
+    #get_default_timelimit(partition)
+    def_timelimit = get_cluster_time_limits()[partition]
+
+    if dt_till_timelimit > def_timelimit:
+        timelimit_str = None
+    elif dt_till_timelimit < 0.0:
+        raise RuntimeError('It is already past specified absolute time limit.')
+    else:
+        sec = datetime.timedelta(seconds=dt_till_timelimit)
+        dobj = datetime.datetime(1,1,1) + sec
+        if dobj.day - 1 != 0:
+            timelimit_str = '{:d}-'.format(dobj.day - 1)
+        else:
+            timelimit_str = ''
+        timelimit_str += '{:02d}:{:02d}:{:02d}'.format(
+            dobj.hour, dobj.minute, dobj.second)
+
+    return timelimit_str
+
+#----------------------------------------------------------------------
 def gen_mpi_submit_script(
-    job_name='job', partition='normal', ntasks=10, x11=False, spread_job=False):
+    job_name='job', partition='normal', ntasks=10, x11=False, spread_job=False,
+    timelimit_str=None):
     """"""
 
     tmp = tempfile.NamedTemporaryFile(dir=os.getcwd(), delete=False,
@@ -972,7 +1022,7 @@ def gen_mpi_submit_script(
 
 #SBATCH --partition={partition}
 
-{timelimit_str}
+{slurm_timelimit_str}
 
 #SBATCH --ntasks={ntasks:d}
 
@@ -988,19 +1038,22 @@ srun python -m mpi4py.futures {main_script_path} _mpi_starmap {input_filepath}
 
     abs_timelimit = SLURM_ABS_TIME_LIMIT[partition]
 
-    if abs_timelimit is None:
-        timelimit_str = ''
-    else:
-        timelimit = get_constrained_timelimit_str(abs_timelimit, partition)
-        if timelimit is None:
-            timelimit_str = ''
+    if timelimit_str is None:
+        if abs_timelimit is None:
+            slurm_timelimit_str = ''
         else:
-            timelimit_str = '#SBATCH --time={}'.format(timelimit)
+            timelimit = get_constrained_timelimit_str(abs_timelimit, partition)
+            if timelimit is None:
+                slurm_timelimit_str = ''
+            else:
+                slurm_timelimit_str = '#SBATCH --time={}'.format(timelimit)
+    else:
+        slurm_timelimit_str = '#SBATCH --time={}'.format(timelimit_str)
 
     contents = contents_template.format(
         main_script_path=__file__[:-3]+'_mpi_script.py', input_filepath=input_filepath,
         job_name=job_name, partition=partition, ntasks=ntasks,
-        timelimit_str=timelimit_str,
+        slurm_timelimit_str=slurm_timelimit_str,
         x11=('' if not x11 else 'export MPLBACKEND="agg"'),
         exclude=('' if SLURM_EXCL_NODES is None else '#SBATCH --exclude={}'.format(
             ','.join(SLURM_EXCL_NODES))),
