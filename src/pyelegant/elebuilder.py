@@ -1420,6 +1420,23 @@ class EleDesigner():
                     print(f'Failed to delete "{fp}"')
 
     #----------------------------------------------------------------------
+    def load_sdds_output_files(self):
+        """"""
+
+        output, meta = {}, {}
+        for sdds_fp in self.actual_output_filepath_list:
+            if sdds_fp.startswith('/dev/'):
+                continue
+            print(f'Processing "{sdds_fp}"...')
+            ext = sdds_fp.split('.')[-1]
+            try:
+                output[ext], meta[ext] = sdds.sdds2dicts(sdds_fp)
+            except:
+                continue
+
+        return dict(data=output, meta=meta)
+
+    #----------------------------------------------------------------------
     def add_newline(self):
         """"""
 
