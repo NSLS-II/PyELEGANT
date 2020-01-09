@@ -1,3 +1,4 @@
+from typing import Optional
 import os, sys
 from pathlib import Path
 from subprocess import Popen, PIPE
@@ -428,14 +429,14 @@ def sdds2dicts(sdds_filepath):
 
 def dicts2sdds(
     sdds_output_pathobj, params=None, columns=None, outputMode='ascii',
-    suppress_err_msg=True):
+    tempdir_path: Optional[str] = None, suppress_err_msg=True):
     """"""
 
     sdds_output_pathobj = Path(sdds_output_pathobj)
     sdds_output_filepath = str(sdds_output_pathobj)
 
     tmp = tempfile.NamedTemporaryFile(
-        dir=Path.cwd(), delete=False, prefix='tmpDicts2sdds_', suffix='.txt')
+        dir=tempdir_path, delete=False, prefix='tmpDicts2sdds_', suffix='.txt')
     plaindata_txt_filepath = str(Path(tmp.name).resolve())
     tmp.close()
 
