@@ -1371,7 +1371,8 @@ class EleDesigner():
     def clear(self):
         """"""
 
-        self.text = ''
+        self._text = ''
+        self._last_block_text = ''
 
         self.rootname = None
         self.output_filepath_list = []
@@ -1380,13 +1381,25 @@ class EleDesigner():
         self.rpnvars._clear()
 
     #----------------------------------------------------------------------
+    def print_whole(self):
+        """"""
+
+        print(self._text)
+
+    #----------------------------------------------------------------------
+    def print_last_block(self):
+        """"""
+
+        print(self._last_block_text)
+
+    #----------------------------------------------------------------------
     def write(self, nMaxTry=10, sleep=10.0):
         """"""
 
         self.update_output_filepaths()
 
         util.robust_text_file_write(
-            self.ele_filepath, self.text, nMaxTry=nMaxTry, sleep=sleep)
+            self.ele_filepath, self._text, nMaxTry=nMaxTry, sleep=sleep)
 
     #----------------------------------------------------------------------
     def delete_ele_file(self):
@@ -1440,13 +1453,13 @@ class EleDesigner():
     def add_newline(self):
         """"""
 
-        self.text += '\n'
+        self._text += '\n'
 
     #----------------------------------------------------------------------
     def add_comment(self, comment):
         """"""
 
-        self.text += '!' + comment + '\n'
+        self._text += '!' + comment + '\n'
 
     #----------------------------------------------------------------------
     def _should_be_inline_block(self, block_body_line_list):
@@ -1708,8 +1721,8 @@ class EleDesigner():
     def add_block(self, block_name, **kwargs):
         """"""
 
-        self.text += self._get_block_str(block_name, **kwargs)
-
+        self._last_block_text = self._get_block_str(block_name, **kwargs)
+        self._text += self._last_block_text
 
 ########################################################################
 class EleEquation():
