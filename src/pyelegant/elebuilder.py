@@ -1659,6 +1659,18 @@ class EleDesigner():
         return dict(elem_type=elem_type, prop_str=prop_str)
 
     #----------------------------------------------------------------------
+    def get_LTE_elem_prop(self, elem_name: str, prop_name: str):
+        """"""
+
+        info = self.get_LTE_elem_info(elem_name)
+
+        if info:
+            prop = self._LTE.parse_elem_properties(info['prop_str'])
+            return prop[prop_name]
+        else:
+            return None
+
+    #----------------------------------------------------------------------
     def get_LTE_all_kickers(self, spos_sorted=False) -> dict:
         """"""
 
@@ -1695,6 +1707,12 @@ class EleDesigner():
                 kickers[plane] = [kickers[plane][i] for i in sort_inds]
 
         return kickers
+
+    #----------------------------------------------------------------------
+    def get_LTE_elem_count(self, elem_name: str):
+        """"""
+
+        return self._LTE.flat_used_elem_names.count(elem_name)
 
     #----------------------------------------------------------------------
     def update_output_filepaths(self):

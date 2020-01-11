@@ -243,6 +243,23 @@ class Lattice():
                     elem_defs=used_elem_defs,
                     flat_used_elem_names=flat_used_elem_name_list)
 
+    def parse_elem_properties(self, prop_str: str):
+        """"""
+
+        pat = r'(\w+)\s*=\s*([^,]+)'
+
+        prop = dict()
+        for prop_name, val_str in re.findall(pat, prop_str):
+            try:
+                prop[prop_name.upper()] = int(val_str)
+            except ValueError:
+                try:
+                    prop[prop_name.upper()] = float(val_str)
+                except ValueError:
+                    prop[prop_name.upper()] = val_str
+
+        return prop
+
     def get_inconvertible_element_types(self, elem_def_list):
         """"""
 
