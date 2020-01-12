@@ -1513,7 +1513,7 @@ class EleDesigner():
                 elif (block_header == 'optimization_covariable') and (k == 'equation'):
                     if isinstance(v, InfixEquation):
                         rpn_str = v.torpn()
-                    else: # Either "str" or "EleEquation" object
+                    else: # Either "str" or "OptimizationTermBlockEquation" object
                         rpn_str = v
                     block.append(f'{k} = "{rpn_str}"')
                 else:
@@ -1761,7 +1761,7 @@ class EleDesigner():
         self._text += self._last_block_text
 
 ########################################################################
-class EleEquation():
+class OptimizationTermBlockEquation():
     """"""
 
     #----------------------------------------------------------------------
