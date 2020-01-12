@@ -21,6 +21,10 @@ class EleBlocks():
     def __init__(self):
         """Constructor"""
 
+        self.OPTIM_TERM_TERM_FIELD_MAX_STR_LEN = 900
+        # Max string length limitation (approximately & empirically determined)
+        # for "optimization_term" block.
+
         self.info = {}
         # ^ Will contain a tuple of (keywords, dtypes, default_vals, recommended)
 
@@ -1519,6 +1523,13 @@ class EleDesigner():
                     self.output_filepath_list.append(v)
                 if (block_header == 'run_setup') and (k == 'rootname'):
                     self.rootname = v
+
+                if (block_header == 'optimization_term') and (k == 'term'):
+                    if len(block[-1]) > self.blocks.OPTIM_TERM_TERM_FIELD_MAX_STR_LEN:
+                        raise ValueError(
+                            ('Ther number of characters for "term" field in "optimization_term" block '
+                             f'cannot exceed {self.blocks.OPTIM_TERM_TERM_FIELD_MAX_STR_LEN:d}'))
+
             elif dtypes[i] == 'long':
                 block.append(f'{k} = {v:d}')
             elif dtypes[i] == 'double':
