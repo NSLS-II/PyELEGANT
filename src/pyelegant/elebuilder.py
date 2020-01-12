@@ -1564,8 +1564,10 @@ class EleDesigner():
             '\n'.join([' ' * n_indent + line for line in block]) +
             final_line)
 
-        if block_header == 'optimization_variable':
-            name, item = kwargs['name'], kwargs['item']
+        # --- Now update "rpnvars" ---
+
+        if block_header in ('optimization_variable', 'optimization_covariable'):
+            name, item = kwargs['name'].upper(), kwargs['item'].upper()
             self.rpnvars._vars.extend([f'{name}.{item}', f'{name}.{item}0'])
             self.rpnvars._update()
 
