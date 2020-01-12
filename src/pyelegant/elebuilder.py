@@ -1510,7 +1510,11 @@ class EleDesigner():
             if dtypes[i] == 'STRING':
                 if v is None:
                     continue
-                elif (block_header == 'optimization_covariable') and (k == 'equation'):
+                elif (
+                    (block_header == 'optimization_covariable') and (k == 'equation')
+                    ) or (
+                    (block_header == 'optimization_term') and (k == 'term')
+                    ):
                     if isinstance(v, InfixEquation):
                         rpn_str = v.torpn()
                     else: # Either "str" or "OptimizationTermBlockEquation" object
