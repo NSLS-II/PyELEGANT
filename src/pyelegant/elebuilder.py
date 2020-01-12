@@ -1476,7 +1476,7 @@ class EleDesigner():
         return single_line
 
     #----------------------------------------------------------------------
-    def _get_block_str(self, block_header, **kwargs):
+    def _get_block_str(self, block_header, **kwargs) -> str:
         """"""
 
         if block_header not in self.blocks.info:
@@ -1565,6 +1565,13 @@ class EleDesigner():
             final_line)
 
         # --- Now update "rpnvars" ---
+        self._update_rpnvars(block_header, **kwargs)
+
+        return block_str
+
+    #----------------------------------------------------------------------
+    def _update_rpnvars(self, block_header: str, **kwargs) -> None:
+        """"""
 
         if block_header in ('optimization_variable', 'optimization_covariable'):
             name, item = kwargs['name'].upper(), kwargs['item'].upper()
@@ -1644,8 +1651,6 @@ class EleDesigner():
                         raise RuntimeError('Unexpected error. Multiple FITPOINT specified')
 
             self.rpnvars._update()
-
-        return block_str
 
     #----------------------------------------------------------------------
     def get_LTE_elem_info(self, elem_name: str):
