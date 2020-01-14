@@ -21,15 +21,15 @@ class EleBlocks():
     def __init__(self):
         """Constructor"""
 
-        self.OPTIM_TERM_TERM_FIELD_MAX_STR_LEN = 900
-        # Max string length limitation (approximately & empirically determined)
-        # for "optimization_term" block.
-
         self.info = {}
         # ^ Will contain a tuple of (keywords, dtypes, default_vals, recommended)
 
         self._block_def_strs = {}
         # ^ Will contain raw block defintion strings from Elegant Manual
+
+        self.OPTIM_TERM_TERM_FIELD_MAX_STR_LEN = 900
+        # Max string length limitation (approximately & empirically determined)
+        # for "optimization_term" block.
 
         self._parse_alter_elements()
         self._parse_bunched_beam()
@@ -908,11 +908,11 @@ class InfixEquation():
         copy = self.copy()
 
         if isinstance(other, (int, float, str)):
-            copy.equation_repr = f'{self.equation_repr} - {other}'
+            copy.equation_repr = f'{self.equation_repr} - ({other})'
         elif isinstance(other, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + other.rpn_conv_post_repl))
-            copy.equation_repr = f'{self.equation_repr} - {other.equation_repr}'
+            copy.equation_repr = f'{self.equation_repr} - ({other.equation_repr})'
         else:
             raise NotImplementedError(f'__sub__ for type "{type(other)}"')
 
@@ -925,11 +925,11 @@ class InfixEquation():
         copy = self.copy()
 
         if isinstance(left, (int, float, str)):
-            copy.equation_repr = f'{left} - {self.equation_repr}'
+            copy.equation_repr = f'{left} - ({self.equation_repr})'
         elif isinstance(left, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + left.rpn_conv_post_repl))
-            copy.equation_repr = f'{left.equation_repr} - {self.equation_repr}'
+            copy.equation_repr = f'{left.equation_repr} - ({self.equation_repr})'
         else:
             raise NotImplementedError(f'__rsub__ for type "{type(left)}"')
 
@@ -1334,8 +1334,10 @@ class EleDesigner():
     """"""
 
     #----------------------------------------------------------------------
-    def __init__(self, ele_filepath: str = '', double_format: str ='.12g',
-                 ele_folderpath: str = '', ele_prefix: str = 'tmp'):
+    def __init__(
+        self, ele_filepath: str = '', ele_folderpath: str = '',
+        ele_prefix: str = 'tmp', double_format: str ='.12g',
+        auto_print_on_add=True):
         """Constructor"""
 
         if ele_filepath:
@@ -1365,11 +1367,15 @@ class EleDesigner():
         self.rpnvars = RPNVariableDatabase()
         # Variables that will be available within the definition of
         #   "term" in "&optimization_term"
+
+        self.rpnvars_covars = RPNVariableDatabase()
+        # Variables that will be available within the definition of
         #   "equation" in "&optimization_covariable"
 
         self.clear()
 
         self.double_format = double_format
+        self.auto_print_on_add = auto_print_on_add
 
     #----------------------------------------------------------------------
     def clear(self):
@@ -1383,6 +1389,18 @@ class EleDesigner():
         self.actual_output_filepath_list = []
 
         self.rpnvars._clear()
+        self.rpnvars_covars._clear()
+
+    #----------------------------------------------------------------------
+    def get_rpn_vars(self, block_header):
+        """"""
+
+        if block_header == 'optimization_term':
+            return self.rpnvars
+        elif block_header == 'optimization_covariable':
+            return self.rpnvars_covars
+        else:
+            raise ValueError('Invalid block header')
 
     #----------------------------------------------------------------------
     def print_whole(self):
@@ -1394,7 +1412,8 @@ class EleDesigner():
     def print_last_block(self):
         """"""
 
-        print(self._last_block_text)
+        print(self._last_block_text[:-1] if self._last_block_text.endswith('\n')
+              else self._last_block_text)
 
     #----------------------------------------------------------------------
     def write(self, nMaxTry=10, sleep=10.0):
@@ -1457,13 +1476,21 @@ class EleDesigner():
     def add_newline(self):
         """"""
 
-        self._text += '\n'
+        self._last_block_text = '\n'
+        self._text += self._last_block_text
+
+        if self.auto_print_on_add:
+            self.print_last_block()
 
     #----------------------------------------------------------------------
     def add_comment(self, comment):
         """"""
 
-        self._text += '!' + comment + '\n'
+        self._last_block_text = f'! {comment}\n'
+        self._text += self._last_block_text
+
+        if self.auto_print_on_add:
+            self.print_last_block()
 
     #----------------------------------------------------------------------
     def _should_be_inline_block(self, block_body_line_list):
@@ -1588,10 +1615,27 @@ class EleDesigner():
     def _update_rpnvars(self, block_header: str, **kwargs) -> None:
         """"""
 
-        if block_header in ('optimization_variable', 'optimization_covariable'):
+        if block_header == 'floor_coordinates':
+            for fitpoint_name in self._fitpoint_names:
+                for quantity in ['X', 'Y', 'Z', 'theta', 'phi', 'psi']:
+                    # ^ These are, respectively, the three position coordinates,
+                    #   the three angle coordinates, and the total arch length at
+                    #   the marker location.
+                    self.rpnvars._vars.append(f'{fitpoint_name}.{quantity}')
+            self.rpnvars._update()
+
+        elif block_header in ('optimization_setup', 'parallel_optimization_setup'):
+            self.rpnvars._vars.append('Particles')
+            self.rpnvars._update()
+
+        elif block_header in ('optimization_variable', 'optimization_covariable'):
             name, item = kwargs['name'].upper(), kwargs['item'].upper()
             self.rpnvars._vars.extend([f'{name}.{item}', f'{name}.{item}0'])
             self.rpnvars._update()
+
+            if block_header == 'optimization_variable':
+                self.rpnvars_covars._vars.extend([f'{name}.{item}', f'{name}.{item}0'])
+                self.rpnvars_covars._update()
 
         elif block_header == 'rpn_load':
             tag = kwargs.get('tag', '')
@@ -1600,6 +1644,52 @@ class EleDesigner():
             for col_name, _d in meta['columns'].items():
                 if _d['TYPE'] == 'double':
                     self.rpnvars._vars.append(f'{tag_dot}{col_name}')
+            self.rpnvars._update()
+
+        elif block_header == 'run_setup':
+
+            used_beamline_name = kwargs.get('use_beamline', '')
+            used_beamline_name = (
+                used_beamline_name if used_beamline_name is not None else '')
+
+            self._LTE = lteparser.Lattice(
+                LTE_filepath=kwargs.get('lattice'),
+                used_beamline_name=used_beamline_name)
+            self._all_elem_names = [name for name, _, _ in self._LTE.elem_defs]
+
+            self._fitpoint_names = []
+            for name, elem_type, prop_str in self._LTE.elem_defs:
+                if elem_type.upper() == 'MARK':
+                    fitpoints = [int(s) for s in re.findall(
+                        'FITPOINT\s*=\s*(\d+)', prop_str, re.IGNORECASE)]
+                    if len(fitpoints) == 0:
+                        continue
+                    elif len(fitpoints) == 1:
+                        is_fitpoint = fitpoints[0]
+                        if is_fitpoint == 1:
+                            n = self._LTE.flat_used_elem_names.count(name)
+                            self._fitpoint_names.extend(
+                                [f'{name}#{occurrence:d}' for occurrence in range(1, n+1)])
+                    else:
+                        raise RuntimeError('Unexpected error. Multiple FITPOINT specified')
+
+            # See the definition of "MARK" element in the ELEGANT manual
+            quantity_list = [
+                'pCentral', 'Cx', 'Cxp', 'Cy', 'Cyp', 'Cs', 'Cdelta',
+                'Sx', 'Sxp', 'Sy', 'Syp', 'Ss', 'Sdelta', 'Particles'
+                ] + [
+                    f's{i}{j}' for i in range(1, 6+1) for j in range(1, 6+1)
+                ] + ['betaxBeam', 'alphaxBeam', 'betayBeam', 'alphayBeam'] + [
+                    f'R{i}{j}' for i in range(1, 6+1) for j in range(1, 6+1)]
+            if kwargs.get('default_order', 2) >= 2:
+                quantity_list += [
+                    f'T{i}{j}{k}' for i in range(1, 6+1) for j in range(1, 6+1)
+                    for k in range(1, 6+1)]
+            #
+            for fitpoint_name in self._fitpoint_names:
+                for quantity in quantity_list:
+                    self.rpnvars._vars.append(f'{fitpoint_name}.{quantity}')
+
             self.rpnvars._update()
 
         elif (block_header == 'twiss_output') and \
@@ -1636,34 +1726,6 @@ class EleDesigner():
                     'h00220', 'h31000', 'h40000', 'h20110', 'h11200', 'h20020',
                     'h20200', 'h00310', 'h00400', 'dnux/dJx', 'dnux/dJy', 'dnuy/dJy'
                 ])
-            self.rpnvars._update()
-
-        elif block_header == 'run_setup':
-
-            used_beamline_name = kwargs.get('use_beamline', '')
-            used_beamline_name = (
-                used_beamline_name if used_beamline_name is not None else '')
-
-            self._LTE = lteparser.Lattice(
-                LTE_filepath=kwargs.get('lattice'),
-                used_beamline_name=used_beamline_name)
-            self._fitpoint_names = []
-            self._all_elem_names = [name for name, _, _ in self._LTE.elem_defs]
-
-            for name, elem_type, prop_str in self._LTE.elem_defs:
-                if elem_type.upper() == 'MARK':
-                    fitpoints = [int(s) for s in re.findall(
-                        'FITPOINT\s*=\s*(\d+)', prop_str, re.IGNORECASE)]
-                    if len(fitpoints) == 0:
-                        continue
-                    elif len(fitpoints) == 1:
-                        is_fitpoint = fitpoints[0]
-                        if is_fitpoint == 1:
-                            n = self._LTE.flat_used_elem_names.count(name)
-                            self._fitpoint_names.extend(
-                                [f'{name}#{occurrence:d}' for occurrence in range(1, n+1)])
-                    else:
-                        raise RuntimeError('Unexpected error. Multiple FITPOINT specified')
 
             self.rpnvars._update()
 
@@ -1764,25 +1826,44 @@ class EleDesigner():
         self._last_block_text = self._get_block_str(block_name, **kwargs)
         self._text += self._last_block_text
 
+        if self.auto_print_on_add:
+            self.print_last_block()
+
 ########################################################################
-class OptimizationTermBlockEquation():
+class OptimizationTerm():
     """"""
 
     #----------------------------------------------------------------------
-    def __init__(self, ele_designer_obj):
+    def __init__(self, ele_designer_obj, intermediate=False):
         """Constructor"""
 
-        self.rpnvars = ele_designer_obj.rpnvars
+        self.rpnvars = ele_designer_obj.get_rpn_vars('optimization_term')
 
         self.assignment_rpn_str_list = []
 
-        self.output = InfixEquation('0.0')
+        self._intermediate = intermediate
+
+        self._final = None
+
+        self._max_str_len = ele_designer_obj.OPTIM_TERM_TERM_FIELD_MAX_STR_LEN
+        # Max string length limitation (approximately & empirically determined)
+        # for "optimization_term" block.
 
     def __repr__(self):
         """"""
 
+        if self._final is None:
+            output = InfixEquation('0.0')
+        else:
+            output = self._final
+
         final_rpn_str = '\n'.join(
-            self.assignment_rpn_str_list + [self.output.torpn()])
+            self.assignment_rpn_str_list + [output.torpn()])
+
+        if len(final_rpn_str) > self._max_str_len:
+            print('\n## WARNING ##')
+            print(f'Expression character length is exceeding {self._max_str_len:d}. ELEGANT will likely fail.')
+            print('Try to divide this OptimizationTerm object into multiple intermediate OptimizationTerm objects.')
 
         return final_rpn_str
 
@@ -1796,6 +1877,36 @@ class OptimizationTermBlockEquation():
         rpn_str = f'{infix_eq_obj.torpn()} sto {new_var_name} pop'
 
         self.assignment_rpn_str_list.append(rpn_str)
+
+    def is_intermediate(self):
+        """"""
+
+        return self._intermediate
+
+    def set_as_intermediate(self, true_or_false: bool) -> None:
+        """"""
+
+        self._intermediate = true_or_false
+
+    def get_final(self):
+        """"""
+
+        return self._final
+
+    def set_final(self, final_val):
+        """"""
+
+        if self._intermediate:
+            raise RuntimeError('Cannot set a final term for the OptimizationTerm object set as "intermediate".')
+
+        if isinstance(final_val, InfixEquation):
+            self._final = final_val
+        elif isinstance(final_val, (float, int)):
+            self._final = InfixEquation(str(final_val))
+        elif isinstance(final_val, str):
+            self._final = InfixEquation(final_val)
+        else:
+            raise TypeError('Invalid type')
 
     def __enter__(self):
         """"""
