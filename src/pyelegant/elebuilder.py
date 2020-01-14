@@ -1312,8 +1312,6 @@ class RPNFunctionDatabase():
     #----------------------------------------------------------------------
     def min2(self, x, y):
         """ Minimum of top 2 items on stack := np.min([x, y]) """
-        x = self._ensure_InfixEquation_type(x)
-        y = self._ensure_InfixEquation_type(y)
         return self._simple_multi_args_func('min2', x, y)
     #----------------------------------------------------------------------
     def maxn(self, *args):
@@ -1328,6 +1326,289 @@ class RPNFunctionDatabase():
         mod_args = list(args) + [n]
         return self._simple_multi_args_func('minn', *mod_args)
 
+########################################################################
+class RPNCalculator():
+    """"""
+
+    #----------------------------------------------------------------------
+    def __init__(self):
+        """Constructor"""
+
+        self.buffer = []
+
+        self.func_list = [
+            'ln', 'exp', 'pow', 'ceil', 'floor', 'int', 'sin', 'cos', 'tan',
+            'asin', 'acos', 'atan', 'atan2', 'dsin', 'dcos', 'dtan',
+            'dasin', 'dacos', 'datan', 'sinh', 'cosh', 'tanh',
+            'asinh', 'acosh', 'atanh', 'sqr', 'sqrt', 'abs',
+            'segt', 'selt', 'sene', 'chs', 'rec', 'rtod', 'dtor', 'hypot',
+            'max2', 'min2', 'maxn', 'minn']
+
+    #----------------------------------------------------------------------
+    def clear_buffer(self):
+        """"""
+
+        self.buffer.clear()
+
+    #----------------------------------------------------------------------
+    def ln(self):
+        """ Natural Log := np.log(x) """
+        x = self.buffer.pop()
+        return np.log(x)
+    #----------------------------------------------------------------------
+    def exp(self):
+        """ Exponential Function := exp(x) """
+        x = self.buffer.pop()
+        return np.exp(x)
+    #----------------------------------------------------------------------
+    def pow(self):
+        """ Power Function := x**y """
+        y = self.buffer.pop()
+        x = self.buffer.pop()
+        return x**y
+    #----------------------------------------------------------------------
+    def ceil(self):
+        """ Ceil := np.ceil(x) """
+        x = self.buffer.pop()
+        return np.ceil(x)
+    #----------------------------------------------------------------------
+    def floor(self):
+        """ Floor := np.floor(x) """
+        x = self.buffer.pop()
+        return np.floor(x)
+    #----------------------------------------------------------------------
+    def int(self):
+        """ Take integer part := x - np.floor(x) """
+        x = self.buffer.pop()
+        return x - np.floor(x)
+    #----------------------------------------------------------------------
+    def sin(self):
+        """ Sine := np.sin(x) """
+        x = self.buffer.pop()
+        return np.sin(x)
+    #----------------------------------------------------------------------
+    def cos(self):
+        """ Cosine := np.cos(x) """
+        x = self.buffer.pop()
+        return np.cos(x)
+    #----------------------------------------------------------------------
+    def tan(self):
+        """ Tangent := np.tan(x) """
+        x = self.buffer.pop()
+        return np.tan(x)
+    #----------------------------------------------------------------------
+    def asin(self):
+        """ Arc Sine [rad] := np.arcsin(x) """
+        x = self.buffer.pop()
+        return np.arcsin(x)
+    #----------------------------------------------------------------------
+    def acos(self):
+        """ Arc Cosine [rad] := np.arccos(x) """
+        x = self.buffer.pop()
+        return np.arccos(x)
+    #----------------------------------------------------------------------
+    def atan(self):
+        """ Arc Tangent [rad] := np.arctan(x) """
+        x = self.buffer.pop()
+        return np.arctan(x)
+    #----------------------------------------------------------------------
+    def atan2(self):
+        """ Arc Tangent [rad] := np.arctan2(y, x)
+        Note the order difference between this "atan2" and "np.arctan2".
+        """
+        y = self.buffer.pop()
+        x = self.buffer.pop()
+        return np.arctan2(y, x)
+    #----------------------------------------------------------------------
+    def dsin(self):
+        """ Sine := np.sin(np.deg2rad(x)) """
+        x = self.buffer.pop()
+        return np.sin(np.deg2rad(x))
+    #----------------------------------------------------------------------
+    def dcos(self):
+        """ Cosine := np.cos(np.deg2rad(x)) """
+        x = self.buffer.pop()
+        return np.cos(np.deg2rad(x))
+    #----------------------------------------------------------------------
+    def dtan(self):
+        """ Tangent := np.tan(np.deg2rad(x)) """
+        x = self.buffer.pop()
+        return np.tan(np.deg2rad(x))
+    #----------------------------------------------------------------------
+    def dasin(self):
+        """ Arc Sine [deg] := np.rad2deg(np.arcsin(x)) """
+        x = self.buffer.pop()
+        return np.rad2deg(np.arcsin(x))
+    #----------------------------------------------------------------------
+    def dacos(self):
+        """ Arc Cosine [deg] := np.rad2deg(np.arccos(x)) """
+        x = self.buffer.pop()
+        return np.rad2deg(np.arccos(x))
+    #----------------------------------------------------------------------
+    def datan(self):
+        """ Arc Tangent [deg] := np.rad2deg(np.arctan(x)) """
+        x = self.buffer.pop()
+        return np.rad2deg(np.arctan(x))
+    #----------------------------------------------------------------------
+    def sinh(self):
+        """ Hyperbolic Sine := np.sinh(x) """
+        x = self.buffer.pop()
+        return np.sinh(x)
+    #----------------------------------------------------------------------
+    def cosh(self):
+        """ Hyperbolic Cosine := np.cosh(x) """
+        x = self.buffer.pop()
+        return np.cosh(x)
+    #----------------------------------------------------------------------
+    def tanh(self):
+        """ Hyperbolic Tangent := np.tanh(x) """
+        x = self.buffer.pop()
+        return np.tanh(x)
+    #----------------------------------------------------------------------
+    def asinh(self):
+        """ Inverse Hyperbolic Sine := np.arcsinh(x) """
+        x = self.buffer.pop()
+        return np.arcsinh(x)
+    #----------------------------------------------------------------------
+    def acosh(self):
+        """ Inverse Hyperbolic Cosine := np.arccosh(x) """
+        x = self.buffer.pop()
+        return np.arccosh(x)
+    #----------------------------------------------------------------------
+    def atanh(self):
+        """ Inverse Hyperbolic Tangent := np.arctanh(x) """
+        x = self.buffer.pop()
+        return np.arctanh(x)
+    #----------------------------------------------------------------------
+    def sqr(self):
+        """ Square := x**2 """
+        x = self.buffer.pop()
+        return x**2
+    #----------------------------------------------------------------------
+    def sqrt(self):
+        """ Square Root := np.sqrt(x) """
+        x = self.buffer.pop()
+        return np.sqrt(x)
+    #----------------------------------------------------------------------
+    def abs(self):
+        """ Absolute := np.abs(x) """
+        x = self.buffer.pop()
+        return np.abs(x)
+    #----------------------------------------------------------------------
+    def segt(self):
+        """ Soft-edge "greater-than" :=
+            if v1 < v2: 0
+            else      : ((v1 - v2) / tol)**2
+        """
+        tol = self.buffer.pop()
+        v2 = self.buffer.pop()
+        v1 = self.buffer.pop()
+        if v1 < v2:
+            return 0.0
+        else:
+            return ((v1 - v2) / tol)**2
+    #----------------------------------------------------------------------
+    def selt(self):
+        """ Soft-edge "less-than" :=
+            if v1 > v2: 0
+            else      : ((v1 - v2) / tol)**2
+        """
+        tol = self.buffer.pop()
+        v2 = self.buffer.pop()
+        v1 = self.buffer.pop()
+        if v1 > v2:
+            return 0.0
+        else:
+            return ((v1 - v2) / tol)**2
+    #----------------------------------------------------------------------
+    def sene(self):
+        """ Soft-edge "not-equal-to" :=
+            if np.abs(v1 - v2) < tol: 0
+            else:
+                if v1 > v2: ((v1 - (v2 + tol)) / tol)**2
+                else      : ((v2 - (v1 + tol)) / tol)**2
+        """
+        tol = self.buffer.pop()
+        v2 = self.buffer.pop()
+        v1 = self.buffer.pop()
+        if v1 > v2:
+            return ((v1 - (v2 + tol)) / tol)**2
+        else:
+            return ((v2 - (v1 + tol)) / tol)**2
+    #----------------------------------------------------------------------
+    def chs(self):
+        """ Change sign := x * (-1) """
+        x = self.buffer.pop()
+        return x * (-1.0)
+    #----------------------------------------------------------------------
+    def rec(self):
+        """ Take reciprocal := 1 / x """
+        x = self.buffer.pop()
+        return 1.0 / x
+    #----------------------------------------------------------------------
+    def rtod(self):
+        """ Convert radians to degrees := np.rad2deg(x) """
+        x = self.buffer.pop()
+        return np.rad2deg(x)
+    #----------------------------------------------------------------------
+    def dtor(self):
+        """ Convert degrees to radians := np.deg2rad(x) """
+        x = self.buffer.pop()
+        return np.deg2rad(x)
+    #----------------------------------------------------------------------
+    def hypot(self):
+        """ hypot function := np.sqrt(x**2 + y**2) """
+        y = self.buffer.pop()
+        x = self.buffer.pop()
+        return np.sqrt(x**2 + y**2)
+    #----------------------------------------------------------------------
+    def max2(self):
+        """ Maximum of top 2 items on stack := np.max([x, y]) """
+        y = self.buffer.pop()
+        x = self.buffer.pop()
+        return np.max([x, y])
+    #----------------------------------------------------------------------
+    def min2(self):
+        """ Minimum of top 2 items on stack := np.min([x, y]) """
+        y = self.buffer.pop()
+        x = self.buffer.pop()
+        return np.min([x, y])
+    #----------------------------------------------------------------------
+    def maxn(self):
+        """ Maximum of top N items on stack := np.max([x0, x1, ...]) """
+        n = int(self.buffer.pop())
+        list_to_compare = []
+        for _ in range(n):
+            list_to_compare.append(self.buffer.pop())
+        return np.max(list_to_compare)
+    #----------------------------------------------------------------------
+    def minn(self):
+        """ Minimum of top N items on stack := np.min([x0, x1, ...]) """
+        n = int(self.buffer.pop())
+        list_to_compare = []
+        for _ in range(n):
+            list_to_compare.append(self.buffer.pop())
+        return np.min(list_to_compare)
+
+    #----------------------------------------------------------------------
+    def get_buffer(self, rpn_expr_str, num_dict=None):
+        """"""
+
+        if num_dict is None:
+            num_dict = {}
+
+        token_list = rpn_expr_str.split()
+
+        for token in token_list:
+
+            if token in self.func_list:
+                self.buffer.append(getattr(self, token)())
+            elif token in num_dict:
+                self.buffer.append(num_dict[token])
+            else:
+                self.buffer.append(float(token))
+
+        return self.buffer[:]
 
 ########################################################################
 class EleDesigner():
