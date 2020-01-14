@@ -1336,6 +1336,8 @@ class RPNCalculator():
 
         self.buffer = []
 
+        self.operator_list = ['+', '-', '*', '/']
+
         self.func_list = [
             'ln', 'exp', 'pow', 'ceil', 'floor', 'int', 'sin', 'cos', 'tan',
             'asin', 'acos', 'atan', 'atan2', 'dsin', 'dcos', 'dtan',
@@ -1591,6 +1593,24 @@ class RPNCalculator():
         return np.min(list_to_compare)
 
     #----------------------------------------------------------------------
+    def _operate(self, op_name):
+        """"""
+
+        v2 = self.buffer.pop()
+        v1 = self.buffer.pop()
+
+        if op_name == '+':
+            return v1 + v2
+        elif op_name == '-':
+            return v1 - v2
+        elif op_name == '*':
+            return v1 * v2
+        elif op_name == '/':
+            return v1 / v2
+        else:
+            raise NotImplementedError(f'Unknown operator type: {op_name}')
+
+    #----------------------------------------------------------------------
     def get_buffer(self, rpn_expr_str, num_dict=None):
         """"""
 
@@ -1603,6 +1623,8 @@ class RPNCalculator():
 
             if token in self.func_list:
                 self.buffer.append(getattr(self, token)())
+            elif token in self.operator_list:
+                self.buffer.append(self._operate(token))
             elif token in num_dict:
                 self.buffer.append(num_dict[token])
             else:
