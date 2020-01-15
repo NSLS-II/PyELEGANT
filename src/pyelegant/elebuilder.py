@@ -2140,7 +2140,9 @@ class OptimizationTerm():
     def __init__(self, ele_designer_obj, intermediate=False):
         """Constructor"""
 
-        self.rpnvars = ele_designer_obj.get_rpn_vars('optimization_term')
+        ed = ele_designer_obj
+
+        self.rpnvars = ed.get_rpn_vars('optimization_term')
 
         self.assignment_rpn_str_list = []
 
@@ -2148,7 +2150,7 @@ class OptimizationTerm():
 
         self._final = None
 
-        self._max_str_len = ele_designer_obj.OPTIM_TERM_TERM_FIELD_MAX_STR_LEN
+        self._max_str_len = ed.blocks.OPTIM_TERM_TERM_FIELD_MAX_STR_LEN
         # Max string length limitation (approximately & empirically determined)
         # for "optimization_term" block.
 
