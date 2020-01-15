@@ -1,3 +1,4 @@
+from typing import List, Union
 import sys
 import re
 import numpy as np
@@ -819,7 +820,8 @@ class InfixEquation():
     """"""
 
     #----------------------------------------------------------------------
-    def __init__(self, variable_str_repr, rpn_conv_post_repl=None):
+    def __init__(self, variable_str_repr: str, rpn_conv_post_repl: List = None,
+                 double_format: str = '.12g'):
         """Constructor"""
 
         self.equation_repr = variable_str_repr
@@ -828,6 +830,8 @@ class InfixEquation():
             self.rpn_conv_post_repl = []
         else:
             self.rpn_conv_post_repl = rpn_conv_post_repl
+
+        self.double_format = double_format
 
     #----------------------------------------------------------------------
     def copy(self):
@@ -843,7 +847,8 @@ class InfixEquation():
         """"""
 
         return notation.convert_infix_to_rpn(
-            self.equation_repr, post_repl=self.rpn_conv_post_repl)
+            self.equation_repr, post_repl=self.rpn_conv_post_repl,
+            double_format=self.double_format)
 
     #----------------------------------------------------------------------
     def __repr__(self):
@@ -873,8 +878,10 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(other, (int, float, str)):
+        if isinstance(other, (int, str)):
             copy.equation_repr = f'{self.equation_repr} + {other}'
+        elif isinstance(other, float):
+            copy.equation_repr = f'{self.equation_repr} + {other:{self.double_format}}'
         elif isinstance(other, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + other.rpn_conv_post_repl))
@@ -890,8 +897,10 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(left, (int, float, str)):
+        if isinstance(left, (int, str)):
             copy.equation_repr = f'{left} + {self.equation_repr}'
+        elif isinstance(left, float):
+            copy.equation_repr = f'{left:{self.double_format}} + {self.equation_repr}'
         elif isinstance(left, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + left.rpn_conv_post_repl))
@@ -907,8 +916,10 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(other, (int, float, str)):
+        if isinstance(other, (int, str)):
             copy.equation_repr = f'{self.equation_repr} - ({other})'
+        elif isinstance(other, float):
+            copy.equation_repr = f'{self.equation_repr} - ({other:{self.double_format}})'
         elif isinstance(other, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + other.rpn_conv_post_repl))
@@ -924,8 +935,10 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(left, (int, float, str)):
+        if isinstance(left, (int, str)):
             copy.equation_repr = f'{left} - ({self.equation_repr})'
+        elif isinstance(left, float):
+            copy.equation_repr = f'{left:{self.double_format}} - ({self.equation_repr})'
         elif isinstance(left, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + left.rpn_conv_post_repl))
@@ -941,8 +954,10 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(other, (int, float, str)):
+        if isinstance(other, (int, str)):
             copy.equation_repr = f'({self.equation_repr}) * ({other})'
+        elif isinstance(other, float):
+            copy.equation_repr = f'({self.equation_repr}) * ({other:{self.double_format}})'
         elif isinstance(other, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + other.rpn_conv_post_repl))
@@ -958,8 +973,10 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(left, (int, float, str)):
+        if isinstance(left, (int, str)):
             copy.equation_repr = f'({left}) * ({self.equation_repr})'
+        elif isinstance(left, float):
+            copy.equation_repr = f'({left:{self.double_format}}) * ({self.equation_repr})'
         elif isinstance(left, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + left.rpn_conv_post_repl))
@@ -975,8 +992,10 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(other, (int, float, str)):
+        if isinstance(other, (int, str)):
             copy.equation_repr = f'({self.equation_repr}) / ({other})'
+        elif isinstance(other, float):
+            copy.equation_repr = f'({self.equation_repr}) / ({other:{self.double_format}})'
         elif isinstance(other, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + other.rpn_conv_post_repl))
@@ -992,8 +1011,10 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(left, (int, float, str)):
+        if isinstance(left, (int, str)):
             copy.equation_repr = f'({left}) / ({self.equation_repr})'
+        elif isinstance(left, float):
+            copy.equation_repr = f'({left:{self.double_format}}) / ({self.equation_repr})'
         elif isinstance(left, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + left.rpn_conv_post_repl))
@@ -1021,8 +1042,10 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(exponent, (int, float, str)):
+        if isinstance(exponent, (int, str)):
             copy.equation_repr = f'({self.equation_repr})**({exponent})'
+        elif isinstance(exponent, float):
+            copy.equation_repr = f'({self.equation_repr})**({exponent:{self.double_format}})'
         elif isinstance(exponent, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + exponent.rpn_conv_post_repl))
@@ -1038,8 +1061,10 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(base, (int, float, str)):
+        if isinstance(base, (int, str)):
             copy.equation_repr = f'({base})**({self.equation_repr})'
+        elif isinstance(base, float):
+            copy.equation_repr = f'({base:{self.double_format}})**({self.equation_repr})'
         elif isinstance(base, InfixEquation):
             copy.rpn_conv_post_repl = list(set(
                 self.rpn_conv_post_repl + base.rpn_conv_post_repl))
