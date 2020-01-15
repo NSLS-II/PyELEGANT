@@ -2162,8 +2162,11 @@ class OptimizationTerm():
         else:
             output = self._final
 
-        final_rpn_str = '\n'.join(
+        newline_indent = '\n' + (' ' * 8)
+        final_rpn_str = newline_indent.join(
             self.assignment_rpn_str_list + [output.torpn()])
+
+        final_rpn_str = newline_indent + final_rpn_str + ('\n' + (' ' * 4))
 
         if len(final_rpn_str) > self._max_str_len:
             print('\n## WARNING ##')
