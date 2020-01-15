@@ -16,6 +16,7 @@ from . import lteparser
 class EleBlocks():
     """
     From https://ops.aps.anl.gov/manuals/elegant_latest/elegant.pdf
+    Program Version 2019.4 (December 10, 2019)
     """
 
     #----------------------------------------------------------------------
@@ -600,16 +601,19 @@ class EleBlocks():
     def _parse_optimization_variable(self):
         """"""
 
-        # Elegant Manual Section 7.44
+        # Elegant Manual Section 7.45
         self._parse_block_def('''
         &optimization_variable
             STRING name = NULL;
             STRING item = NULL;
             double lower_limit = 0;
             double upper_limit = 0;
+            long differential_limits = 0;
             double step_size = 1;
             long disable = 0;
             long force_inside = 0;
+            long no_element = 0;
+            double initial_value = 0;
         &end
         ''')
 
@@ -1919,6 +1923,24 @@ class EleDesigner():
 
             else:
                 raise ValueError('Unexpected data type: {}'.format(dtypes[i]))
+
+        # Check whether initial value is within specified limits
+        if (block_header == 'optimization_variable') and \
+           (not kwargs.get('differential_limits', False)):
+            lower_limit = kwargs.get('lower_limit', 0.0)
+            upper_limit = kwargs.get('upper_limit', 0.0)
+            if lower_limit == upper_limit:
+                pass # Parameter range is unlimited, so any initial value would be fine.
+            else:
+                init_val = self.get_LTE_elem_prop(kwargs.get('name'), kwargs.get('item'))
+                if init_val < lower_limit:
+                    raise ValueError(
+                        (f'Initial value ({init_val:{self.double_format}}) cannot be '
+                         f'smaller than "lower_limit" ({lower_limit:{self.double_format}})'))
+                elif init_val > upper_limit:
+                    raise ValueError(
+                        (f'Initial value ({init_val:{self.double_format}}) cannot be '
+                         f'larger than "upper_limit" ({upper_limit:{self.double_format}})'))
 
         if self._should_be_inline_block(block):
             first_line = f'&{block_header}  '
