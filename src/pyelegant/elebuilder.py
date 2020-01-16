@@ -1199,7 +1199,7 @@ class RPNFunctionDatabase():
         return self._simple_multi_args_func('floor', x)
     #----------------------------------------------------------------------
     def int(self, x):
-        """ Take integer part := x - np.floor(x) """
+        """ Take integer part := np.floor(x) """
         return self._simple_multi_args_func('int', x)
     #----------------------------------------------------------------------
     def sin(self, x):
@@ -1409,9 +1409,9 @@ class RPNCalculator():
         return np.floor(x)
     #----------------------------------------------------------------------
     def int(self):
-        """ Take integer part := x - np.floor(x) """
+        """ Take integer part := np.floor(x) """
         x = self.buffer.pop()
-        return x - np.floor(x)
+        return np.floor(x)
     #----------------------------------------------------------------------
     def sin(self):
         """ Sine := np.sin(x) """
