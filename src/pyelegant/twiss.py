@@ -366,15 +366,22 @@ def plot_twiss(
 
             elem_type = elem_type.upper()
             if elem_type in ('QUAD', 'KQUAD'):
-                m = np.logical_and(parameters['ElementName'] == elem_name,
-                                   parameters['ElementOccurence'] == elem_occur)
+                matched_elem_names = (parameters['ElementName'] == elem_name)
+                matched_elem_occurs = (parameters['ElementOccurence'] == elem_occur)
+                m = np.logical_and(matched_elem_names, matched_elem_occurs)
                 if np.sum(m) == 0:
-                    m = np.logical_and(parameters['ElementName'] == elem_name,
-                                       parameters['ElementOccurence'] < elem_occur)
-                    elem_occur = str(np.max(
-                        [int(v) for v in np.unique(parameters['ElementOccurence'][m])]))
-                    m = np.logical_and(parameters['ElementName'] == elem_name,
-                                       parameters['ElementOccurence'] == elem_occur)
+                    m = np.where(matched_elem_names)[0]
+                    u_elem_occurs_int = np.unique(parameters['ElementOccurence'].astype(int)[m])
+                    elem_occur_int = int(elem_occur)
+                    if np.all(u_elem_occurs_int > elem_occur_int):
+                        elem_occur = str(np.min(u_elem_occurs_int))
+                    elif np.all(u_elem_occurs_int < elem_occur_int):
+                        elem_occur = str(np.max(u_elem_occurs_int))
+                    else:
+                        elem_occur = str(np.min(
+                            u_elem_occurs_int[u_elem_occurs_int >= elem_occur_int]))
+                    matched_elem_occurs = (parameters['ElementOccurence'] == elem_occur)
+                    m = np.logical_and(matched_elem_names, matched_elem_occurs)
                 m = np.logical_and(m, parameters['ElementParameter'] == 'K1')
                 assert np.sum(m) == 1
                 K1 = parameters['ParameterValue'][m]
