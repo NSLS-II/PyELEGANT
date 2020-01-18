@@ -12,6 +12,8 @@ from . import sdds
 from . import notation
 from . import lteparser
 
+from . import std_print_enabled
+
 ########################################################################
 class EleBlocks():
     """
@@ -1811,7 +1813,7 @@ class EleDesigner():
         self._last_block_text = '\n'
         self._text += self._last_block_text
 
-        if self.auto_print_on_add:
+        if std_print_enabled['out'] and self.auto_print_on_add:
             self.print_last_block()
 
     #----------------------------------------------------------------------
@@ -1821,7 +1823,7 @@ class EleDesigner():
         self._last_block_text = f'! {comment}\n'
         self._text += self._last_block_text
 
-        if self.auto_print_on_add:
+        if std_print_enabled['out'] and self.auto_print_on_add:
             self.print_last_block()
 
     #----------------------------------------------------------------------
@@ -2176,7 +2178,7 @@ class EleDesigner():
         self._last_block_text = self._get_block_str(block_name, **kwargs)
         self._text += self._last_block_text
 
-        if self.auto_print_on_add:
+        if std_print_enabled['out'] and self.auto_print_on_add:
             self.print_last_block()
 
 ########################################################################
