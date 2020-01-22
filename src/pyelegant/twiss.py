@@ -222,6 +222,32 @@ def get_visible_inds(all_s_array, slim, s_margin_m=0.1):
 
     return _visible
 
+def _get_param_val(param_name, parameters_dict, elem_name, elem_occur):
+    """"""
+
+    parameters = parameters_dict
+
+    matched_elem_names = (parameters['ElementName'] == elem_name)
+    matched_elem_occurs = (parameters['ElementOccurence'] == elem_occur)
+    m = np.logical_and(matched_elem_names, matched_elem_occurs)
+    if np.sum(m) == 0:
+        m = np.where(matched_elem_names)[0]
+        u_elem_occurs_int = np.unique(parameters['ElementOccurence'].astype(int)[m])
+        elem_occur_int = int(elem_occur)
+        if np.all(u_elem_occurs_int > elem_occur_int):
+            elem_occur = str(np.min(u_elem_occurs_int))
+        elif np.all(u_elem_occurs_int < elem_occur_int):
+            elem_occur = str(np.max(u_elem_occurs_int))
+        else:
+            elem_occur = str(np.min(
+                u_elem_occurs_int[u_elem_occurs_int >= elem_occur_int]))
+        matched_elem_occurs = (parameters['ElementOccurence'] == elem_occur)
+        m = np.logical_and(matched_elem_names, matched_elem_occurs)
+    m = np.logical_and(m, parameters['ElementParameter'] == param_name)
+    assert np.sum(m) == 1
+
+    return parameters['ParameterValue'][m][0]
+
 def plot_twiss(
     result_filepath, result_file_type=None, slim=None, s_margin_m=0.1, s0_m=0.0,
     etax_unit='mm', right_margin_adj=0.88, print_scalars=None):
@@ -316,6 +342,7 @@ def plot_twiss(
 
         prof_center_y = - extra_dy * 0.6
         quad_height = extra_dy / 5.0
+        sext_height = quad_height * 1.5
         bend_half_height = quad_height/3.0
     ax1.axhline(0.0, color='k', linestyle='-.')
     ax2 = ax1.twinx()
@@ -365,32 +392,15 @@ def plot_twiss(
                 continue
 
             elem_type = elem_type.upper()
+
             if elem_type in ('QUAD', 'KQUAD'):
-                matched_elem_names = (parameters['ElementName'] == elem_name)
-                matched_elem_occurs = (parameters['ElementOccurence'] == elem_occur)
-                m = np.logical_and(matched_elem_names, matched_elem_occurs)
-                if np.sum(m) == 0:
-                    m = np.where(matched_elem_names)[0]
-                    u_elem_occurs_int = np.unique(parameters['ElementOccurence'].astype(int)[m])
-                    elem_occur_int = int(elem_occur)
-                    if np.all(u_elem_occurs_int > elem_occur_int):
-                        elem_occur = str(np.min(u_elem_occurs_int))
-                    elif np.all(u_elem_occurs_int < elem_occur_int):
-                        elem_occur = str(np.max(u_elem_occurs_int))
-                    else:
-                        elem_occur = str(np.min(
-                            u_elem_occurs_int[u_elem_occurs_int >= elem_occur_int]))
-                    matched_elem_occurs = (parameters['ElementOccurence'] == elem_occur)
-                    m = np.logical_and(matched_elem_names, matched_elem_occurs)
-                m = np.logical_and(m, parameters['ElementParameter'] == 'K1')
-                assert np.sum(m) == 1
-                K1 = parameters['ParameterValue'][m]
+
+                K1 = _get_param_val('K1', parameters, elem_name, elem_occur)
+                c = 'r'
                 if K1 >= 0.0: # Focusing Quad
                     bottom, top = 0.0, quad_height
-                    c = 'r'
                 else: # Defocusing Quad
                     bottom, top = -quad_height, 0.0
-                    c = 'b'
 
                 # Shift vertically
                 bottom += prof_center_y
@@ -403,7 +413,33 @@ def plot_twiss(
                 ax.add_patch(p)
 
             elif elem_type in ('SEXT', 'KSEXT'):
-                ax.plot([prev_s, cur_s], np.array([0.0, 0.0]) + prof_center_y, 'k-')
+
+                K2 = _get_param_val('K2', parameters, elem_name, elem_occur)
+                c = 'b'
+                if K2 >= 0.0: # Focusing Sext
+                    bottom, mid_h, top = 0.0, sext_height / 2, sext_height
+                else: # Defocusing Sext
+                    bottom, mid_h, top = -sext_height, -sext_height / 2, 0.0
+
+                # Shift vertically
+                bottom += prof_center_y
+                mid_h += prof_center_y
+                top += prof_center_y
+
+                mid_s = (prev_s + cur_s) / 2
+
+                if K2 >= 0.0: # Focusing Sext
+                    xy = np.array([
+                        [prev_s, bottom], [prev_s, mid_h], [mid_s, top],
+                        [cur_s, mid_h], [cur_s, bottom]
+                    ])
+                else:
+                    xy = np.array([
+                        [prev_s, top], [prev_s, mid_h], [mid_s, bottom],
+                        [cur_s, mid_h], [cur_s, top]
+                    ])
+                p = patches.Polygon(xy, closed=True, fill=True, color=c)
+                ax.add_patch(p)
 
             elif elem_type in ('RBEND', 'SBEND', 'SBEN', 'CSBEND'):
                 bottom, top = -bend_half_height, bend_half_height
