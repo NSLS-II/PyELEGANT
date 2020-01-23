@@ -1,18 +1,52 @@
 program_name = 'pyelegant'
 
 from setuptools import setup, find_packages
+from setuptools.command.install import install
+
+facility_name_arg = 'facility-name'
+
+class InstallCommand(install):
+    """"""
+
+    user_options = install.user_options + [
+        (f'{facility_name_arg}=', None, 'Facility name for remote running')
+    ]
+
+    def initialize_options(self):
+        """"""
+        install.initialize_options(self)
+        self.facility_name = None
+
+    def finalize_options(self):
+        """"""
+        print(f'Specified facility name for remote runs is "{self.facility_name}"')
+        install.finalize_options(self)
+
+    def run(self):
+        """"""
+        print(self.facility_name)
+        install.run(self)
 
 import sys
 import os
 import json
 
+#print('sys.argv contents:')
 #print(sys.argv)
+#print(' ')
 
 facility_json_filename = 'facility.json'
 
 if ('install' in sys.argv) or ('sdist' in sys.argv):
 
-    facility_name = sys.argv[2]
+    facility_name_opt = [v for v in sys.argv if v.startswith(f'--{facility_name_arg}=')]
+    if len(facility_name_opt) == 0:
+        raise ValueError(f'Required arg "--{facility_name_arg}" is missing')
+    elif len(facility_name_opt) > 1:
+        raise ValueError(f'Multiple arg "--{facility_name_arg}" found')
+
+    facility_name = facility_name_opt[0][len(f'--{facility_name_arg}='):]
+
     available_facility_names = ['nsls2apcluster',]
     if facility_name not in available_facility_names:
         print('* Only the following facility names are available:')
@@ -25,7 +59,7 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
         this_folder, 'src', 'pyelegant', facility_json_filename), 'w') as f:
         json.dump({'name': facility_name}, f)
 
-    sys.argv = sys.argv[:2]
+    sys.argv.remove(facility_name_opt[0])
 
     if 'sdist' in sys.argv:
         # Modify the tarball name to be "pyelegant-{facility_name}-?.?.?.tar.gz"
@@ -44,5 +78,6 @@ setup(
     description = 'Python Interface to Elegant',
     author = 'Yoshiteru Hidaka',
     maintainer = 'Yoshiteru Hidaka',
-    maintainer_email = 'yhidaka@bnl.gov'
+    maintainer_email = 'yhidaka@bnl.gov',
+    cmdclass={'install': InstallCommand},
 )
