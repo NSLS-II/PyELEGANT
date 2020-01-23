@@ -2115,6 +2115,32 @@ class EleDesigner():
             return None
 
     #----------------------------------------------------------------------
+    def get_LTE_all_elem_defs(self):
+        """"""
+
+        return self._LTE.elem_defs
+
+    #----------------------------------------------------------------------
+    def get_LTE_all_beamline_defs(self):
+        """"""
+
+        return self._LTE.beamline_defs
+
+    #----------------------------------------------------------------------
+    def get_LTE_used_beamline_name(self):
+        """"""
+
+        return self._LTE.used_beamline_name
+
+    #----------------------------------------------------------------------
+    def get_LTE_all_elem_names(self):
+        """
+        Returns all the element names for the used beamline in s-pos order
+        """
+
+        return self._LTE.flat_used_elem_names
+
+    #----------------------------------------------------------------------
     def get_LTE_all_kickers(self, spos_sorted=False) -> dict:
         """"""
 
