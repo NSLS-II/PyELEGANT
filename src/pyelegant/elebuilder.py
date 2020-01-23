@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from pathlib import Path
 import tempfile
 import glob
+import ast
 
 from . import util
 from . import sdds
@@ -829,6 +830,13 @@ class InfixEquation():
     def __init__(self, variable_str_repr: str, rpn_conv_post_repl: List = None,
                  double_format: str = '.12g'):
         """Constructor"""
+
+        try:
+            ast.parse(variable_str_repr)
+        except SyntaxError as e:
+            print(e.text)
+            print(' ' * (e.offset - 1) + '^')
+            print('WARNING: Invalid infix expression')
 
         self.equation_repr = variable_str_repr
 
