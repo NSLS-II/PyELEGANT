@@ -19,6 +19,411 @@ from . import sdds
 from . import twiss
 from . import sigproc
 
+def calc_cmap_xy(
+    output_filepath, LTE_filepath, E_MeV, xmin, xmax, ymin, ymax, nx, ny,
+    n_turns=1, delta_offset=0.0, forward_backward=1,
+    use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
+    output_file_type=None, del_tmp_files=True,
+    run_local=False, remote_opts=None):
+    """"""
+
+    return _calc_cmap(
+        output_filepath, LTE_filepath, E_MeV, 'xy',
+        xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
+        nx=nx, ny=ny, n_turns=n_turns, delta_offset=delta_offset,
+        forward_backward=forward_backward,
+        use_beamline=use_beamline, N_KICKS=N_KICKS,
+        transmute_elements=transmute_elements, ele_filepath=ele_filepath,
+        output_file_type=output_file_type, del_tmp_files=del_tmp_files,
+        run_local=run_local, remote_opts=remote_opts)
+
+def calc_cmap_px(
+    output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, xmin, xmax, ndelta, nx,
+    n_turns=1, y_offset=0.0, forward_backward=1,
+    use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
+    output_file_type=None, del_tmp_files=True,
+    run_local=False, remote_opts=None):
+    """"""
+
+    return _calc_cmap(
+        output_filepath, LTE_filepath, E_MeV, 'px',
+        xmin=xmin, xmax=xmax, delta_min=delta_min, delta_max=delta_max,
+        nx=nx, ndelta=ndelta, n_turns=n_turns, y_offset=y_offset,
+        forward_backward=forward_backward,
+        use_beamline=use_beamline, N_KICKS=N_KICKS,
+        transmute_elements=transmute_elements, ele_filepath=ele_filepath,
+        output_file_type=output_file_type, del_tmp_files=del_tmp_files,
+        run_local=run_local, remote_opts=remote_opts)
+
+def _calc_cmap(
+    output_filepath, LTE_filepath, E_MeV, plane, xmin=-0.1, xmax=0.1, ymin=1e-6, ymax=0.1,
+    delta_min=0.0, delta_max=0.0, nx=20, ny=21, ndelta=1, n_turns=1,
+    delta_offset=0.0, y_offset=0.0, forward_backward=1,
+    use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
+    output_file_type=None, del_tmp_files=True,
+    run_local=False, remote_opts=None):
+    """"""
+
+    if plane == 'xy':
+        pass
+    elif plane == 'px':
+        pass
+    else:
+        raise ValueError('"plane" must be either "xy" or "px".')
+
+    if forward_backward < 1:
+        raise ValueError('"forward_backward" must be an integer >= 1.')
+
+    with open(LTE_filepath, 'r') as f:
+        file_contents = f.read()
+
+    input_dict = dict(
+        LTE_filepath=os.path.abspath(LTE_filepath), E_MeV=E_MeV, n_turns=n_turns,
+        forward_backward=forward_backward, use_beamline=use_beamline,
+        N_KICKS=N_KICKS, transmute_elements=transmute_elements,
+        ele_filepath=ele_filepath, del_tmp_files=del_tmp_files, run_local=run_local,
+        remote_opts=remote_opts,
+        lattice_file_contents=file_contents,
+        timestamp_ini=util.get_current_local_time_str(),
+    )
+    input_dict['cmap_plane'] = plane
+    if plane == 'xy':
+        input_dict['xmin'] = xmin
+        input_dict['xmax'] = xmax
+        input_dict['ymin'] = ymin
+        input_dict['ymax'] = ymax
+        input_dict['nx'] = nx
+        input_dict['ny'] = ny
+        input_dict['delta_offset'] = delta_offset
+
+        plane_specific_chaos_map_block_opts = dict(
+            xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
+            delta_min=delta_offset, delta_max=delta_offset, nx=nx, ny=ny, ndelta=1)
+    else:
+        input_dict['delta_min'] = delta_min
+        input_dict['delta_max'] = delta_max
+        input_dict['xmin'] = xmin
+        input_dict['xmax'] = xmax
+        input_dict['ndelta'] = ndelta
+        input_dict['nx'] = nx
+        input_dict['y_offset'] = y_offset
+
+        plane_specific_chaos_map_block_opts = dict(
+            xmin=xmin, xmax=xmax, ymin=y_offset, ymax=y_offset,
+            delta_min=delta_min, delta_max=delta_max, nx=nx, ny=1, ndelta=ndelta)
+
+    output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
+    input_dict['output_file_type'] = output_file_type
+
+    if output_file_type in ('hdf5', 'h5'):
+        util.save_input_to_hdf5(output_filepath, input_dict)
+
+    if ele_filepath is None:
+        tmp = tempfile.NamedTemporaryFile(
+            dir=os.getcwd(), delete=False, prefix=f'tmpCMAP{plane}_', suffix='.ele')
+        ele_filepath = os.path.abspath(tmp.name)
+        tmp.close()
+
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
+
+    elebuilder.add_transmute_blocks(ed, transmute_elements)
+
+    ed.add_newline()
+
+    ed.add_block('run_setup',
+        lattice=LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline,
+        semaphore_file='%s.done')
+
+    ed.add_newline()
+
+    ed.add_block('run_control', n_passes=n_turns)
+
+    ed.add_newline()
+
+    elebuilder.add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+
+    ed.add_block('bunched_beam', n_particles_per_bunch=1)
+
+    ed.add_newline()
+
+    ed.add_block('twiss_output', filename='%s.twi')
+
+    ed.add_newline()
+
+    ed.add_block('chaos_map',
+        output='%s.cmap', forward_backward=forward_backward, verbosity=False,
+        **plane_specific_chaos_map_block_opts
+    )
+
+    ed.write()
+    #print(ed.actual_output_filepath_list)
+
+    for fp in ed.actual_output_filepath_list:
+        if fp.endswith('.cmap'):
+            cmap_output_filepath = fp
+        elif fp.endswith('.twi'):
+            twi_filepath = fp
+        elif fp.endswith('.done'):
+            done_filepath = fp
+        else:
+            raise ValueError('This line should not be reached.')
+
+    # Run Elegant
+    if run_local:
+        run(ele_filepath, print_cmd=False,
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'])
+    else:
+        if remote_opts is None:
+            remote_opts = dict(
+                use_sbatch=False, pelegant=True, job_name='cmap',
+                output='cmap.%J.out', error='cmap.%J.err',
+                partition='normal', ntasks=50)
+
+        remote.run(remote_opts, ele_filepath, print_cmd=True,
+                   print_stdout=std_print_enabled['out'],
+                   print_stderr=std_print_enabled['err'],
+                   output_filepaths=None)
+
+    tmp_filepaths = dict(cmap=cmap_output_filepath)
+    output, meta = {}, {}
+    for k, v in tmp_filepaths.items():
+        try:
+            output[k], meta[k] = sdds.sdds2dicts(v)
+        except:
+            continue
+
+    timestamp_fin = util.get_current_local_time_str()
+
+    if output_file_type in ('hdf5', 'h5'):
+        util.robust_sdds_hdf5_write(
+            output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
+        f = h5py.File(output_filepath)
+        f['timestamp_fin'] = timestamp_fin
+        f.close()
+
+    elif output_file_type == 'pgz':
+        mod_output = {}
+        for k, v in output.items():
+            mod_output[k] = {}
+            if 'params' in v:
+                mod_output[k]['scalars'] = v['params']
+            if 'columns' in v:
+                mod_output[k]['arrays'] = v['columns']
+        mod_meta = {}
+        for k, v in meta.items():
+            mod_meta[k] = {}
+            if 'params' in v:
+                mod_meta[k]['scalars'] = v['params']
+            if 'columns' in v:
+                mod_meta[k]['arrays'] = v['columns']
+        util.robust_pgz_file_write(
+            output_filepath, dict(data=mod_output, meta=mod_meta,
+                                  input=input_dict, timestamp_fin=timestamp_fin),
+            nMaxTry=10, sleep=10.0)
+    else:
+        raise ValueError()
+
+    if del_tmp_files:
+        for fp in ed.actual_output_filepath_list + [ele_filepath]:
+            if fp.startswith('/dev'):
+                continue
+            else:
+                try:
+                    os.remove(fp)
+                except:
+                    print(f'Failed to delete "{fp}"')
+
+    return output_filepath
+
+def plot_cmap_xy(
+    output_filepath, title='', xlim=None, ylim=None, scatter=True,
+    is_log10=True, cmin=-24, cmax=-10):
+    """"""
+
+    _plot_cmap(output_filepath, title=title, xlim=xlim, ylim=ylim,
+               scatter=scatter, is_log10=is_log10, cmin=cmin, cmax=cmax)
+
+def plot_cmap_px(
+    output_filepath, title='', deltalim=None, xlim=None, scatter=True,
+    is_log10=True, cmin=-24, cmax=-10):
+    """"""
+
+    _plot_cmap(output_filepath, title=title, deltalim=deltalim, xlim=xlim,
+               scatter=scatter, is_log10=is_log10, cmin=cmin, cmax=cmax)
+
+def _plot_cmap(
+    output_filepath, title='', xlim=None, ylim=None, deltalim=None,
+    scatter=True, is_log10=True, cmin=-24, cmax=-10):
+    """"""
+
+    try:
+        d = util.load_pgz_file(output_filepath)
+        plane = d['input']['cmap_plane']
+        g = d['data']['cmap']['arrays']
+        if plane == 'xy':
+            v1 = g['x']
+            v2 = g['y']
+        elif plane == 'px':
+            v1 = g['delta']
+            v2 = g['x']
+        else:
+            raise ValueError(f'Unexpected "cmap_plane" value: {plane}')
+
+        survived = g['Survived'].astype(bool)
+
+        if is_log10:
+            chaos = g['Log10dF']
+        else:
+            chaos = g['dF']
+
+        if not scatter:
+            g = d['input']
+            if plane == 'xy':
+                v1max = g['xmax']
+                v1min = g['xmin']
+                v2max = g['ymax']
+                v2min = g['ymin']
+                n1 = g['nx']
+                n2 = g['ny']
+            else:
+                v1max = g['delta_max']
+                v1min = g['delta_min']
+                v2max = g['xmax']
+                v2min = g['xmin']
+                n1 = g['ndelta']
+                n2 = g['nx']
+
+    except:
+        f = h5py.File(output_filepath, 'r')
+        plane = f['input']['cmap_plane'][()]
+        g = f['cmap']['arrays']
+        if plane == 'xy':
+            v1 = g['x'][()]
+            v2 = g['y'][()]
+        elif plane == 'px':
+            v1 = g['delta'][()]
+            v2 = g['x'][()]
+        else:
+            raise ValueError(f'Unexpected "cmap_plane" value: {plane}')
+
+        survived = g['Survived'][()].astype(bool)
+
+        if is_log10:
+            chaos = g['Log10dF'][()]
+        else:
+            chaos = g['dF'][()]
+
+        if not scatter:
+            g = f['input']
+            if plane == 'xy':
+                v1max = g['xmax'][()]
+                v1min = g['xmin'][()]
+                v2max = g['ymax'][()]
+                v2min = g['ymin'][()]
+                n1 = g['nx'][()]
+                n2 = g['ny'][()]
+            else:
+                v1max = g['delta_max'][()]
+                v1min = g['delta_min'][()]
+                v2max = g['xmax'][()]
+                v2min = g['xmin'][()]
+                n1 = g['ndelta'][()]
+                n2 = g['nx'][()]
+
+        f.close()
+
+    chaos[~survived] = np.nan
+
+    if plane == 'xy':
+        v1name, v2name = 'x', 'y'
+        v1unitsymb, v2unitsymb = r'\mathrm{mm}', r'\mathrm{mm}'
+        v1unitconv, v2unitconv = 1e3, 1e3
+        v1lim, v2lim = xlim, ylim
+    else:
+        v1name, v2name = '\delta', 'x'
+        v1unitsymb, v2unitsymb = r'\%', r'\mathrm{mm}'
+        v1unitconv, v2unitconv = 1e2, 1e3
+        v1lim, v2lim = deltalim, xlim
+
+    if is_log10:
+        EQ_STR = r'$\rm{log}_{10}(\Delta)$'
+        values = chaos
+    else:
+        EQ_STR = r'$\Delta$'
+        values = chaos
+
+    LB = cmin
+    UB = cmax
+
+    if scatter:
+
+        font_sz = 18
+
+        plt.figure()
+        plt.scatter(v1 * v1unitconv, v2 * v2unitconv, s=14, c=values, cmap='jet',
+                    vmin=LB, vmax=UB)
+        plt.xlabel(fr'${v1name}\, [{v1unitsymb}]$', size=font_sz)
+        plt.ylabel(fr'${v2name}\, [{v2unitsymb}]$', size=font_sz)
+        if v1lim is not None:
+            plt.xlim([v * v1unitconv for v in v1lim])
+        if v2lim is not None:
+            plt.ylim([v * v2unitconv for v in v2lim])
+        if title != '':
+            plt.title(title, size=font_sz)
+        cb = plt.colorbar()
+        try:
+            cb.set_ticks(range(LB, UB+1))
+            cb.set_ticklabels([str(i) for i in range(LB, UB+1)])
+        except:
+            pass
+        cb.ax.set_title(EQ_STR)
+        cb.ax.title.set_position((0.5, 1.02))
+        plt.tight_layout()
+
+    else:
+
+        font_sz = 18
+
+        v1array = np.linspace(v1min, v1max, n1)
+        v2array = np.linspace(v2min, v2max, n2)
+
+        V1, V2 = np.meshgrid(v1array, v2array)
+        D = V1 * np.nan
+
+        v1inds = np.argmin(np.abs(
+            v1array.reshape((-1,1)) @ np.ones((1, v1.size)) - v1), axis=0)
+        v2inds = np.argmin(np.abs(
+            v2array.reshape((-1,1)) @ np.ones((1, v2.size)) - v2), axis=0)
+        flatinds = np.ravel_multi_index((v1inds, v2inds), V1.T.shape, order='F')
+        D_flat = D.flatten()
+        D_flat[flatinds] = values
+        D = D_flat.reshape(D.shape)
+
+        D = np.ma.masked_array(D, np.isnan(D))
+
+        plt.figure()
+        ax = plt.subplot(111)
+        plt.pcolor(V1*v1unitconv, V2*v2unitconv, D, cmap='jet', vmin=LB, vmax=UB)
+        plt.xlabel(fr'${v1name}\, [{v1unitsymb}]$', size=font_sz)
+        plt.ylabel(fr'${v2name}\, [{v2unitsymb}]$', size=font_sz)
+        if v1lim is not None:
+            plt.xlim([v * v1unitconv for v in v1lim])
+        if v2lim is not None:
+            plt.ylim([v * v2unitconv for v in v2lim])
+        if title != '':
+            plt.title(title, size=font_sz)
+        cb = plt.colorbar()
+        try:
+            cb.set_ticks(range(LB, UB+1))
+            cb.set_ticklabels([str(i) for i in range(LB, UB+1)])
+        except:
+            pass
+        cb.ax.set_title(EQ_STR)
+        cb.ax.title.set_position((0.5, 1.02))
+        plt.tight_layout()
+
+
 def calc_fma_xy(
     output_filepath, LTE_filepath, E_MeV, xmin, xmax, ymin, ymax, nx, ny,
     n_turns=1024, delta_offset=0.0, quadratic_spacing=False, full_grid_output=False,

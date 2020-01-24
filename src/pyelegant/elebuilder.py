@@ -38,6 +38,7 @@ class EleBlocks():
 
         self._parse_alter_elements()
         self._parse_bunched_beam()
+        self._parse_chaos_map()
         self._parse_chromaticity()
         self._parse_closed_orbit()
         self._parse_correct_tunes()
@@ -214,10 +215,40 @@ class EleBlocks():
         ''')
 
     #----------------------------------------------------------------------
-    def _parse_chromaticity(self):
+    def _parse_chaos_map(self):
         """"""
 
         # Elegant Manual Section 7.11
+        self._parse_block_def('''
+        &chaos_map
+            STRING output = NULL;
+            double xmin = -0.1;
+            double xmax = 0.1;
+            double ymin = 1e-6;
+            double ymax = 0.1;
+            double delta_min = 0;
+            double delta_max = 0;
+            long nx = 20;
+            long ny = 21;
+            long ndelta = 1;
+            long forward_backward = 0;
+            double change_x = 1e-6;
+            double change_y = 1e-6;
+            long verbosity = 1;
+        &end
+        ''')
+
+        d = self.info['chaos_map']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('output')][3] = '%s.cmap'
+
+    #----------------------------------------------------------------------
+    def _parse_chromaticity(self):
+        """"""
+
+        # Elegant Manual Section 7.12
         self._parse_block_def('''
         &chromaticity
             STRING sextupoles = NULL;
