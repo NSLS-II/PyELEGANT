@@ -1,0 +1,33 @@
+#!/bin/bash 
+
+if [ "$1" = "" ] ; then 
+    echo "usage: checkStatus <rootname>"
+    exit 1
+fi
+if [[  ! ( -e $1.all ) && ! ( -e $1.best ) ]] ; then
+    echo "no files found"
+    exit 1
+fi
+
+echo "present time: `date +%F/%T`"
+if [ -e $1.all ] ; then
+    echo "last update: `ls -l --time-style=+%F/%T  $1.all | token -n=6`"
+    echo "total completed runs: `sdds2stream -rows $1.all`"
+    echo "rank 1 runs: `sdds2stream -rows $1.best`"
+fi
+echo "running: `qstat | fgrep $USER | fgrep -i \" r \" | wc -l`"
+echo "queued: `qstat | fgrep $USER | fgrep -i \" q \" | wc -l`"
+
+if [ -e $1.best ] ; then
+    echo ""
+
+    sddsprintout -col=runID -col=Rank -col=tLifetime -col=Area1 -col=ChromPenalty -col=nu? -col=dnu??dp -col=deltaLimitLT $1.best -width=180 
+
+    sddsplot -layout=1,2 \
+	-col=Time,Rank $1.sort -ticks=xtime -graph=sym \
+	-col=Time,Rank $1.sort -ticks=xtime -filter=col,Rank,1,1 -graph=sym,thick=2,subtype=2 \
+	-col=Time,Rank $1.sort -ticks=xtime -filter=col,runID,0,0 -graph=sym,subtype=1,thick=2 -end \
+	-col=Area1,tLifetime $1.all -graph=sym \
+	-col=Area1,tLifetime $1.best -graph=sym,thick=2,subtype=2 -topline="`date`" -pointLabel=runName,edit="Z-x/0/i/ /",scale=0.75 \
+	-col=Area1,tLifetime $1.all -graph=sym,subtype=1,thick=2 -filter=col,runID,0,0
+fi

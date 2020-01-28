@@ -1,0 +1,69 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+# Script computeLifetime
+# Used to compute the touschek lifetime from the local momentum aperture
+# including a cap on the maximum momentum aperture.
+
+set auto_path [linsert $auto_path 0  $env(OAG_TOP_DIR)/oag/apps/lib/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage {usage: computeLifetime -rootname <string> [-msectors <number>1] [-current <mA>(100)] [-bunches <number>(24)] [-coupling <value>(1.0) [-deltaLimit <%>(2.35)}
+set rootname ""
+set coupling .01
+set current 100.0
+set bunches 24
+set deltaLimit 2.35
+set args $argv
+if {[APSStrictParseArguments {rootname current bunches coupling msectors deltaLimit}] || ![string length $rootname]} {
+    return -code error "$usage"
+}
+
+if ![file exists ${rootname}.mmap] {
+    puts stderr "not found: ${rootname}.mmap"
+}
+if ![file exists ${rootname}.twi] {
+    puts stderr "not found: ${rootname}.twi"
+}
+
+# Figure out how many sectors are covered by the LMA data
+set circumference 1104.
+set sectors 40
+set lsector [expr (1.0*$circumference)/$sectors]
+
+set sMax [exec sddsprocess $rootname.mmap -pipe=out -process=s,max,sMax | sdds2stream -pipe -parameter=sMax]
+set msectors [expr int($sMax/$lsector+0.5)]
+
+if [expr $msectors<40] {
+    set sMax [exec sddsprocess $rootname.twi -pipe=out -process=s,max,sMax | sdds2stream -pipe -parameter=sMax]
+    set number [expr int((1.0*$sectors)/$msectors+0.5)]
+    eval exec sddscombine [APSReplicateItem -item $rootname.mmap -number $number] -pipe=out \
+	| sddsprocess -pipe "{-redefine=col,s,s i_page 1 - $sMax $sectors / * $msectors * +,units=m}" \
+	| sddscombine -pipe -merge \
+	| sddsprocess -pipe=in $rootname.mmapxt -filter=col,s,0,$sMax
+    # $rootname.mmapxt now contains the LMA for the full ring, created by replicating the data for $msectors sectors
+    # a sufficient number of times 
+    set mmapFile $rootname.mmapxt
+} else {
+    # $rootname.mmap is for the whole ring already
+    set mmapFile $rootname.mmap
+}
+
+
+# Compute bunch length using experimental curve for length (in mm) vs current (in mA) for APS
+set bunchCurrent [expr $current/(1.0*$bunches)]
+set length [expr 25.1*pow($bunchCurrent, 0.1484+0.0346*log($bunchCurrent))*0.29979]
+
+set charge [expr $bunchCurrent*(1104.0/2.9979e8)*1e6]
+set ex0 [exec sdds2stream -parameter=ex0 $rootname.twi]
+set Sdelta0 [exec sdds2stream -parameter=Sdelta0 $rootname.twi]
+
+exec touschekLifetime $rootname.ltime -twiss=${rootname}.twi -aperture=$mmapFile \
+      -coupling=$coupling -emitxInput=$ex0 -deltaInput=$Sdelta0 -charge=$charge -length=$length \
+      -deltaLimit=$deltaLimit -ignoreMismatch
+
+
+
+
+

@@ -1,0 +1,178 @@
+This directory provides an example of using the geneticOptimizer
+script to optimize the dynamic acceptance and lifetime of a storage
+ring.  This guide was prepared by Michael Borland, ANL, 6/2010.
+
+If you make use of these files or the techniques described herein,
+please reference the following paper: M. Borland, V. Sajaev, L. Emery,
+A. Xiao, "Multi-objective direct optimization of dynamic acceptance
+and lifetime for potential upgrades of the Advanced Photon Source,"
+APS Light Source Note LS-319, July 2010.
+
+We assume that a linux system is being used with a distributed queue
+similar to Sun GridEngine (more below).  We also assume the presence
+of the OAG software distribution, including elegant, SDDS, and the
+geneticOptimizer script.  All of these are available on our web site.
+
+*** Files in this distribution:
+
+aps.lte --- Simplified APS lattice file (40-fold symmetric).  For
+other lattices, it is recommended to use only symplectic elements
+(KQUAD, KSEXT, CSBEND, etc.).  Three beamlines must be defined (ring,
+ringw, and ringrf).  See the comments in the file.
+
+aps.ele --- Basic run to check the lattice
+
+geneticOptimizer.local --- This is a file that can be used to
+customize the job submission method to your particular system.  If you
+must do this, then this file must be in the directory from which
+geneticOptimizer is run.
+
+optim1.sdds --- geneticOptimizer configuration file.   This one is
+set up for a small cluster (40 nodes).  The starting conditions are
+deliberately "messed up" so that the optimizer has to work harder.
+More information on this file can be obtained from the command
+% geneticOptimizer -help 1
+
+runJob1 --- Script to allow geneticOptimizer to perform an evaluation
+of a trial configuration.  This script contains several embedded
+parameters, such as the desired x and y chromaticities, and the number
+of turns to track.  The number of turns N should be chosen so that
+N*T0/tau is 0.1 or higher (see LS 319).
+
+matchTemplate.ele --- Elegant input file template used by runJob1 to
+change the tunes while maintaining other matching constraints.
+
+evalTemplate.ele --- Elegant input file template used by runJob1 to
+set the chromaticity, determine the tune vs momentum, determine the
+DA, and determine the LMA (local momentum aperture)
+
+processJob1 --- Script used by runJob1 to complete processing of a
+configuration.  It is invoked directly by runJob1 (instead of allowing
+geneticOptimizer to do it) so that we can use the cluster nodes for
+postprocessing.  This reduces the load on the cluster's head node.
+
+computeLifetime --- Script used by processJob1 to compute the Touschek
+lifetime from the LMA.  It uses the touschekLifetime program. Note
+that parameters of the beam are embedded in processJob1.
+
+checkStatus --- Script used to check the status of an optimization
+while it is running.
+
+log2input --- Script used to take the best result from a previous
+optimization and create a new optimization input file.  See below.
+
+*** Running the demo: please follow all steps!
+
+0. Check that your system is properly set up.
+
+% cd <demoDirectory>
+% which elegant
+% which sddsprocess
+% which geneticOptimizer
+% which runJob1
+
+If any of these returns a message saying that the command is not in
+your path or not found, then you need to fix your installation and/or
+path before proceeding.  The present directory (".") should be first
+in your path.
+
+1. Check that elegant is working
+
+% elegant aps.ele
+% plotTwiss -fileRoot aps
+
+N.B.: If plotTwiss doesn't work, then you are missing something from
+your installation.  Fix this before proceeding.
+
+2. Check your job submission system
+
+% which qsub
+% which qstat
+
+If not found, you need to have Sun Grid Engine or something similar
+installed on your cluster.  If your system uses something other than
+SGE, you'll need to modify geneticOptimizer.local to use the
+particular job submission commands of your system.  Also, you'll need
+to modify checkStatus to use the particular job query commands of your
+system.
+
+3. Start the optimization
+
+% geneticOptimizer -input optim1.sdds -reduce 1
+(Note that the "-reduce 1" option tells geneticOptimizer to remove poor
+solutions, to save disk space.)
+
+If you get errors here, you may need to customize the
+geneticOptimizer.local file.
+
+Generally, this script should be left running for several days.
+To stop, just use control-C.
+
+In a separate terminal, you should use qstat (or whatever the
+equivalent is for your system) to verify that the jobs are running.
+Jobs will take 3~4 hours for this example.  You'll see messages as
+geneticOptimizer detects and collates results from processed jobs.
+
+4. After letting things run for 3~4 hours: in a separate terminal,
+check the status of the optimization (there's no point in doing this
+until you some jobs have finished).
+
+% checkStatus optim1
+
+This will plot the solutions, showing the pareto-optimal front and the
+starting point.  It will also show a table of the pareto-optimal
+solutions.
+
+At some point (e.g., after a day or two of running), you may want to
+reduce the randomness level to help it converge more efficiently.  To
+do this, use control-C to stop the optimizer, then restart as follows:
+% geneticOptimizer -input optim1.sdds -reduce 1 -contin 1 -errorFactor
+0.1 This will restart ("continue") with error levels reduced by a
+factor of 10.
+
+For the pareto-optimal solutions, you can view details as follows:
+Dynamic acceptance
+% sddsplot -column=x,y optim1-<runID>.aper
+Local momentum acceptance
+% sddsplot -column=s,delta????tive optim1-<runID>.mmap 
+Tunes vs momentum offset
+% sddsplot -col=MALIN.DP,"(CxFrequency,CyFrequency)" -graph=sym,vary optim1-<runID>.naff
+
+Note that <runID> needs to be the full 6-digit number (e.g., 000127, not 127).
+
+5. Perform ensemble evaluation.  
+
+This is important to validate your solution.  Typically, you'd stop
+the optimization first.  Any jobs that are still running can be killed
+using qdel (or the equivalent).  The recommended way to perform
+ensemble evaluation is using elegantRingAnalysis.
+
+After examining the pareto-optimal solutions, you can pick one that
+you think is the best.  The results from this solution are in files
+named, e.g., optim1-<runID>*.  The .param file in particular is the
+starting point for ensemble evaluation to validate the solution.
+
+You can "save" the solution files for your chosen best result as follows
+% saveSolution -rootname optim1 -runID <runID>
+This will rename the files from optim1-<runID>* to optim1-best*
+Check that this worked:
+% ls optim1-best*
+You can then delete all the other solutions (optionally)
+% \rm optim1-[0-9]*
+
+I suggest you also copy the best solution to a subdirectory for ensemble
+evaluation, just to reduce clutter.
+
+6. Run a new optimization starting from a solution in a previous optimization.
+
+Sometimes you want to restart from a previous solution.  Again, use
+checkStatus to view the pareto-optimal solutions. Pick a solution you
+like and note its "runID" value.  Use this value in a command like the
+following:
+% log2input -old optim1 -new optim2 -pick <desiredRunID>
+You may want to change some parameters of the optimization.  For example,
+I sometimes tweak the tunes to see if the optimization converges back to
+the same value
+% sddsedit optim2.sdds    
+% geneticOptimizer -input optim2.sdds
+
