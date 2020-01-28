@@ -1,0 +1,91 @@
+! Match one sector to the desired tunes, with other constraints
+
+&run_setup
+	lattice = aps.lte
+	p_central_mev = 7e3,
+	use_beamline = sector1,
+	default_order = 1,
+	parameters = %s.param,
+        final = %s.fin
+        rootname = <rootname>-linear,
+	semaphore_file = %s.done,
+&end
+
+&twiss_output
+	matched = 1,
+        output_at_each_step = 1
+        concat_order = 1
+        radiation_integrals = 1
+&end
+
+&run_control &end
+
+&optimization_setup
+        tolerance = 1e-14, target = 0,
+        n_passes = 3, n_evaluations = 1500, n_restarts = 5,
+        log_file = /dev/null,
+        verbose =0
+        output_sparsing_factor = 300
+&end
+
+&optimization_term
+        term = "nux 40 * <nuxTarget> 0.01 sene" &end
+&optimization_term
+        term = "nuy 40 * <nuyTarget> 0.01 sene" &end
+&optimization_term
+        term = "max.betax 30 .1 segt" &end
+&optimization_term
+        term = "max.betay 25 .1 segt" &end
+&optimization_term
+        term = "betax 20 .1 sene" &end
+&optimization_term
+        term = "betay 3 .1 sene" &end
+&optimization_term
+        term = "Sdelta0 etax * sqr ex0 / betax / 1 + sqrt ex0 * 3.2e-9 1e-10 segt" &end
+
+&optimization_variable
+        name = S1A:Q1, item=K1, lower_limit=-0.9, upper_limit=-0.01, step_size=0.01 &end
+&optimization_variable
+        name = S1A:Q2, item=K1, lower_limit=0.01, upper_limit=0.9 step_size=0.01 &end
+&optimization_variable
+        name = S1A:Q3, item=K1, lower_limit=-0.9, upper_limit=-0.01, step_size=0.01 &end
+&optimization_variable
+        name = S1A:Q4, item=K1, lower_limit=-0.9, upper_limit=-0.01, step_size=0.01 &end
+&optimization_variable
+        name = S1A:Q5, item=K1, lower_limit=0.01, upper_limit=0.9 step_size=0.01 &end
+
+&optimization_covariable
+        name = S1B:Q1, item = K1, equation = S1A:Q1.K1 &end
+&optimization_covariable
+        name = S1B:Q2, item = K1, equation = S1A:Q2.K1 &end
+&optimization_covariable
+        name = S1B:Q3, item = K1, equation = S1A:Q3.K1 &end
+&optimization_covariable
+        name = S1B:Q4, item = K1, equation = S1A:Q4.K1 &end
+&optimization_covariable
+        name = S1B:Q5, item = K1, equation = S1A:Q5.K1 &end
+
+&bunched_beam &end
+&optimize &end
+
+&run_setup
+	lattice = aps.lte
+	p_central_mev = 7e3,
+	use_beamline = sector1,
+	default_order = 1,
+	semaphore_file = %s.done,
+        rootname = <rootname>-linear,
+&end
+
+&load_parameters
+        filename = %s.param
+        change_defined_values = 1
+&end
+
+&twiss_output
+        radiation_integrals = 1
+	matched = 1,
+        filename = %s.twi
+        concat_order = 1
+&end
+

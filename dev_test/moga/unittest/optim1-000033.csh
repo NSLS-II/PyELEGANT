@@ -1,0 +1,7 @@
+#!/bin/csh 
+unset savehist
+ml elegant-latest
+echo running runJob1 on Linux apcpu-master 3.16.0-6-amd64 #1 SMP Debian 3.16.56-1+deb8u1 (2018-05-08) x86_64 GNU/Linux
+echo running runJob1 optim1-000033 S1AS1 S1AS2 S1BS3 S1BS2 S1BS1 nuxTarget nuyTarget 9.4929257171811816 -21.196030780539502 -9.7547463771023981 -21.496656110051283 9.5644793440344582 36.233123781164522 19.316520298455014 on Linux apcpu-master 3.16.0-6-amd64 #1 SMP Debian 3.16.56-1+deb8u1 (2018-05-08) x86_64 GNU/Linux
+cd /GPFS/APC/yhidaka/git_repos/mogaRing_copy
+./runJob1 -rootname optim1-000033 -tagList 'S1AS1 S1AS2 S1BS3 S1BS2 S1BS1 nuxTarget nuyTarget' -valueList '9.4929257171811816 -21.196030780539502 -9.7547463771023981 -21.496656110051283 9.5644793440344582 36.233123781164522 19.316520298455014' >& optim1-000033.log

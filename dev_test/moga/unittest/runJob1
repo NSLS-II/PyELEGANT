@@ -1,0 +1,105 @@
+#!/bin/sh
+# \
+exec oagtclsh "$0" "$@"
+
+# Script runJob1
+# Purpose: run jobs for genetic optimization of dynamic aperture and Touschek lifetime
+# M. Borland, ANL, 6/2010
+
+set auto_path [linsert $auto_path 0  $env(OAG_TOP_DIR)/oag/apps/lib/$env(HOST_ARCH)]
+catch {APSStandardSetup}
+
+set usage {usage: runJob1 -valueList <list> -tagList <list> -rootname <string> [-turns <number>]}
+# E.g., runTracking -tagList "S1 S2" -valueList "1.7 5.6" -rootname run001
+
+set valueList ""
+set tagList ""
+set rootname ""
+set args $argv
+if {[APSStrictParseArguments {valueList tagList rootname }] || ![string length $valueList] || \
+	![string length $tagList] || ![string length $rootname] } {
+    return -code error "$usage"
+}
+#puts stderr $rootname
+set valueList [split $valueList " ,"]
+set tagList   [split $tagList   " ,"]
+if [llength $valueList]!=[llength $tagList] {
+    return -code error "value and tag lists must be the same length"
+}
+
+set turns 400
+set xchrom 6
+set ychrom 6
+
+# Prepare macro option for passing to elegant
+set macroList rootname=$rootname,xchrom=$xchrom,ychrom=$ychrom,turns=$turns
+foreach value $valueList tag $tagList {
+    set $tag $value
+    lappend macroList $tag=$value
+}
+
+# Open log file
+set fd [open $rootname.log a]
+puts $fd "$rootname   $macroList"
+flush $fd
+
+# Use TMPDIR if defined, otherwise make a subdirectory
+set oldDir [pwd]
+if ![info exists env(TMPDIR)] {
+    exec mkdir $rootname
+    set env(TMPDIR) $rootname
+}
+
+# Copy all input files to the temporary directory
+puts -nonewline $fd "Copying files: "
+flush $fd
+foreach file [list matchTemplate.ele $rootname.inp evalTemplate.ele computeLifetime processJob1 aps.lte] {
+    exec cp $file $env(TMPDIR)/$file
+}
+puts $fd "done"
+flush $fd
+
+cd $env(TMPDIR)
+
+# Perform linear matching
+catch {exec elegant matchTemplate.ele -macro=[join $macroList ,]} result
+puts $fd "linear matching: $result"
+flush $fd
+
+# perform chromaticity correction, DA, LMA
+puts $fd "running elegant for chromaticity, DA, LMA"
+puts $fd "Check $oldDir/$rootname-main.log for status"
+flush $fd
+catch {exec elegant evalTemplate.ele -macro=[join $macroList ,] >& $oldDir/$rootname-main.log} result
+puts $fd "tracking: $result"
+flush $fd
+
+if [file exists $rootname.done0] {
+    set failed 0
+    catch {exec ./processJob1 -rootname $rootname -valueList "$valueList" -tagList "$tagList" -oldDir $oldDir \
+	-xchrom $xchrom -ychrom $ychrom }  result
+    if ![file exists $rootname.proc] {
+ 	puts $fd "processing failed: $result"
+	flush $fd
+	foreach file [glob -nocomplain ${rootname}*] {
+	    file copy -force $file $oldDir/errorLog/$file
+	}
+    }
+}
+
+puts $fd "[glob -nocomplain ${rootname}*]"
+
+# Copy files back to the main directory
+foreach exten {.twi .proc .param .aper .mmap .w1 .naff .fin} {
+    if [catch {file copy -force ./$rootname$exten $oldDir/$rootname$exten} result] {
+	puts $fd "** Problem copying ./$rootname$exten to $oldDir/$rootname$exten: $result"
+    } else {
+	puts $fd "Copied ./$rootname$exten to $oldDir/$rootname$exten"
+    }
+}
+close $fd
+
+# Create semaphore to tell the optimizer that this run is done
+set fdd [open $oldDir/$rootname.done w]
+close $fdd
+

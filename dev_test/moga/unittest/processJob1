@@ -1,0 +1,199 @@
+#!/bin/sh
+# \
+exec oagtclsh "$0" "$@"
+
+# Script processJob1
+# Purpose: post-process jobs for genetic optimization of dynamic aperture and Touschek lifetime
+# M. Borland, ANL, 6/2010
+
+set auto_path [linsert $auto_path 0  $env(OAG_TOP_DIR)/oag/apps/lib/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage {usage: processJob1 -valueList <list> -tagList <list> -rootname <string>}
+
+set valueList ""
+set tagList ""
+set rootname ""
+set oldDir [pwd]
+set xchrom 5
+set ychrom 5
+set args $argv
+if {[APSStrictParseArguments {oldDir valueList tagList rootname runID xchrom ychrom}] || \
+	![string length $rootname] } {
+    return -code error "$usage"
+}
+
+# Check semaphores to see if processing has already started or been done
+if [file exists $rootname.procStart] exit
+if [file exists $rootname.proc] exit
+set fd [open $rootname.procStart w]
+close $fd
+
+set fd [open $oldDir/$rootname.plog a]
+puts $fd [clock format [clock seconds]]
+
+proc failAndExit {result} {
+    global rootname fd runID argv
+    puts $fd "\nError processing data: argv=$argv\nrunID=$runID, rootname=$rootname\n$result"
+    puts $fd "Files for this rootname: [glob -nocomplain $rootname.*]"
+    if [catch {set flog [open $rootname.log r]} result] {
+        puts $fd "$result"
+    } else {
+        while {![eof $flog]} {
+            gets $flog data
+            puts $fd $data
+        }
+        close $flog
+    }
+    close $fd
+    exit 1
+}
+
+proc waitForFiles {args} {
+    # wait for the files to all exist
+    # can be helpful if the file server has problems
+    global notFoundList
+    set notFoundList ""
+    set rootname ""
+    set extensionList ""
+    APSStrictParseArguments {rootname extensionList}
+    set ok 0
+    set tries 5
+    while {!$ok && $tries} {
+	set ok 1
+        set notFoundList ""
+	foreach exten $extensionList {
+	    if [string compare "ok" [exec sddscheck $rootname.$exten]]!=0 {
+                lappend notFoundList $rootname.$exten
+                set ok 0
+            }
+	}
+	if !$ok {
+            after 5000
+            incr tries -1
+        }
+    }
+    return $ok
+}
+
+if ![waitForFiles -rootname $rootname -extensionList [list inp aper mmap twi]] {
+    failAndExit "Unable to find needed files: $notFoundList"
+}
+
+puts $fd "[clock format [clock seconds]]: files found"
+
+# Extract the run ID from the rootname
+#set runID [os editstring e6b6kay100D $rootname]
+regexp {(.*)(......)} $rootname dummy1 dummy2 runID
+puts $fd "runID: $runID"
+
+# Compute the maximum stable momentum deviation by looking at
+# tunes vs momentum.  This is simply to avoid major resonance
+# crossings that might be stable (e.g., due to large tune shift
+# with amplitude), but that make me nervous.
+
+set deltaLimit 2.35e-2
+if {[file exists $rootname.w1] && [file exists $rootname.fin]} {
+    exec sddscollapse $rootname.fin $rootname.finc
+
+    # First, look for cases where the particle is lost and find the minimum
+    # |delta|
+    if [catch {exec sddsprocess $rootname.finc -pipe=out -nowarning \
+                 "-define=col,deltaAbs,MALIN.DP abs" \
+                 -filter=column,Transmission,1,1,! \
+                 -process=deltaAbs,min,%sMin \
+                 | sdds2stream -pipe -parameter=deltaAbsMin} result] {
+        failAndExit "delta limit 1: $result"
+    }
+    puts $fd "Delta limit 1 : $result"
+    if {![string match *e+308 $result] && [expr $result<$deltaLimit]} {
+        set deltaLimit $result
+    }
+
+    # Second, look for undefined tunes
+    if [catch {exec sddsnaff $rootname.w1 -pipe=out \
+                 -column=Pass -pair=Cx,Cxp -pair=Cy,Cyp -terminate=frequencies=1 \
+                 | sddscombine -pipe -merge \
+                 | sddsxref -pipe $rootname.finc -take=MALIN.DP \
+                 | sddsprocess -pipe "-define=column,deltaAbs,MALIN.DP abs" \
+	         -filter=col,deltaAbs,1e-3,1 \
+                 | sddssort -pipe -column=deltaAbs \
+                 | sddsprocess -nowarning -pipe=in $rootname.naff -process=C*Frequency,first,%s0 } result] {
+        failAndExit "delta limit 2: $result"
+    }
+
+    if [catch {exec sddsprocess -nowarning $rootname.naff -pipe=out -filter=col,CxFrequency,-1,-1,CyFrequency,-1,-1,|  \
+                 -process=deltaAbs,min,%sMin \
+             | sdds2stream -pipe -parameter=deltaAbsMin} result] {
+        failAndExit "delta limit 3: $result"
+    }
+    puts $fd "Delta limit 2: $result"
+    if {![string match *e+308 $result] && [expr $result<$deltaLimit]} {
+        set deltaLimit $result
+    }
+
+    # Look for integer or half-integer crossings
+    foreach plane {x y} {
+        if [catch {exec sddsprocess $rootname.naff -pipe=out -nowarning \
+                     "-define=column,badTune,C${plane}Frequency 2 * int C${plane}Frequency0 2 * int - abs" \
+                     -filter=col,badTune,1,1 \
+                     -process=deltaAbs,min,%sMin \
+                     | sdds2stream -pipe -parameter=deltaAbsMin} result] {
+            failAndExit "delta limit 4 ($plane): $result"
+        }
+        puts $fd "Delta limit 3 ($plane): $result"
+	if {![string match *e+308 $result] && [expr $result<$deltaLimit]} {
+            set deltaLimit $result
+        }
+    }
+    puts $fd "New delta limit: $deltaLimit"
+}
+
+# Compute the Touschek lifetime for 100 mA in 24 bunches.
+# The local momentum aperture is capped at the value we just computed usig the -deltaLimit option
+if [catch {exec ./computeLifetime -rootname $rootname -current 100 -bunches 24 -coupling 0.01 -deltaLimit [expr 100*$deltaLimit]} result] {
+    failAndExit "$result"
+}
+puts $fd "Lifetime done"
+
+# Postprocess to find the DA area and create the penalty-function columns
+# ChromPenalty, DAPenalty, and LTPenalty for chromaticity, DA, and lifetime
+
+# The processing of the .aper file uses the clipped DA boundary (yClipped
+# and xClipped).  The xClipped data is further limited to <7mm, because at
+# APS we inject on the negative side and don't care about positive DA beyond
+# that.
+
+if [catch {exec sddsprocess $rootname.mmap -pipe=out \
+        "-define=column,deltaLimit,deltaPositive deltaNegative abs 2 minn" \
+        -process=deltaLimit,min,%sMin \
+        | sddscollapse -pipe=in $rootname.mmapc
+    exec sddscollapse $rootname.twi $rootname.twic
+    exec sddscollapse $rootname.ltime $rootname.ltimec
+    exec sddsprocess $rootname.aper -pipe=out \
+	     "-define=column,xClipped1,xClipped 0.007 > ? 0.007 : xClipped $ ,units=m" \
+	     -process=yClipped,integral,Area1,functionOf=xClipped1 \
+             | sddscollapse -pipe \
+	     | sddsxref $rootname.ltimec -pipe -take=* \
+             | sddsxref $rootname.inp -pipe -take=* \
+             | sddsxref $rootname.mmapc -pipe -take=* -nowarning \
+             | sddsxref $rootname.twic -pipe -take=* \
+             | sddsprocess -pipe=in $rootname.proc1 \
+             "-redefine=column,deltaLimitLT,$deltaLimit" \
+             "-reprint=column,runName,$rootname" \
+             "-redefine=column,runID,$runID,type=long" \
+	     "-redefine=column,Time,[clock seconds],units=s,type=long" \
+             "-redefine=column,ChromPenalty,dnux/dp $xchrom .01 sene  dnuy/dp $ychrom .01 sene +" \
+             "-redefine=column,DAPenalty,Area1 chs" \
+             "-redefine=column,LTPenalty,tLifetime chs" } result] {
+    failAndExit "$result"
+}
+
+puts $fd "Processing done"
+
+file rename -force $rootname.proc1 $rootname.proc
+
+close $fd
+
+exit 0
+

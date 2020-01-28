@@ -1,0 +1,76 @@
+#!/bin/sh
+# \
+exec oagtclsh "$0" "$@"
+
+# These two procedures may need to be customized to your installation.
+# If so, then this file (i.e,. your modified version of it) needs to
+# be in the directory from which you run geneticOptimizer.
+
+proc SubmitJob {args} {
+    set code ""
+    set input ""
+    APSStrictParseArguments {code input}
+    global env
+    eval file delete -force $input.log [file rootname $input].done
+    set tmpFile [file rootname $input].csh
+    set fd [open $tmpFile w]
+    puts $fd "#!/bin/csh "
+    puts $fd "ml elegant-latest"
+    puts $fd "unset savehist"
+    puts $fd "echo running $code $input on [exec uname -a]"
+    puts $fd "cd [pwd]"
+    puts $fd "./$code $input >& $input.log"
+    close $fd
+
+    catch {exec sbatch -o [pwd] -J [file root [file tail $input]] $tmpFile } result
+
+    return "$result"
+}
+
+proc SubmitRunScript {args} {
+    set script ""
+    set tagList ""
+    set valueList ""
+    set rootname ""
+    APSStrictParseArguments {script rootname tagList valueList}
+    global env
+
+    eval file delete -force $rootname.log $rootname.done $rootname.run
+    #set tmpFile [file rootname $rootname].csh
+    set tmpFile [file rootname $rootname].py
+    APSAddToTempFileList $tmpFile
+    set fd [open $tmpFile w]
+    #puts $fd "#!/bin/csh "
+    #puts $fd "unset savehist"
+    #puts $fd "ml elegant-latest"
+    puts $fd "echo Using python executable = [exec which python]"
+    puts $fd "echo running $script on [exec uname -a]"
+    puts $fd "echo running $script $rootname $tagList $valueList on [exec uname -a]"
+    puts $fd "cd [pwd]"
+    #puts $fd "./$script -rootname $rootname -tagList '$tagList' -valueList '$valueList' >& $rootname.log"
+    puts $fd "python $script -rootname $rootname -tagList '$tagList' -valueList '$valueList' >& $rootname.log"
+    close $fd
+
+    #catch {exec cat $tmpFile | qsub -V -o [pwd] -j y -N [file root [file tail $rootname]] } result
+    #catch {exec sbatch -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] $tmpFile } result
+
+    #catch {exec srun -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] --ntasks=1 bash $tmpFile & } result
+    catch {exec srun -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] bash $tmpFile & } result
+
+    return "$result"
+}
+
+proc UpdateJobsRunning {} {
+    global rootname jobsRunning jobsStarted jobsToProc inputFileExtension jobsProc jobsCurrent pulse
+    #set jobsCurrent [llength [glob -nocomplain $rootname-??????.csh]]
+    set jobsCurrent [llength [glob -nocomplain $rootname-??????.py]]
+    set jobsDone [llength [glob -nocomplain $rootname-??????.done]]
+    set jobsProc [llength [glob -nocomplain $rootname-??????.proc]]
+    set jobsToProc [expr $jobsDone-$jobsProc]
+    set jobsRunning [expr $jobsCurrent-$jobsDone]
+    set message "[clock format [clock seconds]]: Jobs: current=$jobsCurrent, done=$jobsDone, proc'd=$jobsProc, toProc=$jobsToProc, running=$jobsRunning"
+    puts -nonewline stderr $message
+    for {set i 0} {$i<[string length $message]} {incr i} {
+	puts -nonewline stderr "\b"
+    }
+}
