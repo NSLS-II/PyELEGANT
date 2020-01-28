@@ -10,10 +10,6 @@ from pathlib import Path
 
 from . import util
 
-try:
-    from mpi4py import MPI
-except:
-    pass
 import dill
 
 _ABS_TIME_LIMIT = None
@@ -557,6 +553,8 @@ def get_mpi_rank_header():
     """"""
 
     try:
+        from mpi4py import MPI
+
         mpi_rank = MPI.COMM_WORLD.Get_rank() + 1
         mpi_rank_header = 'MPI Rank #{:d}: '.format(mpi_rank)
     except:
