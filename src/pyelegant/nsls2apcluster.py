@@ -4,6 +4,7 @@ import time
 import datetime
 from copy import deepcopy
 from subprocess import Popen, PIPE
+import shlex
 import tempfile
 import glob
 from pathlib import Path
@@ -35,21 +36,24 @@ SLURM_EXCL_NODES = None
 MODULE_LOAD_CMD_STR = 'elegant-latest'
 #MODULE_LOAD_CMD_STR = 'elegant-latest elegant/2019.2.1'
 
-nMaxTry = 3
-for iTry in range(nMaxTry):
-    try:
-        # Load "Elegant" module (for Lmod v.8.1)
-        sys.path.insert(0, os.path.join(os.environ['MODULESHOME'], 'init'))
-        from env_modules_python import module
-        #module('load', 'gcc', 'mpich', 'elegant')
-        module('load', *MODULE_LOAD_CMD_STR.split())
-        print('Elegant module loaded successfully')
-        break
-    except:
-        if iTry != nMaxTry - 1:
-            time.sleep(5.0)
-        else:
-            raise RuntimeError('# Loading module "elegant" failed.')
+_p = Popen(shlex.split('which elegant'), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+_out, _err = _p.communicate()
+if _out.strip() == '':
+    nMaxTry = 3
+    for iTry in range(nMaxTry):
+        try:
+            # Load "Elegant" module (for Lmod v.8.1)
+            sys.path.insert(0, os.path.join(os.environ['MODULESHOME'], 'init'))
+            from env_modules_python import module
+            #module('load', 'gcc', 'mpich', 'elegant')
+            module('load', *MODULE_LOAD_CMD_STR.split())
+            print('Elegant module loaded successfully')
+            break
+        except:
+            if iTry != nMaxTry - 1:
+                time.sleep(5.0)
+            else:
+                raise RuntimeError('# Loading module "elegant" failed.')
 
 # CRITICAL: The line "#!/bin/bash" must come on the first line, not the second or later.
 __sbatch_sh_example = '''#!/bin/bash
