@@ -18,6 +18,6 @@ from . import sigproc
 from . import twiss
 from . import util
 
-from .local import run
+from .local import run, enable_stdout, enable_stderr, disable_stdout, disable_stderr
 from .remote import remote
 from .twiss import calc_line_twiss, calc_ring_twiss, plot_twiss
