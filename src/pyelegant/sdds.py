@@ -421,7 +421,17 @@ def sdds2dicts(sdds_filepath):
     if params:
         for _k, _v in params.items():
             if meta['params'][_k]['TYPE'] == 'long':
-                params[_k] = int(_v)
+                try:
+                    params[_k] = int(_v)
+                except TypeError:
+                    params[_k] = np.array(_v).astype(int)
+                except:
+                    sys.stderr.write(f'** key: {_k}\n')
+                    sys.stderr.write('** value:\n')
+                    sys.stderr.write(str(_v))
+                    sys.stderr.write('\n')
+                    sys.stderr.flush()
+                    raise
         output['params'] = params
     if columns:
         for _k, _v in columns.items():
