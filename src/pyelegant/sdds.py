@@ -412,17 +412,23 @@ def sdds2dicts(sdds_filepath):
         suppress_err_msg=True)
 
     meta = {}
-    if meta_params != {}:
+    if meta_params:
         meta['params'] = meta_params
-    if meta_columns != {}:
+    if meta_columns:
         meta['columns'] = meta_columns
 
     output = {}
-    if params != {}:
+    if params:
+        for _k, _v in params.items():
+            if meta['params'][_k]['TYPE'] == 'long':
+                params[_k] = int(_v)
         output['params'] = params
-    if columns != {}:
+    if columns:
         for _k, _v in columns.items():
-            columns[_k] = np.array(_v)
+            if meta['columns'][_k]['TYPE'] == 'long':
+                columns[_k] = np.array(_v).astype(int)
+            else:
+                columns[_k] = np.array(_v)
         output['columns'] = columns
 
     return output, meta
