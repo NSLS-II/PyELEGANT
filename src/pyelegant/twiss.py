@@ -232,15 +232,14 @@ def _get_param_val(param_name, parameters_dict, elem_name, elem_occur):
     m = np.logical_and(matched_elem_names, matched_elem_occurs)
     if np.sum(m) == 0:
         m = np.where(matched_elem_names)[0]
-        u_elem_occurs_int = np.unique(parameters['ElementOccurence'].astype(int)[m])
-        elem_occur_int = int(elem_occur)
-        if np.all(u_elem_occurs_int > elem_occur_int):
-            elem_occur = str(np.min(u_elem_occurs_int))
-        elif np.all(u_elem_occurs_int < elem_occur_int):
-            elem_occur = str(np.max(u_elem_occurs_int))
+        u_elem_occurs_int = np.unique(parameters['ElementOccurence'][m])
+        if np.all(u_elem_occurs_int > elem_occur):
+            elem_occur = np.min(u_elem_occurs_int)
+        elif np.all(u_elem_occurs_int < elem_occur):
+            elem_occur = np.max(u_elem_occurs_int)
         else:
-            elem_occur = str(np.min(
-                u_elem_occurs_int[u_elem_occurs_int >= elem_occur_int]))
+            elem_occur = np.min(
+                u_elem_occurs_int[u_elem_occurs_int >= elem_occur])
         matched_elem_occurs = (parameters['ElementOccurence'] == elem_occur)
         m = np.logical_and(matched_elem_names, matched_elem_occurs)
     m = np.logical_and(m, parameters['ElementParameter'] == param_name)
