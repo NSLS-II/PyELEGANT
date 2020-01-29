@@ -11,7 +11,7 @@ import ast
 from . import util
 from . import sdds
 from . import notation
-from . import lteparser
+from . import ltemanager
 
 from . import std_print_enabled
 
@@ -2043,7 +2043,7 @@ class EleDesigner():
             used_beamline_name = (
                 used_beamline_name if used_beamline_name is not None else '')
 
-            self._LTE = lteparser.Lattice(
+            self._LTE = ltemanager.Lattice(
                 LTE_filepath=kwargs.get('lattice'),
                 used_beamline_name=used_beamline_name)
             self._all_elem_names = [name for name, _, _ in self._LTE.elem_defs]
