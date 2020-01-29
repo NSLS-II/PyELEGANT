@@ -9,6 +9,7 @@ from . import local
 #from . import remote
 from . import correct
 from . import elebuilder
+from . import eleutil
 from . import ltemanager
 from . import nonlin
 from . import notation
