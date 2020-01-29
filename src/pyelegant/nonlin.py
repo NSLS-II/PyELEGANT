@@ -1842,8 +1842,20 @@ def plot_chrom(
         nuys = f['nuys'][()]
         f.close()
 
-    coeffs = dict(x=np.polyfit(deltas, nuxs, max_chrom_order),
-                  y=np.polyfit(deltas, nuys, max_chrom_order))
+    if deltalim:
+        delta_incl = np.logical_and(deltas >= np.min(deltalim),
+                                    deltas >= np.min(deltalim))
+    else:
+        delta_incl = np.ones(deltas.shape).astype(bool)
+    deltas = deltas[delta_incl]
+    nuxs = nuxs[delta_incl]
+    nuys = nuys[delta_incl]
+
+    nux_nan_inds = np.isnan(nuxs)
+    nuy_nan_inds = np.isnan(nuys)
+    coeffs = dict(
+        x=np.polyfit(deltas[~nux_nan_inds], nuxs[~nux_nan_inds], max_chrom_order),
+        y=np.polyfit(deltas[~nuy_nan_inds], nuys[~nuy_nan_inds], max_chrom_order))
 
     fit_label = {}
     for plane in ['x', 'y']:
@@ -1879,7 +1891,7 @@ def plot_chrom(
         deltas * 1e2, np.poly1d(coeffs['x'])(deltas) - offset, 'b-',
         label=fit_label['x'])
     ax2 = ax1.twinx()
-    if is_nuxlim_frac:
+    if is_nuylim_frac:
         offset = np.floor(nuys)
     else:
         offset = np.zeros(nuys.shape)
@@ -1911,8 +1923,8 @@ def plot_chrom(
     frac_nuxs = nuxs - np.floor(nuxs)
     frac_nuys = nuys - np.floor(nuys)
 
-    frac_nuxlim = [v - np.floor(v) for v in nuxlim]
-    frac_nuylim = [v - np.floor(v) for v in nuylim]
+    frac_nuxlim = [v - np.floor(v) if v > 1 else v for v in nuxlim]
+    frac_nuylim = [v - np.floor(v) if v > 1 else v for v in nuylim]
 
     fig = plt.figure()
     fig.add_subplot(111)
