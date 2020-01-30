@@ -1086,3 +1086,142 @@ srun python -m mpi4py.futures {main_script_path} _mpi_starmap {input_filepath}
     Path(mpi_sub_sh_filepath).write_text(contents)
 
     return input_filepath, output_filepath, mpi_sub_sh_filepath
+
+#----------------------------------------------------------------------
+def _tmp_glob(pattern, sort_order='mtime'):
+    """
+    This function is NOT meant to be directly run. The contents of this function
+    is inspected and copied into a temporary Python file, which will be
+    executed on a worker node.
+    """
+
+    import os
+    import datetime
+    from pathlib import Path
+
+    if sort_order == 'mtime':
+        sort_key = os.path.getmtime
+    elif sort_order == 'size':
+        sort_key = os.path.getsize
+    else:
+        raise ValueError(f'Invalid "sort_order": {sort_order}')
+
+    for f in sorted(Path('/tmp').glob(pattern), key=sort_key):
+        stat = f.stat()
+        if stat.st_size < int(1024):
+            size_str = f'{stat.st_size:>4.0f}'
+        elif stat.st_size < int(1024**2):
+            size = stat.st_size / 1024
+            size_str = f'{size:>3.0f}K'
+        elif stat.st_size < int(1024**3):
+            size = stat.st_size / 1024 / 1024
+            size_str = f'{size:>3.0f}M'
+        elif stat.st_size < int(1024**4):
+            size = stat.st_size / 1024 / 1024 / 1024
+            size_str = f'{size:>3.0f}G'
+        elif stat.st_size < int(1024**5):
+            size = stat.st_size / 1024 / 1024 / 1024 / 1024
+            size_str = f'{size:>3.0f}T'
+        else:
+            size = stat.st_size / 1024 / 1024 / 1024 / 1024
+            size_str = f'{size:>3.0f}T'
+
+        time_str = datetime.datetime.fromtimestamp(
+            stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+
+        print(f'{f.owner()} {f.group()} {size_str} {time_str} {f.name}')
+
+#----------------------------------------------------------------------
+def tmp_glob(node_name, pattern, sort_order='mtime'):
+    """"""
+
+    tmp = tempfile.NamedTemporaryFile(dir=Path.cwd(), delete=False,
+                                      prefix='tmpGlob_', suffix='.py')
+    temp_py = Path(tmp.name)
+    tmp.close()
+
+    import inspect
+
+    func_lines = inspect.getsource(_tmp_glob).split('\n')
+    for i, line in enumerate(func_lines):
+        if line.strip().startswith(('import ', 'from ')):
+            func_body_start_index = i
+            break
+
+    py_contents = ['if __name__ == "__main__":',
+                   f'    pattern = "{pattern}"',
+                   f'    sort_order = "{sort_order}"',
+                   ] + func_lines[func_body_start_index:]
+
+    temp_py.write_text('\n'.join(py_contents))
+
+    cmd = f'srun --nodelist={node_name} --partition=debug python {str(temp_py)}'
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+
+    print(out.strip())
+
+    if err.strip():
+        print('\n*** stderr ***')
+        print(err.strip())
+
+    # Remove temp Python file
+    temp_py.unlink()
+
+#----------------------------------------------------------------------
+def _tmp_rm(pattern):
+    """
+    This function is NOT meant to be directly run. The contents of this function
+    is inspected and copied into a temporary Python file, which will be
+    executed on a worker node.
+    """
+
+    from pathlib import Path
+    import shutil
+
+    for f in sorted(Path('/tmp').glob(pattern)):
+        try:
+            if not f.is_dir():
+                f.unlink()
+            else:
+                shutil.rmtree(f)
+        except:
+            pass
+
+#----------------------------------------------------------------------
+def tmp_rm(node_name, pattern):
+    """
+    Remove files/directories in /tmp on specified node.
+    """
+
+    tmp = tempfile.NamedTemporaryFile(dir=Path.cwd(), delete=False,
+                                      prefix='tmpRm_', suffix='.py')
+    temp_py = Path(tmp.name)
+    tmp.close()
+
+    import inspect
+
+    func_lines = inspect.getsource(_tmp_rm).split('\n')
+    for i, line in enumerate(func_lines):
+        if line.strip().startswith(('import ', 'from ')):
+            func_body_start_index = i
+            break
+
+    py_contents = ['if __name__ == "__main__":',
+                   f'    pattern = "{pattern}"',
+                   ] + func_lines[func_body_start_index:]
+
+    temp_py.write_text('\n'.join(py_contents))
+
+    cmd = f'srun --nodelist={node_name} --partition=debug python {str(temp_py)}'
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+
+    print(out.strip())
+
+    if err.strip():
+        print('\n*** stderr ***')
+        print(err.strip())
+
+    # Remove temp Python file
+    temp_py.unlink()
