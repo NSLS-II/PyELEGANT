@@ -1,5 +1,6 @@
 from typing import Union
 import os
+import sys
 import time
 import gzip
 import pickle
@@ -505,5 +506,64 @@ def save_input_to_hdf5(output_filepath: Union[str, Path], input_dict: dict) -> N
                 g[k] = np.array(v, dtype='S')
     f.close()
 
+def run_cmd_w_realtime_print(cmd_list, return_stdout=False, return_stderr=False):
+    """
+    Based on an answer posted at
 
+    https://stackoverflow.com/questions/31926470/run-command-and-get-its-stdout-stderr-separately-in-near-real-time-like-in-a-te
+    """
 
+    import pty
+    from subprocess import Popen
+    from select import select
+    import errno
+
+    masters, slaves = zip(pty.openpty(), pty.openpty())
+    p = Popen(cmd_list, stdin=slaves[0], stdout=slaves[0], stderr=slaves[1])
+    for fd in slaves:
+        os.close(fd)
+
+    if return_stdout:
+        stdout = '' # to store entire stdout history
+    if return_stderr:
+        stderr = '' # to store entire stderr history
+
+    readable = { masters[0]: sys.stdout, masters[1]: sys.stderr}
+    try:
+        while readable:
+            for fd in select(readable, [], [])[0]:
+                try:
+                    data = os.read(fd, 1024)
+                except OSError as e:
+                    if e.errno != errno.EIO:
+                        raise
+                    del readable[fd]
+                finally:
+                    if not data:
+                        del readable[fd]
+                    else:
+                        if return_stdout or return_stderr:
+                            if fd == masters[0]:
+                                stdout += data.decode('utf-8')
+                            else:
+                                stderr += data.decode('utf-8')
+
+                        readable[fd].write(data.decode('utf-8'))
+                        readable[fd].flush()
+    except:
+        pass
+
+    finally:
+        p.wait()
+        for fd in masters:
+            os.close(fd)
+
+    output = {}
+    if return_stdout:
+        output['out'] = stdout
+    if return_stderr:
+        output['err'] = stderr
+    if output == {}:
+        output = None
+
+    return output
