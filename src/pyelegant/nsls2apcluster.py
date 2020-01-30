@@ -820,7 +820,19 @@ def monitor_simplex_log_progress(job_ID_str, simplex_log_prefix):
 def write_geneticOptimizer_dot_local(remote_opts=None):
     """"""
 
-    slurm_opts = extract_slurm_opts(remote_opts)
+    filtered_remote_opts = {}
+
+    if remote_opts:
+        for k, v in remote_opts.items():
+            if k in ['output', 'job_name']:
+                print(
+                    (f'* WARNING: The value of "remote_opts" for key "{k}" is '
+                     f'automatically set, so your specified option value will '
+                     f'be ignored.'))
+            else:
+                filtered_remote_opts[k] = v
+
+    slurm_opts = extract_slurm_opts(filtered_remote_opts)
 
     contents = '''#!/bin/sh
 # \
@@ -830,6 +842,8 @@ exec oagtclsh "$0" "$@"
 # If so, then this file (i.e,. your modified version of it) needs to
 # be in the directory from which you run geneticOptimizer.
 
+# This proc is used if `programName` != ""
+# NOT IMPLEMENTED YET
 proc SubmitJob {args} {
     set code ""
     set input ""
@@ -851,6 +865,7 @@ proc SubmitJob {args} {
     return "$result"
 }
 
+# This proc is used if `runScript` != ""
 proc SubmitRunScript {args} {
     set script ""
     set tagList ""
@@ -859,32 +874,57 @@ proc SubmitRunScript {args} {
     APSStrictParseArguments {script rootname tagList valueList}
     global env
 
+    # If your input SDDS file is named like "optim1.sdds", then $rootname would be
+    # like "optim1-000001", "optim1-000002", etc.
+
+    # $script = `runScript`
+
     eval file delete -force $rootname.log $rootname.done $rootname.run
-    set tmpFile [file rootname $rootname].csh
+    #set tmpFile [file rootname $rootname].csh
+    set tmpFile [file rootname $rootname].py
     APSAddToTempFileList $tmpFile
     set fd [open $tmpFile w]
-    puts $fd "#!/bin/csh "
-    puts $fd "unset savehist"
-    puts $fd "ml elegant-latest"
+    #puts $fd "#!/bin/csh "
+    #puts $fd "unset savehist"
+    #puts $fd "ml elegant-latest"
+    puts $fd "echo Using python executable = [exec which python]"
     puts $fd "echo running $script on [exec uname -a]"
     puts $fd "echo running $script $rootname $tagList $valueList on [exec uname -a]"
     puts $fd "cd [pwd]"
     #puts $fd "./$script -rootname $rootname -tagList '$tagList' -valueList '$valueList' >& $rootname.log"
-    puts $fd "srun ./$script -rootname $rootname -tagList '$tagList' -valueList '$valueList' >& $rootname.log"
+    puts $fd "python $script -rootname $rootname -tagList '$tagList' -valueList '$valueList' >& $rootname.log"
     close $fd
-
 '''
 
+    # Note that this section is separated because the original curly brackets
+    # had to be converted to double-curly brackets, in order to allow insertion
+    # of Python string formatting for "slurm_switches"
     contents += '''
     #catch {{exec cat $tmpFile | qsub -V -o [pwd] -j y -N [file root [file tail $rootname]] }} result
-    catch {{exec sbatch -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] {slurm_switches} $tmpFile }} result
+    #catch {{exec sbatch -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] $tmpFile }} result
 
     #catch {{exec srun -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] --ntasks=1 bash $tmpFile & }} result
-    #catch {{exec srun -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] bash $tmpFile & }} result
+    catch {{exec srun -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] {slurm_switches} bash $tmpFile & }} result
 '''.format(slurm_switches=' '.join([v for v in slurm_opts.values()]))
 
     contents += '''
+
     return "$result"
+}
+
+proc UpdateJobsRunning {} {
+    global rootname jobsRunning jobsStarted jobsToProc inputFileExtension jobsProc jobsCurrent pulse
+    #set jobsCurrent [llength [glob -nocomplain $rootname-??????.csh]]
+    set jobsCurrent [llength [glob -nocomplain $rootname-??????.py]]
+    set jobsDone [llength [glob -nocomplain $rootname-??????.done]]
+    set jobsProc [llength [glob -nocomplain $rootname-??????.proc]]
+    set jobsToProc [expr $jobsDone-$jobsProc]
+    set jobsRunning [expr $jobsCurrent-$jobsDone]
+    set message "[clock format [clock seconds]]: Jobs: current=$jobsCurrent, done=$jobsDone, proc'd=$jobsProc, toProc=$jobsToProc, running=$jobsRunning"
+    puts -nonewline stderr $message
+    for {set i 0} {$i<[string length $message]} {incr i} {
+        puts -nonewline stderr "\b"
+    }
 }
 '''
 

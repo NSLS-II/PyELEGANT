@@ -10,6 +10,7 @@ from . import local
 from . import correct
 from . import elebuilder
 from . import eleutil
+from . import geneopt
 from . import ltemanager
 from . import nonlin
 from . import notation
