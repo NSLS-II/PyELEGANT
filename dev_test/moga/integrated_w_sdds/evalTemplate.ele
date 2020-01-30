@@ -1,0 +1,183 @@
+! 4 step run:
+! 1. Set harmonic sextupoles, adjust chromaticity sextupoles
+! 2. Track to get tunes vs momentum offset
+! 3. Determine on-momentum DA
+! 4. Determine momentum aperture
+
+&run_setup
+    lattice = sample.lte
+    use_beamline = RING,
+    p_central_mev = 3e3
+    default_order = 2
+    rootname = <rootname>
+    semaphore_file = %s.done0
+    parameters = %s.param
+&end
+
+&load_parameters
+    filename_list = "<rootname>-linear.param",
+    allow_missing_elements = 1
+    change_defined_values = 1
+&end
+
+&alter_elements name = S1, item = K2, value = <S1_K2> &end
+&alter_elements name = S1B, item = K2, value = <S1B_K2> &end
+
+&alter_elements name = *, type=KQUAD, item = N_KICKS, value = 40 &end
+&alter_elements name = *, type=CSBEND, item = N_KICKS, value = 12 &end
+&alter_elements name = *, type=KSEXT, item = N_KICKS, value = 8 &end
+
+&run_control &end
+
+&link_control &end
+
+&twiss_output
+    output_at_each_step = 1
+    concat_order = 2
+&end
+
+&chromaticity
+    sextupoles = "S2 S1H",
+    strength_limit = 8e2,
+    dnux_dp = <xchrom>,
+    dnuy_dp = <ychrom>,
+    n_iterations = 50,
+    tolerance = 0.01
+    change_defined_values = 1
+&end
+
+&bunched_beam &end
+
+&track &end
+
+&save_lattice filename = %s.new &end
+
+! Track particles with variable initial momentum offset in order to find out
+! where the integer and half-integer resonances get crossed
+
+&run_setup
+    lattice = sample.lte,
+    use_beamline = RINGW,
+    p_central_mev = 3e3
+    default_order = 1
+    final = %s.fin
+    semaphore_file = %s.done0
+    rootname = <rootname>
+&end
+
+&load_parameters
+    filename = "%s.param"
+    change_defined_values = 1
+&end
+
+&alter_elements name=MAL, item=ON_PASS, value=0 &end
+&alter_elements name=MAL, item=DX, value=1e-6 &end
+&alter_elements name=MAL, item=DY, value=1e-6 &end
+
+&closed_orbit
+    iteration_fraction = 0.1
+    closed_orbit_iterations = 500
+&end
+
+&run_control
+    n_passes = 128
+    n_indices = 1
+&end
+
+&vary_element name=MAL, item=DP, initial=-0.025, final=0.025,
+              index_number=0, index_limit=<off_mom_clo_nIndexes> &end
+
+&bunched_beam &end
+
+&track center_on_orbit=1 &end
+
+! Add errors, then track for dynamic aperture with radiation damping
+
+&run_setup
+    lattice = <rootname>.new,
+    use_beamline = RINGRF,
+    p_central_mev = 3e3
+    default_order = 2
+    rootname = <rootname>
+    semaphore_file = %s.done0
+    magnets = %s.mag
+&end
+
+&twiss_output
+    filename = %s.twi
+    concat_order = 1
+    radiation_integrals = 1
+&end
+
+&twiss_output
+    filename = %s.twi2
+    output_at_each_step = 1
+    concat_order = 2
+    radiation_integrals = 1
+&end
+
+&run_control
+    n_passes = <turns>
+&end
+
+&error_control error_log = %s.erl &end
+&error_element name = *, type = gaussian, element_type=KQUAD, item = FSE, bind = 0, amplitude = 2e-4 &end
+&error_element name = *, type = gaussian, element_type=KSEXT, item = FSE, bind = 0, amplitude = 2e-4 &end
+&error_element name = *, type = gaussian, element_type=KQUAD, item = TILT, bind = 0, amplitude = 5e-4 &end
+&error_element name = *, type = gaussian, element_type=KSEXT, item = TILT, bind = 0, amplitude = 5e-4 &end
+
+&find_aperture
+    output = %s.aper
+    mode = "n-line",
+    !n_lines = 21,
+    n_lines = <n_lines>,
+    xmax = 0.020
+    ymax = 0.001
+    nx = 31
+    n_splits = 1
+    split_fraction = 0.1
+&end
+
+! Determine momentum aperture at selected points in the first 1 super cells
+! We load the errors from the previous step
+
+&run_setup
+    lattice = <rootname>.new,
+    use_beamline = RINGRF,
+    p_central_mev = 3e3
+    default_order = 2
+    semaphore_file = %s.done0
+    rootname = <rootname>
+&end
+
+&load_parameters
+    filename = "%s.erl",
+    force_occurence_data = 1
+&end
+
+&twiss_output
+    concat_order = 2
+    radiation_integrals = 1
+    output_at_each_step = 1
+&end
+
+&run_control
+    n_passes = <turns>
+&end
+
+&momentum_aperture
+    output = %s.mmap,
+    x_initial = 1e-5,
+    y_initial = 1e-5,
+    delta_negative_start= -0.01
+    delta_negative_limit = -0.10,
+    delta_positive_start= 0.01
+    delta_positive_limit = 0.10,
+    delta_step_size = 0.0025,
+    s_start = 0,
+    s_end = "(791.5294 15 / 1 * 1 +)",
+    !include_name_pattern = S*:S[134],
+    include_name_pattern = <mom_aper_elem_name_pattern>,
+    fiducialize = 0,
+    verbosity = 1,
+&end

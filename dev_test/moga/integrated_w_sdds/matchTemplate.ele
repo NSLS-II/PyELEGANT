@@ -1,0 +1,93 @@
+! Match one super cell to the desired tunes, with other constraints
+
+&run_setup
+    lattice = sample.lte
+    p_central_mev = 3e3,
+    use_beamline = CELL,
+    default_order = 1,
+    parameters = %s.param,
+    final = %s.fin
+    rootname = <rootname>-linear,
+    semaphore_file = %s.done,
+&end
+
+&twiss_output
+    matched = 1,
+    output_at_each_step = 1
+    concat_order = 1
+    radiation_integrals = 1
+&end
+
+&run_control &end
+
+&optimization_setup
+    tolerance = 1e-14, target = 0,
+    n_passes = 3, n_evaluations = 1500, n_restarts = 5,
+    log_file = /dev/null,
+    verbose =0
+    output_sparsing_factor = 300
+&end
+
+&optimization_term
+    term = "nux 15 * <nuxTarget> 0.01 sene" &end
+&optimization_term
+    term = "nuy 15 * <nuyTarget> 0.01 sene" &end
+&optimization_term
+    term = "max.betax 30 .1 segt" &end
+&optimization_term
+    term = "max.betay 25 .1 segt" &end
+&optimization_term
+    term = "betax 4.17 .1 sene" &end
+&optimization_term
+    term = "betay 5.02 .1 sene" &end
+&optimization_term
+    !term = "Sdelta0 etax * sqr ex0 / betax / 1 + sqrt ex0 * 3.2e-9 1e-10 segt" &end
+    term = "ex0 23e-12 1e-10 segt" &end
+
+&optimization_variable
+    name = QM1, item=K1, lower_limit=1e-2, upper_limit=12, step_size=0.01 &end
+&optimization_variable
+    name = QM2, item=K1, lower_limit=1e-2, upper_limit=12, step_size=0.01 &end
+&optimization_variable
+    name = QM3, item=K1, lower_limit=-12, upper_limit=-1e-2, step_size=0.01 &end
+&optimization_variable
+    name = QM4, item=K1, lower_limit=1e-2, upper_limit=12, step_size=0.01 &end
+&optimization_variable
+    name = QM5, item=K1, lower_limit=1e-2, upper_limit=12, step_size=0.01 &end
+
+&optimization_variable
+    name = BR, item=K1, lower_limit=1e-2, upper_limit=8, step_size=0.01 &end
+&optimization_variable
+    name = BQ, item=K1, lower_limit=-8, upper_limit=-1e-2, step_size=0.01 &end
+&optimization_variable
+    name = BEND, item=K1, lower_limit=1e-2, upper_limit=2, step_size=0.01 &end
+&optimization_variable
+    name = BENDMAT, item=K1, lower_limit=-2, upper_limit=-1e-2, step_size=0.01 &end
+
+!&optimization_covariable
+!    name = S1B:Q1, item = K1, equation = S1A:Q1.K1 &end
+
+&bunched_beam &end
+&optimize &end
+
+&run_setup
+    lattice = sample.lte
+    p_central_mev = 3e3,
+    use_beamline = CELL,
+    default_order = 1,
+    semaphore_file = %s.done,
+    rootname = <rootname>-linear,
+&end
+
+&load_parameters
+    filename = %s.param
+    change_defined_values = 1
+&end
+
+&twiss_output
+    radiation_integrals = 1
+    matched = 1,
+    filename = %s.twi
+    concat_order = 1
+&end
+
