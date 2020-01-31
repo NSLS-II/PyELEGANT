@@ -1973,15 +1973,19 @@ class EleDesigner():
             if lower_limit == upper_limit:
                 pass # Parameter range is unlimited, so any initial value would be fine.
             else:
-                init_val = self.get_LTE_elem_prop(kwargs.get('name'), kwargs.get('item'))
-                if init_val < lower_limit:
-                    raise ValueError(
-                        (f'Initial value ({init_val:{self.double_format}}) cannot be '
-                         f'smaller than "lower_limit" ({lower_limit:{self.double_format}})'))
-                elif init_val > upper_limit:
-                    raise ValueError(
-                        (f'Initial value ({init_val:{self.double_format}}) cannot be '
-                         f'larger than "upper_limit" ({upper_limit:{self.double_format}})'))
+                name, item = kwargs.get('name'), kwargs.get('item')
+                init_val = self.get_LTE_elem_prop(name, item)
+                if init_val:
+                    if init_val < lower_limit:
+                        raise ValueError(
+                            (f'Initial value ({init_val:{self.double_format}}) cannot be '
+                             f'smaller than "lower_limit" ({lower_limit:{self.double_format}})'))
+                    elif init_val > upper_limit:
+                        raise ValueError(
+                            (f'Initial value ({init_val:{self.double_format}}) cannot be '
+                             f'larger than "upper_limit" ({upper_limit:{self.double_format}})'))
+                else:
+                    print(f'{name}.{item} is not defined in LTE. So, initial value check is skipped.')
 
         if self._should_be_inline_block(block):
             first_line = f'&{block_header}  '
@@ -2141,7 +2145,10 @@ class EleDesigner():
 
         if info:
             prop = self._LTE.parse_elem_properties(info['prop_str'])
-            return prop[prop_name]
+            if prop_name in prop:
+                return prop[prop_name]
+            else:
+                return None
         else:
             return None
 
