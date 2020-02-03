@@ -881,7 +881,7 @@ proc SubmitRunScript {args} {
 
     eval file delete -force $rootname.log $rootname.done $rootname.run
     #set tmpFile [file rootname $rootname].csh
-    set tmpFile [file rootname $rootname].py
+    set tmpFile [file rootname $rootname].bash
     APSAddToTempFileList $tmpFile
     set fd [open $tmpFile w]
     #puts $fd "#!/bin/csh "
@@ -915,7 +915,7 @@ proc SubmitRunScript {args} {
 proc UpdateJobsRunning {} {
     global rootname jobsRunning jobsStarted jobsToProc inputFileExtension jobsProc jobsCurrent pulse
     #set jobsCurrent [llength [glob -nocomplain $rootname-??????.csh]]
-    set jobsCurrent [llength [glob -nocomplain $rootname-??????.py]]
+    set jobsCurrent [llength [glob -nocomplain $rootname-??????.bash]]
     set jobsDone [llength [glob -nocomplain $rootname-??????.done]]
     set jobsProc [llength [glob -nocomplain $rootname-??????.proc]]
     set jobsToProc [expr $jobsDone-$jobsProc]
