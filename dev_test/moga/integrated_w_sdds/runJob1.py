@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 from subprocess import Popen, PIPE
 import shlex
+import tempfile
 
 import pyelegant as pe
 
@@ -99,9 +100,14 @@ if __name__ == '__main__':
 
         # Use TMPDIR if defined, otherwise make a subdirectory
         if ('TMPDIR' in os.environ) and Path(os.environ['TMPDIR']).exists():
-            tmpdir = Path(os.environ['TMPDIR'])
+            #tmpdir = Path(os.environ['TMPDIR'])
+            tmpdir_obj = tempfile.TemporaryDirectory(
+                prefix='tmpRunJob_', dir=Path(os.environ['TMPDIR']))
         else:
-            tmpdir = Path(rootname).mkdir(exists_ok=True)
+            #tmpdir = Path(rootname).mkdir(exists_ok=True)
+            tmpdir_obj = tempfile.TemporaryDirectory(
+                prefix='tmpRunJob_', dir=Path(rootname))
+        tmpdir = Path(tmpdir_obj.name)
 
         # Copy all input files to the temporary directory
         print('Copying files: ', end='')
@@ -221,6 +227,8 @@ if __name__ == '__main__':
 
         # Create semaphore to tell the optimizer that this run is done
         Path(f'{oldDir}/{rootname}.done').write_text('')
+
+        tmpdir_obj.cleanup()
 
         if notify_via_email:
             successful = run_success and (not proc_failed)
