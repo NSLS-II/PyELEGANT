@@ -124,6 +124,11 @@ if __name__ == '__main__':
 
         os.chdir(tmpdir)
 
+        cmd = 'hostname'
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+        out, err = p.communicate()
+        print(f'\nHostname = {out.strip()}\n')
+
         # Perform linear matching
         print('linear matching: ', end='')
         pe.run('matchTemplate.ele', macros=macros, print_stdout=True, print_stderr=True)

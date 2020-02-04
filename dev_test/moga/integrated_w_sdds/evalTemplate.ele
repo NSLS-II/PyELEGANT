@@ -38,10 +38,9 @@
 
 &chromaticity
     sextupoles = "S2 S1H",
-    strength_limit = 8e2,
     dnux_dp = <xchrom>,
     dnuy_dp = <ychrom>,
-    n_iterations = 50,
+    n_iterations = 200,
     tolerance = 0.01
     change_defined_values = 1
 &end
@@ -91,7 +90,57 @@
 
 &track center_on_orbit=1 &end
 
-! Add errors, then track for dynamic aperture with radiation damping
+! Add errors, then determine momentum aperture at selected points in the
+! first 1 super cells
+
+&run_setup
+    lattice = <rootname>.new,
+    use_beamline = RINGRF,
+    p_central_mev = 3e3
+    default_order = 2
+    semaphore_file = %s.done0
+    rootname = <rootname>
+&end
+
+&twiss_output
+    concat_order = 2
+    radiation_integrals = 1
+    output_at_each_step = 1
+&end
+
+&run_control
+    n_passes = <turns>
+&end
+
+&error_control error_log = %s.erl &end
+&error_element name = *, type = gaussian, element_type=KQUAD, item = FSE, bind = 0, amplitude = 2e-4 &end
+&error_element name = *, type = gaussian, element_type=KSEXT, item = FSE, bind = 0, amplitude = 2e-4 &end
+&error_element name = *, type = gaussian, element_type=KQUAD, item = TILT, bind = 0, amplitude = 5e-4 &end
+&error_element name = *, type = gaussian, element_type=KSEXT, item = TILT, bind = 0, amplitude = 5e-4 &end
+
+&momentum_aperture
+    output = %s.mmap,
+    x_initial = 1e-5,
+    y_initial = 1e-5,
+    !delta_negative_start= -0.01
+    !delta_negative_start= -0.0025,
+    delta_negative_start= -0.00025,
+    delta_negative_limit = -0.10,
+    !delta_positive_start= 0.01
+    !delta_positive_start= 0.0025,
+    delta_positive_start= 0.00025,
+    delta_positive_limit = 0.10,
+    delta_step_size = 0.0025,
+    s_start = 0,
+    s_end = "(791.5294 15 / 1 * 1 +)",
+    !include_name_pattern = S*:S[134],
+    include_name_pattern = <mom_aper_elem_name_pattern>,
+    fiducialize = 0,
+    verbosity = 1,
+&end
+
+! Track for dynamic aperture with radiation damping
+! We load the errors from the previous step
 
 &run_setup
     lattice = <rootname>.new,
@@ -101,6 +150,11 @@
     rootname = <rootname>
     semaphore_file = %s.done0
     magnets = %s.mag
+&end
+
+&load_parameters
+    filename = "%s.erl",
+    force_occurence_data = 1
 &end
 
 &twiss_output
@@ -120,12 +174,6 @@
     n_passes = <turns>
 &end
 
-&error_control error_log = %s.erl &end
-&error_element name = *, type = gaussian, element_type=KQUAD, item = FSE, bind = 0, amplitude = 2e-4 &end
-&error_element name = *, type = gaussian, element_type=KSEXT, item = FSE, bind = 0, amplitude = 2e-4 &end
-&error_element name = *, type = gaussian, element_type=KQUAD, item = TILT, bind = 0, amplitude = 5e-4 &end
-&error_element name = *, type = gaussian, element_type=KSEXT, item = TILT, bind = 0, amplitude = 5e-4 &end
-
 &find_aperture
     output = %s.aper
     mode = "n-line",
@@ -136,48 +184,4 @@
     nx = 31
     n_splits = 1
     split_fraction = 0.1
-&end
-
-! Determine momentum aperture at selected points in the first 1 super cells
-! We load the errors from the previous step
-
-&run_setup
-    lattice = <rootname>.new,
-    use_beamline = RINGRF,
-    p_central_mev = 3e3
-    default_order = 2
-    semaphore_file = %s.done0
-    rootname = <rootname>
-&end
-
-&load_parameters
-    filename = "%s.erl",
-    force_occurence_data = 1
-&end
-
-&twiss_output
-    concat_order = 2
-    radiation_integrals = 1
-    output_at_each_step = 1
-&end
-
-&run_control
-    n_passes = <turns>
-&end
-
-&momentum_aperture
-    output = %s.mmap,
-    x_initial = 1e-5,
-    y_initial = 1e-5,
-    delta_negative_start= -0.01
-    delta_negative_limit = -0.10,
-    delta_positive_start= 0.01
-    delta_positive_limit = 0.10,
-    delta_step_size = 0.0025,
-    s_start = 0,
-    s_end = "(791.5294 15 / 1 * 1 +)",
-    !include_name_pattern = S*:S[134],
-    include_name_pattern = <mom_aper_elem_name_pattern>,
-    fiducialize = 0,
-    verbosity = 1,
 &end

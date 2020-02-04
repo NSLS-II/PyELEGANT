@@ -28,12 +28,19 @@ runScript ='runJob1.py'
 if sys.argv[1] == 'start':
     contin = False
     updateOnly = False
+    drain = False
 elif sys.argv[1] == 'update_only':
     contin = True
     updateOnly = True
+    drain = False
+elif sys.argv[1] == 'drain':
+    contin = True
+    updateOnly = False
+    drain = True
 elif sys.argv[1] == 'resume':
     contin = True
     updateOnly = False
+    drain = False
 else:
     raise ValueError()
 reduce = True
@@ -47,4 +54,5 @@ pe.geneopt.run(
     rootname, parameterNames, initialValues, lowerLimits, upperLimits, errorLevels,
     nTotalJobs, nParents, childMultiplier, runScript=runScript,
     contin=contin, reduce=reduce, multiObjective=multiObjective, updateOnly=updateOnly,
+    drain=drain,
     remote_opts=remote_opts)
