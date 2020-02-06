@@ -276,7 +276,7 @@ def plot_twiss(
     meta_twi_sc = meta['twi']['scalars']
 
     # Print out scalar values
-    print('################################################################')
+    scalar_lines = []
     for k in sorted(list(twi_sc)):
         if (print_scalars is not None) and (k not in print_scalars):
             continue
@@ -285,14 +285,17 @@ def plot_twiss(
         units = meta_twi_sc[k]['UNITS']
         descr = meta_twi_sc[k]['DESCRIPTION']
         if dtype == 'double':
-            print(f'{k} = {v:.9g} [{units}] ({descr})')
+            scalar_lines.append(f'{k} = {v:.9g} [{units}] ({descr})')
         elif dtype == 'string':
-            print(f'{k} = {v} [{units}] ({descr})')
+            scalar_lines.append(f'{k} = {v} [{units}] ({descr})')
         elif dtype == 'long':
-            print(f'{k} = {int(v):d} [{units}] ({descr})')
+            scalar_lines.append(f'{k} = {int(v):d} [{units}] ({descr})')
         else:
             raise ValueError((k, dtype, units))
-    print('################################################################')
+    if scalar_lines:
+        separator_line = '################################################################'
+        scalar_lines = [separator_line] + scalar_lines + [separator_line]
+        print('\n'.join(scalar_lines))
 
 
     if slim is None:
