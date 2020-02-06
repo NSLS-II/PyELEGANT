@@ -817,6 +817,61 @@ def monitor_simplex_log_progress(job_ID_str, simplex_log_prefix):
     except:
         pass
 
+def start_hybrid_simplex_optimizer(
+    elebuilder_obj, show_progress_plot=True, ntasks=20, partition='normal',
+    job_name='job', time_limit=None, email_end=True, email_beign=False,
+    email_address=''):
+    """"""
+
+    if email_end or email_beign:
+        if not email_address:
+            raise ValueError(
+                ('If either "email_end" or "email_begin" is True, '
+                 'you must provide email address.'))
+
+    ed = elebuilder_obj
+
+    # Minimal options
+    #    remote_opts = dict(pelegant=True, ntasks=50)
+    remote_opts = dict(
+        use_sbatch=True, pelegant=True,
+        job_name=job_name, partition=partition, ntasks=ntasks, time=time_limit,
+        mail_type_begin=email_beign, mail_type_end=email_end, mail_user=email_address,
+    )
+
+    if not show_progress_plot: # If you don't care to see the progress of the optimization
+
+        remote_opts['exit_right_after_sbatch'] = False
+
+        # Run Pelegant
+        run(remote_opts, ed.ele_filepath)
+        # ^ This will block until the optimization is completed.
+
+    else: # If you want to see the progress of the optimization
+
+        _fp_list = [_v for _v in ed.actual_output_filepath_list if _v.endswith('.simlog')]
+        if len(_fp_list) == 0:
+            raise RuntimeError('simplex_log is NOT specified. Cannot monitor simplex progress.')
+        elif len(_fp_list) == 1:
+            simlog_filepath = _fp_list[0]
+        else:
+            raise RuntimeError('More than one simplex_log file found.')
+
+        remote_opts['exit_right_after_sbatch'] = True
+
+        # Run Pelegant
+        job_info = run(remote_opts, ed.ele_filepath)
+
+        # Start plotting simplex optimization progress
+        monitor_simplex_log_progress(job_info['job_ID_str'], simlog_filepath)
+
+        try:
+            os.remove(job_info['sbatch_sh_filepath'])
+        except IOError:
+            print('* Failed to delete temporary sbatch shell file "{}"'.format(
+                job_info['sbatch_sh_filepath']))
+
+
 def write_geneticOptimizer_dot_local(remote_opts=None):
     """"""
 
