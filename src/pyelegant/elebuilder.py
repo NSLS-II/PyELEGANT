@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 import glob
 import ast
+import pickle
 
 from . import util
 from . import sdds
@@ -1132,9 +1133,22 @@ class RPNVariableDatabase():
     def __init__(self):
         """Constructor"""
 
-        self._vars = []
         self.dict = {}
         self.namespace = SimpleNamespace(**self.dict)
+
+        self._var_names = BookmarkableList()
+        self._ast_compatible_var_names = BookmarkableList()
+        self._var_eqs = BookmarkableList()
+
+        self._uncommitted_var_names = [] # This list will hold variable names
+        # that have not been fully committed yet as part of a block. For example,
+        # when you are building up an "OptimizationTerm" object, you may create
+        # new variables sequentially, and want these new variables immediately
+        # show up as an available variable in the next line within in the same
+        # "&optimization_term" block. This list will help in doing this. Once
+        # the fully-built-up "OptimizationTerm" object is added as an
+        # "&optimization_term" block, then these variables will be integrated
+        # into the database, and removed from this uncommited list.
 
         self._builtin_vars = [
             'pi', # PI = 3.14...
@@ -1148,44 +1162,169 @@ class RPNVariableDatabase():
             'hbar_mks', 'hbar_MeVs', 'mp_mks', 'mu_o', 'eps_o'
         ]
 
+        _builtin_dict = {}
+        for var_name in self._builtin_vars:
+            eq_obj = InfixEquation(var_name)
+
+            _builtin_dict[var_name] = eq_obj
+
+        self._builtin_dict_dumps = pickle.dumps(_builtin_dict)
+
     #----------------------------------------------------------------------
-    def _update(self):
+    def _get_ast_compatible_var_name_and_eq_obj(
+        self, var_name: str) -> Union[str, InfixEquation]:
+        """"""
+
+        ast_compatible_var_name = var_name
+
+        for _orig, _temp in AST_COMPATIBLE_REPL:
+            ast_compatible_var_name = ast_compatible_var_name.replace(
+                _orig, _temp)
+
+        eq_obj = InfixEquation(ast_compatible_var_name,
+                               rpn_conv_post_repl=RPN_CONV_POST_REPL)
+
+        return ast_compatible_var_name, eq_obj
+
+    #----------------------------------------------------------------------
+    def update_base(self, new_var_names: List) -> None:
         """"""
 
         names_conflict_w_builtins = [
-            name for name in self._vars if name in self._builtin_vars]
-        if names_conflict_w_builtins != []:
+            name for name in new_var_names if name in self._builtin_vars]
+        if names_conflict_w_builtins:
             for var_name in names_conflict_w_builtins:
                 print(f'* WARNING: RPN variable: name conflict with built-in '
                       f'variable name  "{var_name}".')
 
-        #u_vars = set(self._vars)
-        #if len(self._vars) != len(u_vars):
-            #names_dup = [name for name in u_vars if self._vars.count(name) != 1]
-            #for var_name in names_dup:
-                #print(f'* WARNING: RPN variable: duplicate name found  "{var_name}".')
+        ast_compatible_var_name_list = []
+        eq_obj_list = []
+        for var_name in new_var_names:
 
-        for var_name in self._vars + self._builtin_vars:
+            ast_compatible_var_name, eq_obj = \
+                self._get_ast_compatible_var_name_and_eq_obj(var_name)
 
-            ast_compatible_var_name = var_name
-            for _orig, _temp in AST_COMPATIBLE_REPL:
-                ast_compatible_var_name = ast_compatible_var_name.replace(
-                    _orig, _temp)
+            ast_compatible_var_name_list.append(ast_compatible_var_name)
 
-            eq_obj = InfixEquation(ast_compatible_var_name,
-                                   rpn_conv_post_repl=RPN_CONV_POST_REPL)
+            eq_obj_list.append(eq_obj)
+
+        self._var_names.insert(new_var_names)
+        self._ast_compatible_var_names.insert(ast_compatible_var_name_list)
+        self._var_eqs.insert(eq_obj_list)
+
+        for var_name in new_var_names:
+            if var_name in self._uncommitted_var_names:
+                self._uncommitted_var_names.remove(var_name)
+
+    #----------------------------------------------------------------------
+    def update_accessible(self):
+        """"""
+
+        _builtin_dict = pickle.loads(self._builtin_dict_dumps)
+
+        self.dict.clear()
+        self.dict.update(_builtin_dict)
+
+        self.namespace.__dict__.clear()
+        self.namespace.__dict__.update(_builtin_dict)
+
+        var_name_LoL = self._var_names.get_truncated_list()
+        ast_compatible_var_name_LoL = self._ast_compatible_var_names.get_truncated_list()
+        eq_obj_LoL = self._var_eqs.get_truncated_list()
+
+        assert len(var_name_LoL) == len(ast_compatible_var_name_LoL) == len(eq_obj_LoL)
+
+        for var_name_list, ast_compatible_var_name_list, eq_obj_list in zip(
+            var_name_LoL, ast_compatible_var_name_LoL, eq_obj_LoL):
+
+            assert len(var_name_list) == len(ast_compatible_var_name_list) \
+                   == len(eq_obj_list)
+
+            for var_name, ast_compatible_var_name, eq_obj in zip(
+                var_name_list, ast_compatible_var_name_list, eq_obj_list):
+
+                self.dict[var_name] = eq_obj
+                self.namespace.__dict__[ast_compatible_var_name] = eq_obj
+
+        for var_name in self._uncommitted_var_names:
+
+            ast_compatible_var_name, eq_obj = \
+                self._get_ast_compatible_var_name_and_eq_obj(var_name)
 
             self.dict[var_name] = eq_obj
-
             self.namespace.__dict__[ast_compatible_var_name] = eq_obj
 
     #----------------------------------------------------------------------
-    def _clear(self):
+    def add_uncommitted_var_name(self, new_var_name):
         """"""
 
-        self._vars.clear()
+        if new_var_name not in self._uncommitted_var_names:
+            self._uncommitted_var_names.append(new_var_name)
+            self.update_accessible()
+
+    #----------------------------------------------------------------------
+    def get_dict(self):
+        """"""
+
+        return self.dict
+
+    #----------------------------------------------------------------------
+    def get_namespace(self):
+        """"""
+
+        return self.namespace
+
+    #----------------------------------------------------------------------
+    def clear(self):
+        """"""
+
         self.dict.clear()
         self.namespace.__dict__.clear()
+
+        self._var_names.clear()
+        self._ast_compatible_var_names.clear()
+        self._var_eqs.clear()
+
+    #----------------------------------------------------------------------
+    def set_bookmark(self, bookmark_key):
+        """"""
+
+        self._var_names.set_bookmark(bookmark_key)
+        self._ast_compatible_var_names.set_bookmark(bookmark_key)
+        self._var_eqs.set_bookmark(bookmark_key)
+
+    #----------------------------------------------------------------------
+    def delete_bookmark(self):
+        """"""
+
+        self._var_names.delete_bookmark()
+        self._ast_compatible_var_names.delete_bookmark()
+        self._var_eqs.delete_bookmark()
+
+    #----------------------------------------------------------------------
+    def seek_bookmark(self, bookmark_key):
+        """"""
+
+        self._var_names.seek_bookmark(bookmark_key)
+        self._ast_compatible_var_names.seek_bookmark(bookmark_key)
+        self._var_eqs.seek_bookmark(bookmark_key)
+
+    #----------------------------------------------------------------------
+    def pop_above(self):
+        """"""
+
+        self._var_names.pop_above()
+        self._ast_compatible_var_names.pop_above()
+        self._var_eqs.pop_above()
+
+    #----------------------------------------------------------------------
+    def pop_below(self):
+        """"""
+
+        self._var_names.pop_below()
+        self._ast_compatible_var_names.pop_below()
+        self._var_eqs.pop_below()
+
 
 ########################################################################
 class RPNFunctionDatabase():
@@ -1703,6 +1842,285 @@ class RPNCalculator():
         return self.buffer[:]
 
 ########################################################################
+class BookmarkableObject:
+    """"""
+
+    #----------------------------------------------------------------------
+    def __init__(self, obj):
+        """Constructor"""
+
+        self.obj = obj
+
+        self.bookmark = None
+
+    #----------------------------------------------------------------------
+    def get_object(self):
+        """"""
+
+        return self.obj
+
+    #----------------------------------------------------------------------
+    def get_bookmark(self):
+        """"""
+
+        return self.bookmark
+
+    #----------------------------------------------------------------------
+    def set_bookmark(self, bookmark_key):
+        """"""
+
+        self.bookmark = bookmark_key
+
+########################################################################
+class BookmarkableList:
+    """"""
+
+    #----------------------------------------------------------------------
+    def __init__(self):
+        """Constructor"""
+
+        bottom_obj = BookmarkableObject(None)
+        bottom_obj.set_bookmark('bottom')
+
+        self._list = [bottom_obj]
+        self._bookmarks = ['bottom']
+
+        self._insert_index = 0
+        self._item_index = 0
+
+    #----------------------------------------------------------------------
+    def clear(self):
+        """"""
+
+        # Keep just "bottom" bookmarkable object
+        self._list = self._list[-1:]
+        self._bookmarks = self._bookmarks[-1:]
+
+        # Reset indexes to point to "bottom"
+        self._insert_index = 0
+        self._item_index = 0
+
+    #----------------------------------------------------------------------
+    def __len__(self):
+        """"""
+
+        # Exclude the special "bottom" BookmarkableObject
+        return len(self._list) - 1
+
+    #----------------------------------------------------------------------
+    def __iter__(self):
+        """"""
+
+        return iter(self._list[:-1])
+        # ^ Last element is excluded, as it is the "bottom"
+        #   BookmarkableObject, which contains no meaningful data.
+
+    #----------------------------------------------------------------------
+    def _assert_no_duplicate_bookmarks(self, bookmark_key):
+        """"""
+
+        if bookmark_key:
+
+            if bookmark_key in ('top', 'bottom'):
+                raise ValueError(f'Bookmark key "{bookmark_key}" is reserved, and cannot be used.')
+
+            existing_bookmarks = set(self._bookmarks)
+            if None in existing_bookmarks:
+                existing_bookmarks.remove(None)
+
+            if bookmark_key in existing_bookmarks:
+                raise ValueError(f'Bookmark key "{bookmark_key}" already exists, and cannot be used.')
+
+    #----------------------------------------------------------------------
+    def _at_top(self):
+        """"""
+
+        if self._item_index is None:
+            return True
+        else:
+            return False
+
+    #----------------------------------------------------------------------
+    def _at_bottom(self):
+        """"""
+
+        if self._item_index == self._insert_index:
+            return True
+        else:
+            return False
+
+    #----------------------------------------------------------------------
+    def get_bookmark(self):
+        """"""
+
+        if self._at_top():
+            return 'top'
+        elif self._at_bottom():
+            return 'bottom'
+        else:
+            return self._bookmarks[self._item_index]
+
+    #----------------------------------------------------------------------
+    def set_bookmark(self, bookmark_key):
+        """"""
+
+        self._assert_no_duplicate_bookmarks(bookmark_key)
+
+        if self._at_top():
+            if self._bookmarks[0] == 'bottom':
+                raise RuntimeError('No item found to bookmark')
+            self._list[0].set_bookmark(bookmark_key)
+            self._bookmarks[0] = bookmark_key
+        elif self._at_bottom():
+            if self._item_index == 0:
+                raise RuntimeError('No item found to bookmark')
+            self._list[self._item_index - 1].set_bookmark(bookmark_key)
+            self._bookmarks[self._item_index - 1] = bookmark_key
+        else:
+            self._list[self._item_index].set_bookmark(bookmark_key)
+            self._bookmarks[self._item_index] = bookmark_key
+
+    #----------------------------------------------------------------------
+    def delete_bookmark(self):
+        """"""
+
+        if self._at_top():
+            raise RuntimeError('You are at "top" bookmark, which cannot be deleted')
+        elif self._at_bottom():
+            raise RuntimeError('You are at "bottom" bookmark, which cannot be deleted')
+        else:
+            self._list[self._item_index].set_bookmark(None)
+            self._bookmarks[self._item_index] = None
+
+    #----------------------------------------------------------------------
+    def seek_bookmark(self, bookmark_key):
+        """"""
+
+        if bookmark_key == 'top':
+            self._item_index = None
+            self._insert_index = 0
+
+        elif bookmark_key == 'bottom':
+
+            self._item_index = self._insert_index = len(self._list) - 1
+
+        else:
+            if bookmark_key not in self._bookmarks:
+                raise ValueError(f'A bookmark with the name "{bookmark_key}" does NOT exist.')
+
+            self._item_index = self._bookmarks.index(bookmark_key)
+            self._insert_index = self._item_index + 1
+
+    #----------------------------------------------------------------------
+    def insert(self, obj):
+        """"""
+
+        if not isinstance(obj, BookmarkableObject):
+            obj = BookmarkableObject(obj)
+
+        bookmark_key = obj.get_bookmark()
+        self._assert_no_duplicate_bookmarks(bookmark_key)
+
+        self._list.insert(self._insert_index, obj)
+        self._bookmarks.insert(self._insert_index, bookmark_key)
+
+        if self._at_top():
+            self._item_index = 0
+        else:
+            self._item_index += 1
+
+        self._insert_index += 1
+
+    #----------------------------------------------------------------------
+    def pop_above(self):
+        """"""
+
+        if self._at_top():
+            raise RuntimeError('At the top. No item above to pop')
+
+        elif self._at_bottom():
+            if self._item_index == 0:
+                raise RuntimeError('No item found to pop')
+            self._bookmarks.pop(index=self._item_index)
+            obj = self._list.pop(index=self._item_index)
+
+            # Reset indexes to "bottom" again
+            self._item_index = self._insert_index = len(self._list) - 1
+
+        else:
+            self._bookmarks.pop(index=self._item_index)
+            obj = self._list.pop(index=self._item_index)
+
+            # Update indexes to reflect the removal
+            self._item_index -= 1
+            self._insert_index -= 1
+
+        return obj
+
+    #----------------------------------------------------------------------
+    def pop_below(self):
+        """"""
+
+        if self._at_top():
+            if self._bookmarks[0] == 'bottom':
+                raise RuntimeError('No item found to pop')
+            self._bookmarks.pop(index=0)
+            obj = self._list.pop(index=0)
+
+            # No need to update indexes in this case
+
+        elif self._at_bottom():
+            raise RuntimeError('At the bottom. No item below to pop')
+
+        else:
+            if self._bookmarks[self._item_index + 1] == 'botoom':
+                raise RuntimeError('No item below to pop')
+
+            self._bookmarks.pop(index=self._item_index + 1)
+            obj = self._list.pop(index=self._item_index + 1)
+
+            # No need to update indexes in this case
+
+        return obj
+
+    #----------------------------------------------------------------------
+    def get_truncated_list(self):
+        """"""
+
+        return [b_obj.get_object() for b_obj in self._list[:(self._item_index+1)]
+                if b_obj.get_bookmark() != 'bottom']
+
+    ##----------------------------------------------------------------------
+    #def index(self, value):
+        #"""
+        #First search for a match in the bookmark keys. If not found,
+        #then search for a match in the objects in the list.
+        #"""
+
+        #if value in self._bookmarks:
+            #return self._bookmarks.index(value)
+        #elif value in self._list:
+            #return self._list.index(value)
+        #else:
+            #raise ValueError(
+                #('Specified value exists neither in bookmark keys or '
+                 #'in the list of objects.'))
+
+    ##----------------------------------------------------------------------
+    #def remove(self, value):
+        #"""
+        #First search for a match in the bookmark keys. If not found,
+        #then search for a match in the objects in the list.
+        #"""
+
+        #index = self.index(value)
+
+        #self._bookmarks.pop(index=index)
+        #self._list.pop(index=index)
+
+        #self._cur_pos = self._get_positive_index(index) - 1
+
+########################################################################
 class EleDesigner():
     """"""
 
@@ -1737,13 +2155,23 @@ class EleDesigner():
 
         self.rpnfuncs = RPNFunctionDatabase()
 
-        self.rpnvars = RPNVariableDatabase()
+        self.rpnvars = {}
+        self.rpnvars['optimization_term'] = RPNVariableDatabase()
         # Variables that will be available within the definition of
         #   "term" in "&optimization_term"
 
-        self.rpnvars_covars = RPNVariableDatabase()
+        self.rpnvars['optimization_covariable'] = RPNVariableDatabase()
         # Variables that will be available within the definition of
         #   "equation" in "&optimization_covariable"
+
+        self._text_blocks = BookmarkableList()
+
+        self._text = ''
+        self._last_block_text = ''
+
+        self.rootname = None
+        self.output_filepath_list = []
+        self.actual_output_filepath_list = []
 
         self.clear()
 
@@ -1754,31 +2182,38 @@ class EleDesigner():
     def clear(self):
         """"""
 
+        for k, v in self.rpnvars.items():
+            v.clear()
+
+        self._text_blocks.clear()
+
         self._text = ''
         self._last_block_text = ''
 
         self.rootname = None
-        self.output_filepath_list = []
-        self.actual_output_filepath_list = []
-
-        self.rpnvars._clear()
-        self.rpnvars_covars._clear()
+        self.output_filepath_list.clear()
+        self.actual_output_filepath_list.clear()
 
     #----------------------------------------------------------------------
     def get_rpn_vars(self, block_header):
         """"""
 
-        if block_header == 'optimization_term':
-            return self.rpnvars
-        elif block_header == 'optimization_covariable':
-            return self.rpnvars_covars
-        else:
-            raise ValueError('Invalid block header')
+        if block_header not in self.rpnvars:
+            raise KeyError('Invalid block header')
+
+        return self.rpnvars[block_header]
+
+    #----------------------------------------------------------------------
+    def _update_text(self):
+        """"""
+
+        self._text = ''.join([b_obj.get_object() for b_obj in self._text_blocks])
 
     #----------------------------------------------------------------------
     def print_whole(self):
         """"""
 
+        self._update_text()
         print(self._text)
 
     #----------------------------------------------------------------------
@@ -1794,8 +2229,42 @@ class EleDesigner():
 
         self.update_output_filepaths()
 
+        self._update_text()
+
         util.robust_text_file_write(
             self.ele_filepath, self._text, nMaxTry=nMaxTry, sleep=sleep)
+
+    #----------------------------------------------------------------------
+    def get_bookmark(self):
+        """"""
+
+        return self._text_blocks.get_bookmark()
+
+    #----------------------------------------------------------------------
+    def set_bookmark(self, bookmark_key):
+        """"""
+
+        self._text_blocks.set_bookmark(bookmark_key)
+        for v in self.rpnvars.values():
+            v.set_bookmark(bookmark_key)
+
+    #----------------------------------------------------------------------
+    def delete_bookmark(self):
+        """"""
+
+        self._text_blocks.delete_bookmark()
+        for v in self.rpnvars.values():
+            v.delete_bookmark()
+
+    #----------------------------------------------------------------------
+    def seek_bookmark(self, bookmark_key):
+        """"""
+
+        self._text_blocks.seek_bookmark(bookmark_key)
+        for v in self.rpnvars.values():
+            v.seek_bookmark(bookmark_key)
+
+        self._update_accessible_rpnvars()
 
     #----------------------------------------------------------------------
     def delete_ele_file(self):
@@ -1850,7 +2319,10 @@ class EleDesigner():
         """"""
 
         self._last_block_text = '\n'
-        self._text += self._last_block_text
+
+        self._text_blocks.insert(self._last_block_text)
+        for v in self.rpnvars.values():
+            v.update_base([])
 
         if std_print_enabled['out'] and self.auto_print_on_add:
             self.print_last_block()
@@ -1860,7 +2332,10 @@ class EleDesigner():
         """"""
 
         self._last_block_text = f'! {comment}\n'
-        self._text += self._last_block_text
+
+        self._text_blocks.insert(self._last_block_text)
+        for v in self.rpnvars.values():
+            v.update_base([])
 
         if std_print_enabled['out'] and self.auto_print_on_add:
             self.print_last_block()
@@ -2001,14 +2476,22 @@ class EleDesigner():
             '\n'.join([' ' * n_indent + line for line in block]) +
             final_line)
 
-        # --- Now update "rpnvars" ---
-        self._update_rpnvars(block_header, **kwargs)
-
         return block_str
 
     #----------------------------------------------------------------------
-    def _update_rpnvars(self, block_header: str, **kwargs) -> None:
+    def _update_accessible_rpnvars(self) -> None:
         """"""
+
+        for v in self.rpnvars.values():
+            v.update_accessible()
+
+    #----------------------------------------------------------------------
+    def _update_base_rpnvars(self, block_header: str, **kwargs) -> None:
+        """"""
+
+        new_var_names = {}
+        for k in list(self.rpnvars):
+            new_var_names[k] = []
 
         if block_header == 'floor_coordinates':
             for fitpoint_name in self._fitpoint_names:
@@ -2016,21 +2499,34 @@ class EleDesigner():
                     # ^ These are, respectively, the three position coordinates,
                     #   the three angle coordinates, and the total arch length at
                     #   the marker location.
-                    self.rpnvars._vars.append(f'{fitpoint_name}.{quantity}')
-            self.rpnvars._update()
+                    new_var_names['optimization_term'].append(f'{fitpoint_name}.{quantity}')
 
         elif block_header in ('optimization_setup', 'parallel_optimization_setup'):
-            self.rpnvars._vars.append('Particles')
-            self.rpnvars._update()
+            new_var_names['optimization_term'].append('Particles')
+
+        elif block_header == 'optimization_term':
+            if isinstance(kwargs['term'], str):
+                terms = kwargs['term'].split()
+            elif isinstance(kwargs['term'], InfixEquation):
+                terms = kwargs['term'].torpn().split()
+            elif isinstance(kwargs['term'], OptimizationTerm):
+                terms = str(kwargs['term']).split()
+            else:
+                raise ValueError('Invalid data type')
+
+            for i, t in enumerate(terms):
+                if t == 'sto':
+                    #print(f'** Adding new variable "{terms[i+1]}"')
+                    new_var_names['optimization_term'].append(terms[i+1])
 
         elif block_header in ('optimization_variable', 'optimization_covariable'):
             name, item = kwargs['name'].upper(), kwargs['item'].upper()
-            self.rpnvars._vars.extend([f'{name}.{item}', f'{name}.{item}0'])
-            self.rpnvars._update()
+            new_var_names['optimization_term'].extend(
+                [f'{name}.{item}', f'{name}.{item}0'])
 
             if block_header == 'optimization_variable':
-                self.rpnvars_covars._vars.extend([f'{name}.{item}', f'{name}.{item}0'])
-                self.rpnvars_covars._update()
+                new_var_names['optimization_covariable'].extend(
+                    [f'{name}.{item}', f'{name}.{item}0'])
 
         elif block_header == 'rpn_load':
             tag = kwargs.get('tag', '')
@@ -2038,8 +2534,7 @@ class EleDesigner():
             [_, meta] = sdds.sdds2dicts(kwargs['filename'])
             for col_name, _d in meta['columns'].items():
                 if _d['TYPE'] == 'double':
-                    self.rpnvars._vars.append(f'{tag_dot}{col_name}')
-            self.rpnvars._update()
+                    new_var_names['optimization_term'].append(f'{tag_dot}{col_name}')
 
         elif block_header == 'run_setup':
 
@@ -2083,21 +2578,19 @@ class EleDesigner():
             #
             for fitpoint_name in self._fitpoint_names:
                 for quantity in quantity_list:
-                    self.rpnvars._vars.append(f'{fitpoint_name}.{quantity}')
-
-            self.rpnvars._update()
+                    new_var_names['optimization_term'].append(f'{fitpoint_name}.{quantity}')
 
         elif (block_header == 'twiss_output') and \
              kwargs.get('output_at_each_step', False):
 
-            self.rpnvars._vars.extend([
+            new_var_names['optimization_term'].extend([
                 'nux', 'nuy', 'dnux/dp', 'dnuy/dp', 'alphac', 'alphac2',
             ])
 
             for statistic in ['min', 'max', 'ave', 'p99', 'p98', 'p96']:
                 for twiss_param_name in ['betax', 'alphax', 'betay', 'alphay',
                                          'etax', 'etaxp', 'etay', 'etayp']:
-                    self.rpnvars._vars.append(f'{statistic}.{twiss_param_name}')
+                    new_var_names['optimization_term'].append(f'{statistic}.{twiss_param_name}')
 
             for fitpoint_name in self._fitpoint_names:
                 for twiss_param_name in [
@@ -2107,22 +2600,25 @@ class EleDesigner():
                     # ^ Note that "etapx" and "etaxp" are the same, being
                     #   alternate names for etax_prime, and the same is true for
                     #   vertical plane.
-                    self.rpnvars._vars.append(f'{fitpoint_name}.{twiss_param_name}')
+                    new_var_names['optimization_term'].append(f'{fitpoint_name}.{twiss_param_name}')
 
             if kwargs.get('radiation_integrals', False):
-                self.rpnvars._vars.extend([
+                new_var_names['optimization_term'].extend([
                     'ex0', 'Sdelta0', 'Jx', 'Jy', 'Jdelta', 'taux', 'tauy',
                     'taudelta', 'I1', 'I2', 'I3', 'I4', 'I5'])
 
             if kwargs.get('compute_driving_terms', False):
-                self.rpnvars._vars.extend([
+                new_var_names['optimization_term'].extend([
                     'h11001', 'h00111', 'h20001', 'h00201', 'h10002', 'h21000',
                     'h30000', 'h10110', 'h10020', 'h10200', 'h22000', 'h11110',
                     'h00220', 'h31000', 'h40000', 'h20110', 'h11200', 'h20020',
                     'h20200', 'h00310', 'h00400', 'dnux/dJx', 'dnux/dJy', 'dnuy/dJy'
                 ])
 
-            self.rpnvars._update()
+        for k, v in self.rpnvars.items():
+            v.update_base(new_var_names[k])
+
+        self._update_accessible_rpnvars()
 
     #----------------------------------------------------------------------
     def get_LTE_elem_info(self, elem_name: str):
@@ -2248,10 +2744,34 @@ class EleDesigner():
         """"""
 
         self._last_block_text = self._get_block_str(block_name, **kwargs)
-        self._text += self._last_block_text
+
+        # --- Now update "rpnvars" ---
+        self._update_base_rpnvars(block_name, **kwargs)
+
+        self._text_blocks.insert(self._last_block_text)
 
         if std_print_enabled['out'] and self.auto_print_on_add:
             self.print_last_block()
+
+    #----------------------------------------------------------------------
+    def remove_block_above(self):
+        """"""
+
+        self._text_blocks.pop_above()
+
+        for v in self.rpnvars.values():
+            v.pop_above()
+        self._update_accessible_rpnvars()
+
+    #----------------------------------------------------------------------
+    def remove_block_below(self):
+        """"""
+
+        self._text_blocks.pop_below()
+
+        for v in self.rpnvars.values():
+            v.pop_below()
+        self._update_accessible_rpnvars()
 
 ########################################################################
 class OptimizationTerm():
@@ -2299,9 +2819,7 @@ class OptimizationTerm():
     def assign(self, new_var_name, infix_eq_obj):
         """"""
 
-        if new_var_name not in self.rpnvars._vars:
-            self.rpnvars._vars.append(new_var_name)
-            self.rpnvars._update()
+        self.rpnvars.add_uncommitted_var_name(new_var_name)
 
         rpn_str = f'{infix_eq_obj.torpn()} sto {new_var_name} pop'
 
