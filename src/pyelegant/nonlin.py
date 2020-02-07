@@ -2006,7 +2006,8 @@ def _save_chrom_data(
 
 def plot_chrom(
     output_filepath, max_chrom_order=3, title='', deltalim=None, fit_deltalim=None,
-    nuxlim=None, nuylim=None, max_resonance_line_order=5, fit_label_format='+.3g'):
+    nuxlim=None, nuylim=None, max_resonance_line_order=5, fit_label_format='+.3g',
+    ax_nu_vs_delta=None, ax_nuy_vs_nux=None):
     """"""
 
     assert max_resonance_line_order <= 5
@@ -2115,8 +2116,10 @@ def plot_chrom(
 
     font_sz = 22
 
-    fig = plt.figure()
-    ax1 = fig.add_subplot(111)
+    if ax_nu_vs_delta:
+        ax1 = ax_nu_vs_delta
+    else:
+        fig, ax1 = plt.subplots()
     if _plot_nu_frac:
         offset = np.floor(nuxs)
     else:
@@ -2148,11 +2151,12 @@ def plot_chrom(
     else:
         nuylim = ax2.get_ylim()
     if title != '':
-        plt.title(title, size=font_sz, pad=60)
+        ax1.set_title(title, size=font_sz, pad=60)
     combined_lines = fit_lines1 + fit_lines2
     leg = ax2.legend(combined_lines, [L.get_label() for L in combined_lines],
                      loc='upper center', bbox_to_anchor=(0.5, 1.3),
                      fancybox=True, shadow=True, prop=dict(size=12))
+    plt.sca(ax1)
     plt.tight_layout()
 
 
@@ -2170,15 +2174,17 @@ def plot_chrom(
         frac_nuxlim = nuxlim - nux0_int
         frac_nuylim = nuylim - nuy0_int
 
-    fig = plt.figure()
-    fig.add_subplot(111)
-    plt.scatter(_nuxs, _nuys, s=10, c=deltas * 1e2, marker='o', cmap='jet')
+    if ax_nuy_vs_nux:
+        ax = ax_nuy_vs_nux
+    else:
+        _, ax = plt.subplots()
+    sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=deltas * 1e2, marker='o', cmap='jet')
     if nuxlim:
-        plt.xlim(nuxlim)
+        ax.set_xlim(nuxlim)
     if nuylim:
-        plt.ylim(nuylim)
-    plt.xlabel(r'$\nu_x$', size=font_sz)
-    plt.ylabel(r'$\nu_y$', size=font_sz)
+        ax.set_ylim(nuylim)
+    ax.set_xlabel(r'$\nu_x$', size=font_sz)
+    ax.set_ylabel(r'$\nu_y$', size=font_sz)
     #
     rd = util.ResonanceDiagram()
     lineprops = dict(
@@ -2198,15 +2204,16 @@ def plot_chrom(
             else:
                 _x = np.array([nux1, nux2])
                 _y = np.array([nuy1, nuy2])
-            plt.plot(_x, _y, label=rd.getResonanceCoeffLabelString(nx, ny), **prop)
+            ax.plot(_x, _y, label=rd.getResonanceCoeffLabelString(nx, ny), **prop)
             #print(n, nx, ny, _x, _y, prop)
     #leg = plt.legend(loc='best')
     #leg.set_draggable(True, use_blit=True)
     #
-    cb = plt.colorbar()
+    cb = plt.colorbar(sc_obj, ax=ax)
     cb.ax.set_title(r'$\delta\, [\%]$', size=16)
     if title != '':
-        plt.title(title, size=font_sz)
+        ax.set_title(title, size=font_sz)
+    plt.sca(ax)
     plt.tight_layout()
 
 
