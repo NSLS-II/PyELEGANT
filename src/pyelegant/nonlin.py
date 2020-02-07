@@ -1505,6 +1505,7 @@ def calc_chrom_twiss(
 
 def calc_chrom_track(
     output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, ndelta,
+    courant_snyder=True,
     n_turns=256, x0_offset=1e-5, y0_offset=1e-5, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
@@ -1518,6 +1519,7 @@ def calc_chrom_track(
     input_dict = dict(
         LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
         delta_min=delta_min, delta_max=delta_max, ndelta=ndelta,
+        courant_snyder=courant_snyder,
         n_turns=n_turns, x0_offset=x0_offset, y0_offset=y0_offset,
         use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
@@ -1598,10 +1600,11 @@ def calc_chrom_track(
     _d = util.load_pgz_file(str(twi_pgz_pathobj))
     nux0 = _d['data']['twi']['scalars']['nux']
     nuy0 = _d['data']['twi']['scalars']['nuy']
+    betax = _d['data']['twi']['arrays']['betax'][0]
+    betay = _d['data']['twi']['arrays']['betay'][0]
+    alphax = _d['data']['twi']['arrays']['alphax'][0]
+    alphay = _d['data']['twi']['arrays']['alphay'][0]
     twi_pgz_pathobj.unlink()
-
-    nux0_frac = nux0 - np.floor(nux0)
-    nuy0_frac = nuy0 - np.floor(nuy0)
 
     delta_array = np.linspace(delta_min, delta_max, ndelta)
 
@@ -1609,9 +1612,10 @@ def calc_chrom_track(
     if run_local:
         tbt = dict(x = np.full((n_turns, ndelta), np.nan),
                    y = np.full((n_turns, ndelta), np.nan),
-                   #xp = np.full((n_turns, ndelta), np.nan),
-                   #yp = np.full((n_turns, ndelta), np.nan),
                    )
+        if courant_snyder:
+            tbt['xp'] = np.full((n_turns, ndelta), np.nan)
+            tbt['yp'] = np.full((n_turns, ndelta), np.nan),
 
         #tElapsed = dict(run_ele=0.0, sdds2dicts=0.0, tbt_population=0.0)
 
@@ -1644,24 +1648,32 @@ def calc_chrom_track(
         delta_sub_array_list, reverse_mapping = util.chunk_list(
             delta_array, remote_opts['ntasks'])
 
+        coords_list = ['x', 'y']
+        if courant_snyder:
+            coords_list += ['xp', 'yp']
+
         module_name = 'pyelegant.nonlin'
         func_name = '_calc_chrom_track_get_tbt'
         chunked_results = remote.run_mpi_python(
             remote_opts, module_name, func_name, delta_sub_array_list,
             (ele_pathobj.read_text(), ele_pathobj.name, watch_pathobj.name,
-             print_cmd, std_print_enabled['out'], std_print_enabled['err']),
+             print_cmd, std_print_enabled['out'], std_print_enabled['err'],
+             coords_list),
         )
 
         tbt_chunked_list = dict()
         tbt_flat_list = dict()
-        for plane in ['x', 'y']:
+        for plane in coords_list:
             tbt_chunked_list[plane] = [_d[plane] for _d in chunked_results]
             tbt_flat_list[plane] = util.unchunk_list_of_lists(
                 tbt_chunked_list[plane], reverse_mapping)
 
         tbt = dict(x = np.full((n_turns, ndelta), np.nan),
                    y = np.full((n_turns, ndelta), np.nan))
-        for plane in ['x', 'y']:
+        if courant_snyder:
+            tbt['xp'] = np.full((n_turns, ndelta), np.nan)
+            tbt['yp'] = np.full((n_turns, ndelta), np.nan)
+        for plane in coords_list:
             for iDelta, array in enumerate(tbt_flat_list[plane]):
                 tbt[plane][:len(array), iDelta] = array
 
@@ -1669,7 +1681,12 @@ def calc_chrom_track(
 
     #t0 = time.time()
     # Estimate tunes from TbT data
-    nus = calc_chrom_from_tbt(delta_array, tbt['x'], tbt['y'], nux0, nuy0)
+    if courant_snyder:
+        nus = calc_chrom_from_tbt_cs(
+            delta_array, tbt['x'], tbt['y'], nux0, nuy0,
+            tbt['xp'], tbt['yp'], betax, alphax, betay, alphay)
+    else:
+        nus = calc_chrom_from_tbt_ps(delta_array, tbt['x'], tbt['y'], nux0, nuy0)
     nuxs = nus['x']
     nuys = nus['y']
     #print('* Time elapsed for tune estimation: {:.3f}'.format(time.time() - t0))
@@ -1686,11 +1703,26 @@ def calc_chrom_track(
 
     return output_filepath
 
-def calc_chrom_from_tbt(delta_array, xtbt, ytbt, nux0, nuy0):
-    """"""
+def calc_chrom_from_tbt_ps(delta_array, xtbt, ytbt, nux0, nuy0):
+    """
+    Using phase-space (ps) variables "x" and "y", which can only
+    determine tunes within the range of [0, 0.5].
+    """
 
     frac_nux0 = nux0 - np.floor(nux0)
     frac_nuy0 = nuy0 - np.floor(nuy0)
+
+    if frac_nux0 > 0.5:
+        frac_nux0 = 1 - frac_nux0
+        nux_above_half = True
+    else:
+        nux_above_half = False
+
+    if frac_nuy0 > 0.5:
+        frac_nuy0 = 1 - frac_nuy0
+        nuy_above_half = True
+    else:
+        nuy_above_half = False
 
     neg_delta_array = delta_array[delta_array < 0.0]
     neg_sort_inds = np.argsort(np.abs(neg_delta_array))
@@ -1745,17 +1777,158 @@ def calc_chrom_from_tbt(delta_array, xtbt, ytbt, nux0, nuy0):
                 out = sigproc.getDftPeak(yarray, init_nuy, **opts)
                 nus['y'][i] = out['nu']
 
+    if nux_above_half:
+        nus['x'] = 1 - nus['x']
+    if nuy_above_half:
+        nus['y'] = 1 - nus['y']
+
+    return nus
+
+def angle2p(xp, yp, delta):
+    """
+    Convert angles (xp, yp) into canonical momenta (px, py)
+    """
+
+    fac = (1 + delta) / np.sqrt(1 + xp**2 + yp**2)
+
+    px = xp * fac
+    py = yp * fac
+
+    return px, py
+
+def p2angle(px, py, delta):
+    """
+    Convert canonical momenta (px, py) into angles (xp, yp)
+    """
+
+    fac = np.sqrt((1 + delta)**2 - (px**2 + py**2))
+
+    xp = px / fac
+    yp = py / fac
+
+    return xp, yp
+
+def approx_angle2p(xp, yp, delta):
+    """
+    Convert angles (xp, yp) into canonical momenta (px, py)
+    **approximately** with small-angle assumption.
+    """
+
+    fac = 1 + delta
+
+    px = xp * fac
+    py = yp * fac
+
+    return px, py
+
+def approx_p2angle(px, py, delta):
+    """
+    Convert canonical momenta (px, py) into angles (xp, yp)
+    **approximately** with small-angle assumption.
+    """
+
+    fac = 1 + delta
+
+    xp = px / fac
+    yp = py / fac
+
+    return xp, yp
+
+def calc_chrom_from_tbt_cs(delta_array, xtbt, ytbt, nux0, nuy0,
+                           xptbt, yptbt, betax, alphax, betay, alphay):
+    """
+    Using Courant-Snyder (CS) coordinates "xhat" and "yhat", which enables
+    determination of tunes within the range of [0, 1.0].
+    """
+
+    frac_nux0 = nux0 - np.floor(nux0)
+    frac_nuy0 = nuy0 - np.floor(nuy0)
+
+    if frac_nux0 > 0.5:
+        frac_nux0 = frac_nux0 - 1
+    if frac_nuy0 > 0.5:
+        frac_nuy0 = frac_nuy0 - 1
+
+    neg_delta_array = delta_array[delta_array < 0.0]
+    neg_sort_inds = np.argsort(np.abs(neg_delta_array))
+    sorted_neg_delta_inds = np.where(delta_array < 0.0)[0][neg_sort_inds]
+    pos_delta_array = delta_array[delta_array >= 0.0]
+    pos_sort_inds = np.argsort(pos_delta_array)
+    sorted_pos_delta_inds = np.where(delta_array >= 0.0)[0][pos_sort_inds]
+    sorted_neg_delta_inds, sorted_pos_delta_inds
+
+    nus = dict(x=np.full(delta_array.shape, np.nan),
+               y=np.full(delta_array.shape, np.nan))
+
+    n_turns = xtbt.shape[0]
+    nu_vec = np.fft.fftfreq(n_turns)
+
+    opts = dict(window='sine', resolution=1e-8)
+    for sorted_delta_inds in [sorted_neg_delta_inds, sorted_pos_delta_inds]:
+        init_nux = frac_nux0
+        init_nuy = frac_nuy0
+        for i in sorted_delta_inds:
+            xarray = xtbt[:, i]
+            yarray = ytbt[:, i]
+
+            if np.any(np.isnan(xarray)) or np.any(np.isnan(yarray)):
+                # Particle lost at some point.
+                continue
+
+            xparray = xptbt[:, i]
+            yparray = yptbt[:, i]
+            delta = delta_array[i]
+            pxarray, pyarray = angle2p(xparray, yparray, delta)
+
+            xarray -= np.mean(xarray)
+            yarray -= np.mean(yarray)
+            pxarray -= np.mean(pxarray)
+            pyarray -= np.mean(pyarray)
+
+            xhat = xarray / np.sqrt(betax)
+            pxhat = alphax / np.sqrt(betax) * xarray + np.sqrt(betax) * pxarray
+            yhat = yarray / np.sqrt(betay)
+            pyhat = alphay / np.sqrt(betay) * yarray + np.sqrt(betay) * pyarray
+
+            hx = xhat - 1j * pxhat
+            hy = yhat - 1j * pyhat
+
+            # Find the rough peak first
+            ff_rect = np.fft.fft(hx)
+            A_arb = np.abs(ff_rect)
+            init_nux = nu_vec[np.argmax(A_arb)]
+            # Then fine-tune
+            out = sigproc.getDftPeak(hx, init_nux, **opts)
+            nus['x'][i] = out['nu']
+
+            # Find the rough peak first
+            ff_rect = np.fft.fft(hy)
+            A_arb = np.abs(ff_rect)
+            init_nuy = nu_vec[np.argmax(A_arb)]
+            # Then fine-tune
+            out = sigproc.getDftPeak(hy, init_nuy, **opts)
+            nus['y'][i] = out['nu']
+
+    nonnan_inds = np.where(~np.isnan(nus['x']))[0]
+    neg_inds = nonnan_inds[nus['x'][nonnan_inds] < 0]
+    nus['x'][neg_inds] += 1
+    nonnan_inds = np.where(~np.isnan(nus['y']))[0]
+    neg_inds = nonnan_inds[nus['y'][nonnan_inds] < 0]
+    nus['y'][neg_inds] += 1
+
     return nus
 
 def _calc_chrom_track_get_tbt(
     delta_sub_array, ele_contents, ele_filename, watch_filename,
-    print_cmd, print_stdout, print_stderr, tempdir_path='/tmp'):
+    print_cmd, print_stdout, print_stderr, coords_list, tempdir_path='/tmp'):
     """"""
 
     if not Path(tempdir_path).exists():
         tempdir_path = Path.cwd()
 
-    sub_tbt = dict(x=[], y=[])
+    sub_tbt = dict()
+    for k in coords_list:
+        sub_tbt[k] = []
 
     with tempfile.TemporaryDirectory(
         prefix='tmpCalcChrom_', dir=tempdir_path) as tmpdirname:
@@ -1786,7 +1959,7 @@ def _calc_chrom_track_get_tbt(
 
 def _save_chrom_data(
     output_filepath, output_file_type, delta_array, nuxs, nuys, timestamp_fin,
-    input_dict, xtbt=None, ytbt=None, nux0=None, nuy0=None):
+    input_dict, xtbt=None, ytbt=None, xptbt=None, yptbt=None, nux0=None, nuy0=None):
     """
     nux0, nuy0: on-momentum tunes
     """
@@ -1801,6 +1974,10 @@ def _save_chrom_data(
             f.create_dataset('xtbt', data=xtbt, **_kwargs)
         if ytbt is not None:
             f.create_dataset('ytbt', data=ytbt, **_kwargs)
+        if xptbt is not None:
+            f.create_dataset('xptbt', data=xptbt, **_kwargs)
+        if yptbt is not None:
+            f.create_dataset('yptbt', data=yptbt, **_kwargs)
         if nux0 is not None:
             f['nux0'] = nux0
         if nuy0 is not None:
@@ -1815,6 +1992,10 @@ def _save_chrom_data(
             d['xtbt'] = xtbt
         if ytbt is not None:
             d['ytbt'] = ytbt
+        if xptbt is not None:
+            d['xptbt'] = xptbt
+        if yptbt is not None:
+            d['yptbt'] = yptbt
         if nux0 is not None:
             d['nux0'] = nux0
         if nuy0 is not None:
@@ -1824,44 +2005,107 @@ def _save_chrom_data(
         raise ValueError()
 
 def plot_chrom(
-    output_filepath, max_chrom_order=3, title='', deltalim=None,
-    nuxlim=None, nuylim=None, max_resonance_line_order=5):
+    output_filepath, max_chrom_order=3, title='', deltalim=None, fit_deltalim=None,
+    nuxlim=None, nuylim=None, max_resonance_line_order=5, fit_label_format='+.3g'):
     """"""
 
     assert max_resonance_line_order <= 5
+
+    is_nuxlim_frac = False
+    if nuxlim:
+        if (0.0 <= nuxlim[0] <= 1.0) and (0.0 <= nuxlim[1] <= 1.0):
+            is_nuxlim_frac = True
+
+    is_nuylim_frac = False
+    if nuylim:
+        if (0.0 <= nuylim[0] <= 1.0) and (0.0 <= nuylim[1] <= 1.0):
+            is_nuylim_frac = True
+
+    if is_nuxlim_frac and is_nuylim_frac:
+        _plot_nu_frac = True
+    elif (not is_nuxlim_frac) and (not is_nuylim_frac):
+        _plot_nu_frac = False
+    else:
+        raise ValueError('"nuxlim" and "nuylim" must be either both fractional or both non-fractional')
 
     try:
         d = util.load_pgz_file(output_filepath)
         deltas = d['deltas']
         nuxs = d['nuxs']
         nuys = d['nuys']
+        if 'nux0' in d:
+            nux0 = d['nux0']
+            nuy0 = d['nuy0']
+
+            nux0_int = np.floor(nux0)
+            nuy0_int = np.floor(nuy0)
+
+            nuxs += nux0_int
+            nuys += nuy0_int
+        else:
+            nux0 = np.nanmedian(nuxs)
+            nuy0 = np.nanmedian(nuys)
+
+            nux0_int = np.floor(nux0)
+            nuy0_int = np.floor(nuy0)
     except:
         f = h5py.File(output_filepath, 'r')
         deltas = f['deltas'][()]
         nuxs = f['nuxs'][()]
         nuys = f['nuys'][()]
+        if 'nux0' in f:
+            nux0 = f['nux0'][()]
+            nuy0 = f['nuy0'][()]
+
+            nux0_int = np.floor(nux0)
+            nuy0_int = np.floor(nuy0)
+
+            nuxs += nux0_int
+            nuys += nuy0_int
+        else:
+            nux0 = np.nanmedian(nuxs)
+            nuy0 = np.nanmedian(nuys)
+
+            nux0_int = np.floor(nux0)
+            nuy0_int = np.floor(nuy0)
         f.close()
 
     if deltalim:
         delta_incl = np.logical_and(deltas >= np.min(deltalim),
-                                    deltas >= np.min(deltalim))
+                                    deltas <= np.max(deltalim))
     else:
         delta_incl = np.ones(deltas.shape).astype(bool)
     deltas = deltas[delta_incl]
     nuxs = nuxs[delta_incl]
     nuys = nuys[delta_incl]
 
-    nux_nan_inds = np.isnan(nuxs)
-    nuy_nan_inds = np.isnan(nuys)
+    if fit_deltalim:
+        fit_delta_incl = np.logical_and(deltas >= np.min(fit_deltalim),
+                                        deltas <= np.max(fit_deltalim))
+        fit_deltas = deltas[fit_delta_incl]
+        fit_nuxs = nuxs[fit_delta_incl]
+        fit_nuys = nuys[fit_delta_incl]
+    else:
+        fit_delta_incl = np.ones(deltas.shape).astype(bool)
+        fit_deltas = deltas
+        fit_nuxs = nuxs
+        fit_nuys = nuys
+    nux_nan_inds = np.isnan(fit_nuxs)
+    nuy_nan_inds = np.isnan(fit_nuys)
     coeffs = dict(
-        x=np.polyfit(deltas[~nux_nan_inds], nuxs[~nux_nan_inds], max_chrom_order),
-        y=np.polyfit(deltas[~nuy_nan_inds], nuys[~nuy_nan_inds], max_chrom_order))
+        x=np.polyfit(fit_deltas[~nux_nan_inds], fit_nuxs[~nux_nan_inds], max_chrom_order),
+        y=np.polyfit(fit_deltas[~nuy_nan_inds], fit_nuys[~nuy_nan_inds], max_chrom_order))
 
     fit_label = {}
     for plane in ['x', 'y']:
         fit_label[plane] = fr'\nu_{plane} = '
         for i, c in zip(range(max_chrom_order + 1)[::-1], coeffs[plane]):
-            fit_label[plane] += util.pprint_sci_notation(c, '+.3g')
+
+            if i != 0:
+                fit_label[plane] += util.pprint_sci_notation(c, fit_label_format)
+            else:
+                fit_label[plane] += util.pprint_sci_notation(c, '+.3f')
+
             if i == 1:
                 fit_label[plane] += r'\delta '
             elif i >= 2:
@@ -1869,46 +2113,37 @@ def plot_chrom(
 
         fit_label[plane] = '${}$'.format(fit_label[plane].strip())
 
-    is_nuxlim_frac = False
-    if nuxlim is not None:
-        if (0.0 <= nuxlim[0] <= 1.0) and (0.0 <= nuxlim[1] <= 1.0):
-            is_nuxlim_frac = True
-    is_nuylim_frac = False
-    if nuylim is not None:
-        if (0.0 <= nuylim[0] <= 1.0) and (0.0 <= nuylim[1] <= 1.0):
-            is_nuylim_frac = True
-
     font_sz = 22
 
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
-    if is_nuxlim_frac:
+    if _plot_nu_frac:
         offset = np.floor(nuxs)
     else:
         offset = np.zeros(nuxs.shape)
     lines1 = ax1.plot(deltas * 1e2, nuxs - offset, 'b.', label=r'$\nu_x$')
     fit_lines1 = ax1.plot(
-        deltas * 1e2, np.poly1d(coeffs['x'])(deltas) - offset, 'b-',
+        fit_deltas * 1e2, np.poly1d(coeffs['x'])(fit_deltas) - offset[fit_delta_incl], 'b-',
         label=fit_label['x'])
     ax2 = ax1.twinx()
-    if is_nuylim_frac:
+    if _plot_nu_frac:
         offset = np.floor(nuys)
     else:
         offset = np.zeros(nuys.shape)
     lines2 = ax2.plot(deltas * 1e2, nuys - offset, 'r.', label=r'$\nu_y$')
     fit_lines2 = ax2.plot(
-        deltas * 1e2, np.poly1d(coeffs['y'])(deltas) - offset, 'r-',
+        fit_deltas * 1e2, np.poly1d(coeffs['y'])(fit_deltas) - offset[fit_delta_incl], 'r-',
         label=fit_label['y'])
     ax1.set_xlabel(r'$\delta\, [\%]$', size=font_sz)
     ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
     ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
     if deltalim is not None:
         ax1.set_xlim([v * 1e2 for v in deltalim])
-    if nuxlim is not None:
+    if nuxlim:
         ax1.set_ylim(nuxlim)
     else:
         nuxlim = ax1.get_ylim()
-    if nuylim is not None:
+    if nuylim:
         ax2.set_ylim(nuylim)
     else:
         nuylim = ax2.get_ylim()
@@ -1920,17 +2155,28 @@ def plot_chrom(
                      fancybox=True, shadow=True, prop=dict(size=12))
     plt.tight_layout()
 
-    frac_nuxs = nuxs - np.floor(nuxs)
-    frac_nuys = nuys - np.floor(nuys)
 
-    frac_nuxlim = [v - np.floor(v) if v > 1 else v for v in nuxlim]
-    frac_nuylim = [v - np.floor(v) if v > 1 else v for v in nuylim]
+
+    if _plot_nu_frac:
+        _nuxs = nuxs - nux0_int
+        _nuys = nuys - nuy0_int
+
+        frac_nuxlim = nuxlim
+        frac_nuylim = nuylim
+    else:
+        _nuxs = nuxs
+        _nuys = nuys
+
+        frac_nuxlim = nuxlim - nux0_int
+        frac_nuylim = nuylim - nuy0_int
 
     fig = plt.figure()
     fig.add_subplot(111)
-    plt.scatter(frac_nuxs, frac_nuys, s=10, c=deltas * 1e2, marker='o', cmap='jet')
-    plt.xlim(frac_nuxlim)
-    plt.ylim(frac_nuylim)
+    plt.scatter(_nuxs, _nuys, s=10, c=deltas * 1e2, marker='o', cmap='jet')
+    if nuxlim:
+        plt.xlim(nuxlim)
+    if nuylim:
+        plt.ylim(nuylim)
     plt.xlabel(r'$\nu_x$', size=font_sz)
     plt.ylabel(r'$\nu_y$', size=font_sz)
     #
@@ -1941,15 +2187,19 @@ def plot_chrom(
         linewidth=[  2,    2, 0.5, 0.5, 0.5],
     )
     for n in range(1, max_resonance_line_order):
-        d = rd.getResonanceCoeffsAndLines(n, frac_nuxlim, frac_nuylim)
+        d = rd.getResonanceCoeffsAndLines(
+            n, np.array(frac_nuxlim) + nux0_int, frac_nuylim + nuy0_int) # <= CRITICAL: Must pass tunes w/ integer parts
         prop = {k: lineprops[k][n-1] for k in ['color', 'linestyle', 'linewidth']}
         assert len(d['lines']) == len(d['coeffs'])
         for ((nux1, nuy1), (nux2, nuy2)), (nx, ny, _) in zip(d['lines'], d['coeffs']):
-            _x = np.array([nux1, nux2])
-            _x -= np.floor(_x)
-            _y = np.array([nuy1, nuy2])
-            _y -= np.floor(_y)
+            if _plot_nu_frac:
+                _x = np.array([nux1 - nux0_int, nux2 - nux0_int])
+                _y = np.array([nuy1 - nuy0_int, nuy2 - nuy0_int])
+            else:
+                _x = np.array([nux1, nux2])
+                _y = np.array([nuy1, nuy2])
             plt.plot(_x, _y, label=rd.getResonanceCoeffLabelString(nx, ny), **prop)
+            #print(n, nx, ny, _x, _y, prop)
     #leg = plt.legend(loc='best')
     #leg.set_draggable(True, use_blit=True)
     #
@@ -1958,6 +2208,8 @@ def plot_chrom(
     if title != '':
         plt.title(title, size=font_sz)
     plt.tight_layout()
+
+
 
 def calc_tswa_x(
     output_filepath, LTE_filepath, E_MeV, abs_xmax, nx, xsign='+',
