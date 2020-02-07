@@ -45,9 +45,10 @@ if _out.strip() == '':
             # Load "Elegant" module (for Lmod v.8.1)
             sys.path.insert(0, os.path.join(os.environ['MODULESHOME'], 'init'))
             from env_modules_python import module
+            os.environ['LMOD_REDIRECT'] = 'yes'
             #module('load', 'gcc', 'mpich', 'elegant')
             module('load', *MODULE_LOAD_CMD_STR.split())
-            print('Elegant module loaded successfully')
+            #print('Elegant module loaded successfully')
             break
         except:
             if iTry != nMaxTry - 1:
