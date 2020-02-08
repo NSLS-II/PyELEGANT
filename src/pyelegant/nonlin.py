@@ -1600,6 +1600,7 @@ def calc_chrom_track(
     _d = util.load_pgz_file(str(twi_pgz_pathobj))
     nux0 = _d['data']['twi']['scalars']['nux']
     nuy0 = _d['data']['twi']['scalars']['nuy']
+    # alpha & beta at watch element (at the start of the lattice)
     betax = _d['data']['twi']['arrays']['betax'][0]
     betay = _d['data']['twi']['arrays']['betay'][0]
     alphax = _d['data']['twi']['arrays']['alphax'][0]
@@ -1615,7 +1616,7 @@ def calc_chrom_track(
                    )
         if courant_snyder:
             tbt['xp'] = np.full((n_turns, ndelta), np.nan)
-            tbt['yp'] = np.full((n_turns, ndelta), np.nan),
+            tbt['yp'] = np.full((n_turns, ndelta), np.nan)
 
         #tElapsed = dict(run_ele=0.0, sdds2dicts=0.0, tbt_population=0.0)
 
@@ -1685,8 +1686,12 @@ def calc_chrom_track(
         nus = calc_chrom_from_tbt_cs(
             delta_array, tbt['x'], tbt['y'], nux0, nuy0,
             tbt['xp'], tbt['yp'], betax, alphax, betay, alphay)
+        extra_save_kwargs = dict(
+            xptbt=tbt['xp'], yptbt=tbt['yp'],
+            betax=betax, alphax=alphax, betay=betay, alphay=alphay)
     else:
         nus = calc_chrom_from_tbt_ps(delta_array, tbt['x'], tbt['y'], nux0, nuy0)
+        extra_save_kwargs = {}
     nuxs = nus['x']
     nuys = nus['y']
     #print('* Time elapsed for tune estimation: {:.3f}'.format(time.time() - t0))
@@ -1695,7 +1700,8 @@ def calc_chrom_track(
 
     _save_chrom_data(
         output_filepath, output_file_type, delta_array, nuxs, nuys,
-        timestamp_fin, input_dict, xtbt=tbt['x'], ytbt=tbt['y'], nux0=nux0, nuy0=nuy0)
+        timestamp_fin, input_dict, xtbt=tbt['x'], ytbt=tbt['y'],
+        nux0=nux0, nuy0=nuy0, **extra_save_kwargs)
 
     if del_tmp_files:
         util.delete_temp_files(
@@ -1959,7 +1965,8 @@ def _calc_chrom_track_get_tbt(
 
 def _save_chrom_data(
     output_filepath, output_file_type, delta_array, nuxs, nuys, timestamp_fin,
-    input_dict, xtbt=None, ytbt=None, xptbt=None, yptbt=None, nux0=None, nuy0=None):
+    input_dict, xtbt=None, ytbt=None, nux0=None, nuy0=None,
+    xptbt=None, yptbt=None, betax=None, alphax=None, betay=None, alphay=None):
     """
     nux0, nuy0: on-momentum tunes
     """
@@ -1974,14 +1981,22 @@ def _save_chrom_data(
             f.create_dataset('xtbt', data=xtbt, **_kwargs)
         if ytbt is not None:
             f.create_dataset('ytbt', data=ytbt, **_kwargs)
+        if nux0:
+            f['nux0'] = nux0
+        if nuy0:
+            f['nuy0'] = nuy0
         if xptbt is not None:
             f.create_dataset('xptbt', data=xptbt, **_kwargs)
         if yptbt is not None:
             f.create_dataset('yptbt', data=yptbt, **_kwargs)
-        if nux0 is not None:
-            f['nux0'] = nux0
-        if nuy0 is not None:
-            f['nuy0'] = nuy0
+        if betax:
+            f['betax'] = betax
+        if alphax:
+            f['alphax'] = alphax
+        if betay:
+            f['betay'] = betay
+        if alphay:
+            f['alphay'] = alphay
         f['timestamp_fin'] = timestamp_fin
         f.close()
 
@@ -1992,14 +2007,22 @@ def _save_chrom_data(
             d['xtbt'] = xtbt
         if ytbt is not None:
             d['ytbt'] = ytbt
+        if nux0:
+            d['nux0'] = nux0
+        if nuy0:
+            d['nuy0'] = nuy0
         if xptbt is not None:
             d['xptbt'] = xptbt
         if yptbt is not None:
             d['yptbt'] = yptbt
-        if nux0 is not None:
-            d['nux0'] = nux0
-        if nuy0 is not None:
-            d['nuy0'] = nuy0
+        if betax:
+            d['betax'] = betax
+        if alphax:
+            d['alphax'] = alphax
+        if betay:
+            d['betay'] = betay
+        if alphay:
+            d['alphay'] = alphay
         util.robust_pgz_file_write(output_filepath, d, nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
@@ -2220,7 +2243,7 @@ def plot_chrom(
 
 def calc_tswa_x(
     output_filepath, LTE_filepath, E_MeV, abs_xmax, nx, xsign='+',
-    n_turns=256, y0_offset=1e-5, use_beamline=None, N_KICKS=None,
+    courant_snyder=True, n_turns=256, y0_offset=1e-5, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
     run_local=True, remote_opts=None):
@@ -2238,7 +2261,8 @@ def calc_tswa_x(
 
     return _calc_tswa(
         'x', plane_specific_input, output_filepath, LTE_filepath, E_MeV,
-        x0_array, y0_array, n_turns=n_turns, use_beamline=use_beamline,
+        x0_array, y0_array, courant_snyder=courant_snyder,
+        n_turns=n_turns, use_beamline=use_beamline,
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, output_file_type=output_file_type,
         del_tmp_files=del_tmp_files, print_cmd=print_cmd,
@@ -2246,7 +2270,7 @@ def calc_tswa_x(
 
 def calc_tswa_y(
     output_filepath, LTE_filepath, E_MeV, abs_ymax, ny, ysign='+',
-    n_turns=256, x0_offset=1e-5, use_beamline=None, N_KICKS=None,
+    courant_snyder=True, n_turns=256, x0_offset=1e-5, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
     run_local=True, remote_opts=None):
@@ -2264,7 +2288,8 @@ def calc_tswa_y(
 
     return _calc_tswa(
         'y', plane_specific_input, output_filepath, LTE_filepath, E_MeV,
-        x0_array, y0_array, n_turns=n_turns, use_beamline=use_beamline,
+        x0_array, y0_array, courant_snyder=courant_snyder,
+        n_turns=n_turns, use_beamline=use_beamline,
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, output_file_type=output_file_type,
         del_tmp_files=del_tmp_files, print_cmd=print_cmd,
@@ -2272,7 +2297,8 @@ def calc_tswa_y(
 
 def _calc_tswa(
     scan_plane, plane_specific_input, output_filepath, LTE_filepath, E_MeV,
-    x0_array, y0_array, n_turns=256, use_beamline=None, N_KICKS=None,
+    x0_array, y0_array, courant_snyder=True,
+    n_turns=256, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
     run_local=True, remote_opts=None):
@@ -2288,7 +2314,8 @@ def _calc_tswa(
     input_dict = dict(
         scan_plane=scan_plane, plane_specific_input=plane_specific_input,
         LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
-        x0_array=x0_array, y0_array=y0_array, n_turns=n_turns,
+        x0_array=x0_array, y0_array=y0_array, courant_snyder=courant_snyder,
+        n_turns=n_turns,
         use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
         run_local=run_local, remote_opts=remote_opts,
@@ -2379,6 +2406,9 @@ def _calc_tswa(
     if run_local:
         tbt = dict(x = np.full((n_turns, nscan), np.nan),
                    y = np.full((n_turns, nscan), np.nan))
+        if courant_snyder:
+            tbt['xp'] = np.full((n_turns, nscan), np.nan)
+            tbt['yp'] = np.full((n_turns, nscan), np.nan)
 
         #tElapsed = dict(run_ele=0.0, sdds2dicts=0.0, tbt_population=0.0)
 
@@ -2413,24 +2443,32 @@ def _calc_tswa(
         xy0_sub_array_list, reverse_mapping = util.chunk_list(
             xy0_array, remote_opts['ntasks'])
 
+        coords_list = ['x', 'y']
+        if courant_snyder:
+            coords_list += ['xp', 'yp']
+
         module_name = 'pyelegant.nonlin'
         func_name = '_calc_tswa_get_tbt'
         chunked_results = remote.run_mpi_python(
             remote_opts, module_name, func_name, xy0_sub_array_list,
             (ele_pathobj.read_text(), ele_pathobj.name, watch_pathobj.name,
-             print_cmd, std_print_enabled['out'], std_print_enabled['err']),
+             print_cmd, std_print_enabled['out'], std_print_enabled['err'],
+             coords_list),
         )
 
         tbt_chunked_list = dict()
         tbt_flat_list = dict()
-        for plane in ['x', 'y']:
+        for plane in coords_list:
             tbt_chunked_list[plane] = [_d[plane] for _d in chunked_results]
             tbt_flat_list[plane] = util.unchunk_list_of_lists(
                 tbt_chunked_list[plane], reverse_mapping)
 
         tbt = dict(x = np.full((n_turns, nscan), np.nan),
                    y = np.full((n_turns, nscan), np.nan))
-        for plane in ['x', 'y']:
+        if courant_snyder:
+            tbt['xp'] = np.full((n_turns, nscan), np.nan)
+            tbt['yp'] = np.full((n_turns, nscan), np.nan)
+        for plane in coords_list:
             for iXY, array in enumerate(tbt_flat_list[plane]):
                 tbt[plane][:len(array), iXY] = array
 
@@ -2438,8 +2476,15 @@ def _calc_tswa(
 
     #t0 = time.time()
     # Estimate tunes and amplitudes from TbT data
-    nus, As = calc_tswa_from_tbt(
-        scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0)
+    if courant_snyder:
+        nus, As = calc_tswa_from_tbt_cs(
+            scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0,
+            tbt['xp'], tbt['yp'], betax, alphax, betay, alphay)
+        extra_save_kwargs = dict(xptbt=tbt['xp'], yptbt=tbt['yp'])
+    else:
+        nus, As = calc_tswa_from_tbt_ps(
+            scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0)
+        extra_save_kwargs = {}
     nuxs, nuys = nus['x'], nus['y']
     Axs, Ays = As['x'], As['y']
     #print('* Time elapsed for tune/amplitude estimation: {:.3f}'.format(time.time() - t0))
@@ -2448,8 +2493,8 @@ def _calc_tswa(
 
     _save_tswa_data(
         output_filepath, output_file_type, x0_array, y0_array, tbt['x'], tbt['y'],
-        nux0, nuy0, betax, betay, alphax, alphay, nuxs, nuys, Axs, Ays,
-        timestamp_fin, input_dict)
+        betax, alphax, betay, alphay, nux0, nuy0, nuxs, nuys, Axs, Ays,
+        timestamp_fin, input_dict, **extra_save_kwargs)
 
     if del_tmp_files:
         util.delete_temp_files(
@@ -2459,13 +2504,15 @@ def _calc_tswa(
 
 def _calc_tswa_get_tbt(
     xy0_sub_array_list, ele_contents, ele_filename, watch_filename,
-    print_cmd, print_stdout, print_stderr, tempdir_path='/tmp'):
+    print_cmd, print_stdout, print_stderr, coords_list, tempdir_path='/tmp'):
     """"""
 
     if not Path(tempdir_path).exists():
         tempdir_path = Path.cwd()
 
-    sub_tbt = dict(x=[], y=[])
+    sub_tbt = dict()
+    for k in coords_list:
+        sub_tbt[k] = []
 
     with tempfile.TemporaryDirectory(
         prefix='tmpCalcTSwA_', dir=tempdir_path) as tmpdirname:
@@ -2494,8 +2541,11 @@ def _calc_tswa_get_tbt(
 
     return sub_tbt
 
-def calc_tswa_from_tbt(scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0):
-    """"""
+def calc_tswa_from_tbt_ps(scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0):
+    """
+    Using phase-space (ps) variables "x" and "y", which can only
+    determine tunes within the range of [0, 0.5].
+    """
 
     assert x0_array.shape == y0_array.shape
 
@@ -2554,10 +2604,93 @@ def calc_tswa_from_tbt(scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0):
 
     return nus, As
 
+def calc_tswa_from_tbt_cs(scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0,
+                          xptbt, yptbt, betax, alphax, betay, alphay):
+    """
+    Using Courant-Snyder (CS) coordinates "xhat" and "yhat", which enables
+    determination of tunes within the range of [0, 1.0].
+    """
+
+    assert x0_array.shape == y0_array.shape
+
+    nus = dict(x=np.full(x0_array.shape, np.nan),
+               y=np.full(x0_array.shape, np.nan))
+    As = dict(x=np.full(x0_array.shape, np.nan),
+              y=np.full(x0_array.shape, np.nan))
+
+    frac_nux0 = nux0 - np.floor(nux0)
+    frac_nuy0 = nuy0 - np.floor(nuy0)
+
+    if frac_nux0 > 0.5:
+        frac_nux0 = frac_nux0 - 1
+    if frac_nuy0 > 0.5:
+        frac_nuy0 = frac_nuy0 - 1
+
+    n_turns, nscans = xtbt.shape
+    nu_vec = np.fft.fftfreq(n_turns)
+
+    opts = dict(window='sine', resolution=1e-8)
+    init_nux = frac_nux0
+    init_nuy = frac_nuy0
+    for i in range(nscans):
+        xarray = xtbt[:, i]
+        yarray = ytbt[:, i]
+
+        if np.any(np.isnan(xarray)) or np.any(np.isnan(yarray)):
+            # Particle lost at some point.
+            continue
+
+        xparray = xptbt[:, i]
+        yparray = yptbt[:, i]
+        delta = 0.0 # Only on-momentum case is assumed
+        pxarray, pyarray = angle2p(xparray, yparray, delta)
+
+        xarray -= np.mean(xarray)
+        yarray -= np.mean(yarray)
+        pxarray -= np.mean(pxarray)
+        pyarray -= np.mean(pyarray)
+
+        xhat = xarray / np.sqrt(betax)
+        pxhat = alphax / np.sqrt(betax) * xarray + np.sqrt(betax) * pxarray
+        yhat = yarray / np.sqrt(betay)
+        pyhat = alphay / np.sqrt(betay) * yarray + np.sqrt(betay) * pyarray
+
+        hx = xhat - 1j * pxhat
+        hy = yhat - 1j * pyhat
+
+        # Find the rough peak first
+        ff_rect = np.fft.fft(hx)
+        A_arb = np.abs(ff_rect)
+        init_nux = nu_vec[np.argmax(A_arb)]
+        # Then fine-tune
+        out = sigproc.getDftPeak(hx, init_nux, **opts)
+        nus['x'][i] = out['nu']
+        sqrt_twoJx = out['A']
+        As['x'][i] = sqrt_twoJx * np.sqrt(betax) # Convert CS amplitude to phase-space amplitude
+
+        # Find the rough peak first
+        ff_rect = np.fft.fft(hy)
+        A_arb = np.abs(ff_rect)
+        init_nuy = nu_vec[np.argmax(A_arb)]
+        # Then fine-tune
+        out = sigproc.getDftPeak(hy, init_nuy, **opts)
+        nus['y'][i] = out['nu']
+        sqrt_twoJy = out['A']
+        As['y'][i] = sqrt_twoJy * np.sqrt(betay) # Convert CS amplitude to phase-space amplitude
+
+    nonnan_inds = np.where(~np.isnan(nus['x']))[0]
+    neg_inds = nonnan_inds[nus['x'][nonnan_inds] < 0]
+    nus['x'][neg_inds] += 1
+    nonnan_inds = np.where(~np.isnan(nus['y']))[0]
+    neg_inds = nonnan_inds[nus['y'][nonnan_inds] < 0]
+    nus['y'][neg_inds] += 1
+
+    return nus, As
+
 def _save_tswa_data(
     output_filepath, output_file_type, x0_array, y0_array, xtbt, ytbt,
-    nux0, nuy0, betax, betay, alphax, alphay, nuxs, nuys, Axs, Ays,
-    timestamp_fin, input_dict):
+    betax, alphax, betay, alphay, nux0, nuy0, nuxs, nuys, Axs, Ays,
+    timestamp_fin, input_dict, xptbt=None, yptbt=None):
     """
     """
 
@@ -2570,6 +2703,10 @@ def _save_tswa_data(
         f.create_dataset('ytbt', data=ytbt, **_kwargs)
         f['nux0'] = nux0
         f['nuy0'] = nuy0
+        if xptbt is not None:
+            f.create_dataset('xptbt', data=xptbt, **_kwargs)
+        if yptbt is not None:
+            f.create_dataset('yptbt', data=xptbt, **_kwargs)
         f['betax'] = betax
         f['betay'] = betay
         f['alphax'] = alphax
@@ -2588,16 +2725,42 @@ def _save_tswa_data(
             betax=betax, betay=betay, alphax=alphax, alphay=alphay,
             nuxs=nuxs, nuys=nuys, Axs=Axs, Ays=Ays,
             input=input_dict, timestamp_fin=timestamp_fin)
+        if xptbt is not None:
+            d['xptbt'] = xptbt
+        if yptbt is not None:
+            d['yptbt'] = yptbt
+        d['betax'] = betax
+        d['betay'] = betay
+        d['alphax'] = alphax
+        d['alphay'] = alphay
         util.robust_pgz_file_write(output_filepath, d, nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
 
 def plot_tswa(
     output_filepath, title='', fit_abs_xmax=None, fit_abs_ymax=None,
-    Axlim=None, Aylim=None, nuxlim=None, nuylim=None, max_resonance_line_order=5):
+    Axlim=None, Aylim=None, nuxlim=None, nuylim=None, max_resonance_line_order=5,
+    ax_nu_vs_A=None, ax_nuy_vs_nux=None):
     """"""
 
     assert max_resonance_line_order <= 5
+
+    is_nuxlim_frac = False
+    if nuxlim:
+        if (0.0 <= nuxlim[0] <= 1.0) and (0.0 <= nuxlim[1] <= 1.0):
+            is_nuxlim_frac = True
+
+    is_nuylim_frac = False
+    if nuylim:
+        if (0.0 <= nuylim[0] <= 1.0) and (0.0 <= nuylim[1] <= 1.0):
+            is_nuylim_frac = True
+
+    if is_nuxlim_frac and is_nuylim_frac:
+        _plot_nu_frac = True
+    elif (not is_nuxlim_frac) and (not is_nuylim_frac):
+        _plot_nu_frac = False
+    else:
+        raise ValueError('"nuxlim" and "nuylim" must be either both fractional or both non-fractional')
 
     try:
         d = util.load_pgz_file(output_filepath)
@@ -2607,7 +2770,7 @@ def plot_tswa(
         Axs, Ays = d['Axs'], d['Ays']
         nux0, nuy0 = d['nux0'], d['nuy0']
         betax, betay = d['betax'], d['betay']
-        alphax, alphay = d['alphax'], d['alphay']
+        #alphax, alphay = d['alphax'], d['alphay']
     except:
         f = h5py.File(output_filepath, 'r')
         scan_plane = f['input']['scan_plane'][()]
@@ -2621,11 +2784,15 @@ def plot_tswa(
         nuy0 = f['nuy0'][()]
         betax = f['betax'][()]
         betay = f['betay'][()]
-        alphax = f['alphax'][()]
-        alphay = f['alphay'][()]
+        #alphax = f['alphax'][()]
+        #alphay = f['alphay'][()]
         f.close()
 
-    font_sz = 22
+    nux0_int = np.floor(nux0)
+    nuy0_int = np.floor(nuy0)
+
+    nuxs += nux0_int
+    nuys += nuy0_int
 
     twoJxs = Axs**2 / betax
     twoJys = Ays**2 / betay
@@ -2635,10 +2802,14 @@ def plot_tswa(
     if scan_plane == 'x':
         if np.sign(x0s[-1]) > 0:
             fit_roi = (x0s <= fit_abs_xmax)
-            scan_sign_str = '(x_0 > 0)'
+            scan_sign_beta_str = (
+                '(x_0 > 0)$' '\n'
+                fr'$(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})')
         else:
             fit_roi = (x0s >= fit_abs_xmax * (-1))
-            scan_sign_str = '(x_0 < 0)'
+            scan_sign_beta_str = (
+                '(x_0 < 0)$' '\n'
+                fr'$(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})')
 
         coeffs = np.polyfit(Jxs[fit_roi], nuxs[fit_roi], 1)
         dnux_dJx = coeffs[0]
@@ -2665,10 +2836,14 @@ def plot_tswa(
     elif scan_plane == 'y':
         if np.sign(y0s[-1]) > 0:
             fit_roi = (y0s <= fit_abs_ymax)
-            scan_sign_str = '(y_0 > 0)'
+            scan_sign_beta_str = (
+                '(y_0 > 0)$' '\n'
+                fr'$(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})')
         else:
             fit_roi = (y0s >= fit_abs_ymax * (-1))
-            scan_sign_str = '(y_0 < 0)'
+            scan_sign_beta_str = (
+                '(y_0 < 0)$' '\n'
+                fr'$(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})')
 
         coeffs = np.polyfit(Jys[fit_roi], nuxs[fit_roi], 1)
         dnux_dJy = coeffs[0]
@@ -2695,49 +2870,70 @@ def plot_tswa(
     else:
         raise ValueError
 
+    A_font_sz = 18
+    font_sz = 22
 
-    fig = plt.figure()
-    ax1 = fig.add_subplot(111)
+    if ax_nu_vs_A:
+        ax1 = ax_nu_vs_A
+    else:
+        fig, ax1 = plt.subplots()
+    #
+    if _plot_nu_frac:
+        offset = dict(nux = np.floor(nuxs), nuy = np.floor(nuys))
+        if scan_plane == 'x':
+            offset['fit_nux'] = np.floor(nux_fit(Jx_fit))
+            offset['fit_nuy'] = np.floor(nuy_fit(Jx_fit))
+        elif scan_plane == 'y':
+            offset['fit_nux'] = np.floor(nux_fit(Jy_fit))
+            offset['fit_nuy'] = np.floor(nuy_fit(Jy_fit))
+    else:
+        offset = dict(nux = np.zeros(nuxs.shape), nuy = np.zeros(nuys.shape))
+        if scan_plane == 'x':
+            offset['fit_nux'] = offset['fit_nuy'] = np.zeros(Jx_fit.shape)
+        elif scan_plane == 'y':
+            offset['fit_nux'] = offset['fit_nuy'] = np.zeros(Jy_fit.shape)
+    #
     if scan_plane == 'x':
-        lines1 = ax1.plot(Axs * 1e3, nuxs, 'b.', label=r'$\nu_x$')
+        lines1 = ax1.plot(Axs * 1e3, nuxs - offset['nux'], 'b.', label=r'$\nu_x$')
         fit_lines1 = ax1.plot(
-            Ax_fit * 1e3, nux_fit(Jx_fit), 'b-', label=fit_label['nux'])
+            Ax_fit * 1e3, nux_fit(Jx_fit) - offset['fit_nux'], 'b-', label=fit_label['nux'])
         ax2 = ax1.twinx()
-        lines2 = ax2.plot(Axs * 1e3, nuys, 'r.', label=r'$\nu_y$')
+        lines2 = ax2.plot(Axs * 1e3, nuys - offset['nuy'], 'r.', label=r'$\nu_y$')
         fit_lines2 = ax2.plot(
-            Ax_fit * 1e3, nuy_fit(Jx_fit), 'r-', label=fit_label['nuy'])
-        ax1.set_xlabel(fr'$A_x\, [\mathrm{{mm}}]\, {scan_sign_str}$', size=font_sz)
+            Ax_fit * 1e3, nuy_fit(Jx_fit) - offset['fit_nuy'], 'r-', label=fit_label['nuy'])
+        ax1.set_xlabel(fr'$A_x\, [\mathrm{{mm}}]\, {scan_sign_beta_str}$', size=A_font_sz)
         if Axlim is not None:
             ax1.set_xlim([v * 1e3 for v in Axlim])
     elif scan_plane == 'y':
-        lines1 = ax1.plot(Ays * 1e3, nuxs, 'b.', label=r'$\nu_x$')
+        lines1 = ax1.plot(Ays * 1e3, nuxs - offset['nux'], 'b.', label=r'$\nu_x$')
         fit_lines1 = ax1.plot(
-            Ay_fit * 1e3, nux_fit(Jy_fit), 'b-', label=fit_label['nux'])
+            Ay_fit * 1e3, nux_fit(Jy_fit) - offset['fit_nux'], 'b-', label=fit_label['nux'])
         ax2 = ax1.twinx()
-        lines2 = ax2.plot(Ays * 1e3, nuys, 'r.', label=r'$\nu_y$')
+        lines2 = ax2.plot(Ays * 1e3, nuys - offset['nuy'], 'r.', label=r'$\nu_y$')
         fit_lines2 = ax2.plot(
-            Ay_fit * 1e3, nuy_fit(Jy_fit), 'r-', label=fit_label['nuy'])
-        ax1.set_xlabel(fr'$A_y\, [\mathrm{{mm}}]\, {scan_sign_str}$', size=font_sz)
+            Ay_fit * 1e3, nuy_fit(Jy_fit) - offset['fit_nuy'], 'r-', label=fit_label['nuy'])
+        ax1.set_xlabel(fr'$A_y\, [\mathrm{{mm}}]\, {scan_sign_beta_str}$', size=A_font_sz)
         if Aylim is not None:
             ax1.set_xlim([v * 1e3 for v in Aylim])
     ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
     ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
-    if nuxlim is not None:
+    if nuxlim:
         ax1.set_ylim(nuxlim)
     else:
         nuxlim = ax1.get_ylim()
-        nuxlim = [nuxlim[0] - 0.1, nuxlim[1] + 0.1]
-    if nuylim is not None:
+        #nuxlim = [nuxlim[0] - 0.1, nuxlim[1] + 0.1]
+    if nuylim:
         ax2.set_ylim(nuylim)
     else:
         nuylim = ax2.get_ylim()
-        nuylim = [nuylim[0] - 0.1, nuylim[1] + 0.1]
+        #nuylim = [nuylim[0] - 0.1, nuylim[1] + 0.1]
     if title != '':
-        plt.title(title, size=font_sz, pad=60)
+        ax1.set_title(title, size=font_sz, pad=60)
     combined_lines = fit_lines1 + fit_lines2
     leg = ax2.legend(combined_lines, [L.get_label() for L in combined_lines],
-                     loc='upper center', bbox_to_anchor=(0.5, 1.3),
+                     loc='upper center', ncol=2, bbox_to_anchor=(0.5, 1.2),
                      fancybox=True, shadow=True, prop=dict(size=12))
+    plt.sca(ax1)
     plt.tight_layout()
 
 
@@ -2746,13 +2942,30 @@ def plot_tswa(
     else:
         As = Ays
 
-    fig = plt.figure()
-    fig.add_subplot(111)
-    plt.scatter(nuxs, nuys, s=10, c=As * 1e3, marker='o', cmap='jet')
-    plt.xlim(nuxlim)
-    plt.ylim(nuylim)
-    plt.xlabel(r'$\nu_x$', size=font_sz)
-    plt.ylabel(r'$\nu_y$', size=font_sz)
+    if _plot_nu_frac:
+        _nuxs = nuxs - nux0_int
+        _nuys = nuys - nuy0_int
+
+        frac_nuxlim = nuxlim
+        frac_nuylim = nuylim
+    else:
+        _nuxs = nuxs
+        _nuys = nuys
+
+        frac_nuxlim = nuxlim - nux0_int
+        frac_nuylim = nuylim - nuy0_int
+
+    if ax_nuy_vs_nux:
+        ax = ax_nuy_vs_nux
+    else:
+        _, ax = plt.subplots()
+    sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=As * 1e3, marker='o', cmap='jet')
+    if nuxlim:
+        ax.set_xlim(nuxlim)
+    if nuylim:
+        ax.set_ylim(nuylim)
+    ax.set_xlabel(r'$\nu_x$', size=font_sz)
+    ax.set_ylabel(r'$\nu_y$', size=font_sz)
     #
     rd = util.ResonanceDiagram()
     lineprops = dict(
@@ -2761,23 +2974,338 @@ def plot_tswa(
         linewidth=[  2,    2, 0.5, 0.5, 0.5],
     )
     for n in range(1, max_resonance_line_order):
-        d = rd.getResonanceCoeffsAndLines(n, nuxlim, nuylim)
+        d = rd.getResonanceCoeffsAndLines(
+            n, np.array(frac_nuxlim) + nux0_int, frac_nuylim + nuy0_int) # <= CRITICAL: Must pass tunes w/ integer parts
         prop = {k: lineprops[k][n-1] for k in ['color', 'linestyle', 'linewidth']}
         assert len(d['lines']) == len(d['coeffs'])
         for ((nux1, nuy1), (nux2, nuy2)), (nx, ny, _) in zip(d['lines'], d['coeffs']):
-            _x = np.array([nux1, nux2])
-            _x -= np.floor(_x)
-            _y = np.array([nuy1, nuy2])
-            _y -= np.floor(_y)
-            plt.plot(_x, _y, label=rd.getResonanceCoeffLabelString(nx, ny), **prop)
+            if _plot_nu_frac:
+                _x = np.array([nux1 - nux0_int, nux2 - nux0_int])
+                _y = np.array([nuy1 - nuy0_int, nuy2 - nuy0_int])
+            else:
+                _x = np.array([nux1, nux2])
+                _y = np.array([nuy1, nuy2])
+            ax.plot(_x, _y, label=rd.getResonanceCoeffLabelString(nx, ny), **prop)
     #leg = plt.legend(loc='best')
     #leg.set_draggable(True, use_blit=True)
     #
-    cb = plt.colorbar()
+    cb = plt.colorbar(sc_obj, ax=ax)
     cb.ax.set_title(fr'$A_{scan_plane}\, [\mathrm{{mm}}]$', size=16)
     if title != '':
-        plt.title(title, size=font_sz)
+        ax.set_title(title, size=font_sz)
+    plt.sca(ax)
     plt.tight_layout()
+
+
+def plot_tswa_both_sides(
+    output_filepath_positive, output_filepath_negative, title='',
+    fit_xmax=None, fit_xmin=None, fit_ymax=None, fit_ymin=None,
+    Axlim=None, Aylim=None, nuxlim=None, nuylim=None, max_resonance_line_order=5,
+    ax_nu_vs_A=None, ax_nuy_vs_nux=None):
+    """"""
+
+    assert max_resonance_line_order <= 5
+
+    is_nuxlim_frac = False
+    if nuxlim:
+        if (0.0 <= nuxlim[0] <= 1.0) and (0.0 <= nuxlim[1] <= 1.0):
+            is_nuxlim_frac = True
+
+    is_nuylim_frac = False
+    if nuylim:
+        if (0.0 <= nuylim[0] <= 1.0) and (0.0 <= nuylim[1] <= 1.0):
+            is_nuylim_frac = True
+
+    if is_nuxlim_frac and is_nuylim_frac:
+        _plot_nu_frac = True
+    elif (not is_nuxlim_frac) and (not is_nuylim_frac):
+        _plot_nu_frac = False
+    else:
+        raise ValueError('"nuxlim" and "nuylim" must be either both fractional or both non-fractional')
+
+    scan_plane, x0s, y0s, nuxs, nuys, Axs, Ays, nux0, nuy0, betax, betay = [
+        {} for _ in range(11)]
+
+    for side, output_filepath in [('+', output_filepath_positive),
+                                  ('-', output_filepath_negative)]:
+        try:
+            d = util.load_pgz_file(output_filepath)
+            scan_plane[side] = d['input']['scan_plane']
+            x0s[side], y0s[side] = d['x0s'], d['y0s']
+            nuxs[side], nuys[side] = d['nuxs'], d['nuys']
+            Axs[side], Ays[side] = d['Axs'], d['Ays']
+            nux0[side], nuy0[side] = d['nux0'], d['nuy0']
+            betax[side], betay[side] = d['betax'], d['betay']
+        except:
+            f = h5py.File(output_filepath, 'r')
+            scan_plane[side] = f['input']['scan_plane'][()]
+            x0s[side] = f['x0s'][()]
+            y0s[side] = f['y0s'][()]
+            nuxs[side] = f['nuxs'][()]
+            nuys[side] = f['nuys'][()]
+            Axs[side] = f['Axs'][()]
+            Ays[side] = f['Ays'][()]
+            nux0[side] = f['nux0'][()]
+            nuy0[side] = f['nuy0'][()]
+            betax[side] = f['betax'][()]
+            betay[side] = f['betay'][()]
+            f.close()
+
+    # Check consistency between the positive and negative results (i.e.,
+    # see if the results are likley from the same lattice)
+    assert scan_plane['+'] == scan_plane['-']
+    scan_plane = scan_plane['+']
+    np.testing.assert_almost_equal(nux0['+'], nux0['-'], decimal=12)
+    np.testing.assert_almost_equal(nuy0['+'], nuy0['-'], decimal=12)
+    nux0, nuy0 = nux0['+'], nuy0['+']
+    np.testing.assert_almost_equal(betax['+'], betax['-'], decimal=12)
+    np.testing.assert_almost_equal(betay['+'], betay['-'], decimal=12)
+    betax, betay = betax['+'], betay['+']
+
+    if scan_plane == 'x':
+        assert np.all(x0s['+'] >= 0.0)
+        assert np.all(x0s['-'] <= 0.0)
+    elif scan_plane == 'y':
+        assert np.all(y0s['+'] >= 0.0)
+        assert np.all(y0s['-'] <= 0.0)
+    else:
+        raise ValueError
+
+    nux0_int = np.floor(nux0)
+    nuy0_int = np.floor(nuy0)
+
+    twoJxs, twoJys, Jxs, Jys, nux_fit, nuy_fit, fit_label = [{} for _ in range(7)]
+    if scan_plane == 'x':
+        Ax_fit, Jx_fit = {}, {}
+    elif scan_plane == 'y':
+        Ay_fit , Jy_fit = {}, {}
+
+    beta_str = fr'(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})'
+
+    for side in ['+', '-']:
+        nuxs[side] += nux0_int
+        nuys[side] += nuy0_int
+
+        twoJxs[side] = Axs[side]**2 / betax
+        twoJys[side] = Ays[side]**2 / betay
+        Jxs[side] = twoJxs[side] / 2
+        Jys[side] = twoJys[side] / 2
+
+        if scan_plane == 'x':
+            if side == '+':
+                fit_roi = (x0s[side] <= fit_xmax)
+            else:
+                fit_roi = (x0s[side] >= fit_xmin)
+
+            coeffs = np.polyfit(Jxs[side][fit_roi], nuxs[side][fit_roi], 1)
+            dnux_dJx = coeffs[0]
+            nux_fit[side] = np.poly1d(coeffs)
+
+            coeffs = np.polyfit(Jxs[side][fit_roi], nuys[side][fit_roi], 1)
+            dnuy_dJx = coeffs[0]
+            nuy_fit[side] = np.poly1d(coeffs)
+
+            dnux_dJy = np.polyfit(Jys[side][fit_roi], nuxs[side][fit_roi], 1)[0]
+            dnuy_dJy = np.polyfit(Jys[side][fit_roi], nuys[side][fit_roi], 1)[0]
+
+            Ax_fit[side] = np.linspace(np.min(Axs[side]), np.max(Axs[side]), 101)
+            Jx_fit[side] = (Ax_fit[side]**2 / betax) / 2
+
+            dnux_dJx_str = util.pprint_sci_notation(dnux_dJx, '+.3g')
+            dnuy_dJx_str = util.pprint_sci_notation(dnuy_dJx, '+.3g')
+
+            fit_label[side] = dict(nux=dnux_dJx_str, nuy=dnuy_dJx_str,)
+
+        elif scan_plane == 'y':
+            if side == '+':
+                fit_roi = (y0s[side] <= fit_ymax)
+            else:
+                fit_roi = (y0s[side] >= fit_ymin)
+
+            coeffs = np.polyfit(Jys[side][fit_roi], nuxs[side][fit_roi], 1)
+            dnux_dJy = coeffs[0]
+            nux_fit[side] = np.poly1d(coeffs)
+
+            coeffs = np.polyfit(Jys[side][fit_roi], nuys[side][fit_roi], 1)
+            dnuy_dJy = coeffs[0]
+            nuy_fit[side] = np.poly1d(coeffs)
+
+            dnux_dJx = np.polyfit(Jxs[side][fit_roi], nuxs[side][fit_roi], 1)[0]
+            dnuy_dJx = np.polyfit(Jxs[side][fit_roi], nuys[side][fit_roi], 1)[0]
+
+            Ay_fit[side] = np.linspace(np.min(Ays[side]), np.max(Ays[side]), 101)
+            Jy_fit[side] = (Ay_fit[side]**2 / betay) / 2
+
+            dnux_dJy_str = util.pprint_sci_notation(dnux_dJy, '+.3g')
+            dnuy_dJy_str = util.pprint_sci_notation(dnuy_dJy, '+.3g')
+
+            fit_label[side] = dict(nux=dnux_dJy_str, nuy=dnuy_dJy_str,)
+
+    if scan_plane == 'x':
+        fit_label_combo = dict(
+            nux=r'$d\nu_x / d J_x [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                fit_label['-']['nux'], fit_label['+']['nux']),
+            nuy=r'$d\nu_y / d J_x [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                fit_label['-']['nuy'], fit_label['+']['nuy']),
+        )
+    elif scan_plane == 'y':
+        fit_label_combo = dict(
+            nux=r'$d\nu_x / d J_y [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                fit_label['-']['nux'], fit_label['+']['nux']),
+            nuy=r'$d\nu_y / d J_y [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                fit_label['-']['nuy'], fit_label['+']['nuy']),
+        )
+
+
+    A_font_sz = 18
+    font_sz = 22
+
+    if ax_nu_vs_A:
+        ax1 = ax_nu_vs_A
+    else:
+        fig, ax1 = plt.subplots()
+    #
+    nuxs_combo = np.append(nuxs['-'][::-1], nuxs['+'])
+    nuys_combo = np.append(nuys['-'][::-1], nuys['+'])
+    #
+    if scan_plane == 'x':
+        nux_fit_combo = np.append(nux_fit['-'](Jx_fit['-'])[::-1], nux_fit['+'](Jx_fit['+']))
+        nuy_fit_combo = np.append(nuy_fit['-'](Jx_fit['-'])[::-1], nuy_fit['+'](Jx_fit['+']))
+    elif scan_plane == 'y':
+        nux_fit_combo = np.append(nux_fit['-'](Jy_fit['-'])[::-1], nux_fit['+'](Jy_fit['+']))
+        nuy_fit_combo = np.append(nuy_fit['-'](Jy_fit['-'])[::-1], nuy_fit['+'](Jy_fit['+']))
+    #
+    if _plot_nu_frac:
+        offset_combo = dict(nux = np.floor(nuxs_combo), nuy = np.floor(nuys_combo))
+        if scan_plane == 'x':
+            offset_combo['fit_nux'] = np.floor(nux_fit_combo)
+            offset_combo['fit_nuy'] = np.floor(nuy_fit_combo)
+        elif scan_plane == 'y':
+            offset_combo['fit_nux'] = np.floor(nux_fit_combo)
+            offset_combo['fit_nuy'] = np.floor(nuy_fit_combo)
+    else:
+        offset_combo = dict(nux = np.zeros(nuxs_combo.shape), nuy = np.zeros(nuys_combo.shape))
+        if scan_plane == 'x':
+            offset_combo['fit_nux'] = offset_combo['fit_nuy'] = np.zeros(
+                np.append(Jx_fit['-'][::-1], Jx_fit['+']).shape)
+        elif scan_plane == 'y':
+            offset_combo['fit_nux'] = offset_combo['fit_nuy'] = np.zeros(
+                np.append(Jy_fit['-'][::-1], Jy_fit['+']).shape)
+    #
+    if scan_plane == 'x':
+        Axs_combo = np.append(Axs['-'][::-1] * (-1), Axs['+'])
+        Ax_fit_combo = np.append(Ax_fit['-'][::-1] * (-1), Ax_fit['+'])
+        lines1 = ax1.plot(Axs_combo * 1e3, nuxs_combo - offset_combo['nux'], 'b.',
+                          label=r'$\nu_x$')
+        fit_lines1 = ax1.plot(
+            Ax_fit_combo * 1e3, nux_fit_combo - offset_combo['fit_nux'], 'b-',
+            label=fit_label_combo['nux'])
+        ax2 = ax1.twinx()
+        lines2 = ax2.plot(Axs_combo * 1e3, nuys_combo - offset_combo['nuy'], 'r.',
+                          label=r'$\nu_y$')
+        fit_lines2 = ax2.plot(
+            Ax_fit_combo * 1e3, nuy_fit_combo - offset_combo['fit_nuy'], 'r-',
+            label=fit_label_combo['nuy'])
+        ax1.set_xlabel(fr'$A_x\, [\mathrm{{mm}}];\, {beta_str}$', size=A_font_sz)
+        if Axlim is not None:
+            ax1.set_xlim([v * 1e3 for v in Axlim])
+    elif scan_plane == 'y':
+        Ays_combo = np.append(Ays['-'][::-1] * (-1), Ays['+'])
+        Ay_fit_combo = np.append(Ay_fit['-'][::-1] * (-1), Ay_fit['+'])
+        lines1 = ax1.plot(Ays_combo * 1e3, nuxs_combo - offset_combo['nux'], 'b.',
+                          label=r'$\nu_x$')
+        fit_lines1 = ax1.plot(
+            Ay_fit_combo * 1e3, nux_fit_combo - offset_combo['fit_nux'], 'b-',
+            label=fit_label_combo['nux'])
+        ax2 = ax1.twinx()
+        lines2 = ax2.plot(Ays_combo * 1e3, nuys_combo - offset_combo['nuy'], 'r.',
+                          label=r'$\nu_y$')
+        fit_lines2 = ax2.plot(
+            Ay_fit_combo * 1e3, nuy_fit_combo - offset_combo['fit_nuy'], 'r-',
+            label=fit_label_combo['nuy'])
+        ax1.set_xlabel(fr'$A_y\, [\mathrm{{mm}}];\, {beta_str}$', size=A_font_sz)
+        if Aylim is not None:
+            ax1.set_xlim([v * 1e3 for v in Aylim])
+    ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
+    ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
+    if nuxlim:
+        ax1.set_ylim(nuxlim)
+    else:
+        nuxlim = ax1.get_ylim()
+    if nuylim:
+        ax2.set_ylim(nuylim)
+    else:
+        nuylim = ax2.get_ylim()
+    if title != '':
+        ax1.set_title(title, size=font_sz, pad=60)
+    combined_lines = fit_lines1 + fit_lines2
+    leg = ax2.legend(combined_lines, [L.get_label() for L in combined_lines],
+                     loc='upper center', ncol=1, bbox_to_anchor=(0.5, 1.3),
+                     fancybox=True, shadow=True, prop=dict(size=12))
+    plt.sca(ax1)
+    plt.tight_layout()
+
+
+    if scan_plane == 'x':
+        As = np.append(Axs['-'][::-1] * (-1), Axs['+'])
+    else:
+        As = np.append(Ays['-'][::-1] * (-1), Ays['+'])
+
+    if _plot_nu_frac:
+        _nuxs = nuxs_combo - nux0_int
+        _nuys = nuys_combo - nuy0_int
+
+        frac_nuxlim = nuxlim
+        frac_nuylim = nuylim
+    else:
+        _nuxs = nuxs_combo
+        _nuys = nuys_combo
+
+        frac_nuxlim = nuxlim - nux0_int
+        frac_nuylim = nuylim - nuy0_int
+
+    if ax_nuy_vs_nux:
+        ax = ax_nuy_vs_nux
+    else:
+        _, ax = plt.subplots()
+    sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=As * 1e3, marker='o', cmap='jet')
+    if nuxlim:
+        ax.set_xlim(nuxlim)
+    if nuylim:
+        ax.set_ylim(nuylim)
+    ax.set_xlabel(r'$\nu_x$', size=font_sz)
+    ax.set_ylabel(r'$\nu_y$', size=font_sz)
+    #
+    rd = util.ResonanceDiagram()
+    lineprops = dict(
+        color    =['k',  'k', 'g', 'm', 'm'],
+        linestyle=['-', '--', '-', '-', ':'],
+        linewidth=[  2,    2, 0.5, 0.5, 0.5],
+    )
+    for n in range(1, max_resonance_line_order):
+        d = rd.getResonanceCoeffsAndLines(
+            n, np.array(frac_nuxlim) + nux0_int, frac_nuylim + nuy0_int) # <= CRITICAL: Must pass tunes w/ integer parts
+        prop = {k: lineprops[k][n-1] for k in ['color', 'linestyle', 'linewidth']}
+        assert len(d['lines']) == len(d['coeffs'])
+        for ((nux1, nuy1), (nux2, nuy2)), (nx, ny, _) in zip(d['lines'], d['coeffs']):
+            if _plot_nu_frac:
+                _x = np.array([nux1 - nux0_int, nux2 - nux0_int])
+                _y = np.array([nuy1 - nuy0_int, nuy2 - nuy0_int])
+            else:
+                _x = np.array([nux1, nux2])
+                _y = np.array([nuy1, nuy2])
+            ax.plot(_x, _y, label=rd.getResonanceCoeffLabelString(nx, ny), **prop)
+    #leg = plt.legend(loc='best')
+    #leg.set_draggable(True, use_blit=True)
+    #
+    cb = plt.colorbar(sc_obj, ax=ax)
+    cb.ax.set_title(fr'$A_{scan_plane}\, [\mathrm{{mm}}]$', size=16)
+    if title != '':
+        ax.set_title(title, size=font_sz)
+    plt.sca(ax)
+    plt.tight_layout()
+
+
 
 def track(
     output_filepath, LTE_filepath, E_MeV, n_turns,
