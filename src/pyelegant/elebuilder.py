@@ -1816,6 +1816,8 @@ class RPNCalculator():
             return v1 * v2
         elif op_name == '/':
             return v1 / v2
+        elif op_name == '**':
+            return v1 ** v2
         else:
             raise NotImplementedError(f'Unknown operator type: {op_name}')
 
