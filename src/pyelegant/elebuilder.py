@@ -1545,7 +1545,7 @@ class RPNCalculator():
 
         self.buffer = []
 
-        self.operator_list = ['+', '-', '*', '/']
+        self.operator_list = ['+', '-', '*', '/', '**']
 
         self.func_list = [
             'ln', 'exp', 'pow', 'ceil', 'floor', 'int', 'sin', 'cos', 'tan',
