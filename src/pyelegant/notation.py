@@ -187,10 +187,102 @@ def convert_infix_to_rpn(infix_expression, temp_repl=None, post_repl=None,
 
     return rpn_expr
 
+class RPN:
+    """"""
+
+    def __init__(self, rpn_epxression):
+        """Constructor"""
+
+        self.rpn_expr = rpn_epxression
+
+        self.buffer = []
+
+        self.operator_list = ['+', '-', '*', '/', '**', '&&', '||']
+
+        self.func_list_1arg = [
+            'ln', 'exp', 'ceil', 'floor', 'int', 'sin', 'cos', 'tan',
+            'asin', 'acos', 'atan', 'dsin', 'dcos', 'dtan',
+            'dasin', 'dacos', 'datan', 'sinh', 'cosh', 'tanh',
+            'asinh', 'acosh', 'atanh', 'sqr', 'sqrt', 'abs',
+            'chs', 'rec', 'rtod', 'dtor',
+        ]
+        self.func_list_2args = ['pow', 'atan2', 'hypot', 'max2', 'min2',]
+        self.func_list_3args = ['segt', 'selt', 'sene',]
+        self.func_list_special = ['maxn', 'minn']
+
+        self.func_list = self.func_list_1arg + self.func_list_2args
+        self.func_list += self.func_list_3args
+        self.func_list += self.func_list_special
+
+    def clear_buffer(self):
+        """"""
+
+        self.buffer.clear()
+
+    def _operate(self, op_name):
+        """"""
+
+        v2 = self.buffer.pop()
+        v1 = self.buffer.pop()
+
+        if len(v1.split()) != 1:
+            v1 = f'({v1})'
+        if len(v2.split()) != 1:
+            v2 = f'({v2})'
+
+        if op_name == '&&':
+            op_name = 'and'
+        elif op_name == '||':
+            op_name = 'or'
+
+        return f'{v1} {op_name} {v2}'
+
+    def toinfix(self):
+        """"""
+
+        token_list = self.rpn_expr.split()
+
+        for token in token_list:
+
+            if token in self.func_list:
+                #self.buffer.append(getattr(self, token)())
+                if token in self.func_list_1arg:
+                    v1 = self.buffer.pop()
+                    self.buffer.append(f'{token}({v1})')
+                elif token in self.func_list_2args:
+                    v2 = self.buffer.pop()
+                    v1 = self.buffer.pop()
+                    self.buffer.append(f'{token}({v1}, {v2})')
+                elif token in self.func_list_3args:
+                    v3 = self.buffer.pop()
+                    v2 = self.buffer.pop()
+                    v1 = self.buffer.pop()
+                    self.buffer.append(f'{token}({v1}, {v2}, {v3})')
+                elif token in self.func_list_special:
+                    if token in ('maxn', 'minn'):
+                        n = int(self.buffer.pop())
+                        _args = [self.buffer.pop() for _ in range(n)]
+                        _arg_str = ', '.join(_args[::-1])
+                        self.buffer.append(f'{token}({_arg_str})')
+                    else:
+                        raise ValueError('Special function "{token}" not defined')
+                else:
+                    raise ValueError('You should not see this error at all')
+            elif token in self.operator_list:
+                self.buffer.append(self._operate(token))
+            else:
+                self.buffer.append(token)
+
+        assert len(self.buffer) == 1
+
+        return self.buffer[0]
+
 def convert_rpn_to_infix(rpn_expression):
     """"""
 
-    raise NotImplementedError()
+    r = RPN(rpn_expression)
+
+    return r.toinfix()
 
 if __name__ == '__main__':
 
@@ -220,6 +312,7 @@ if __name__ == '__main__':
         visitor = PostfixVisitor()
         visitor.visit(ast.parse(f))
         print(visitor.tokens)
+        print(f'Re-convereted to Infix: {convert_rpn_to_infix(convert_infix_to_rpn(f))}')
         print(' ')
 
     print('** Prefix or PN (Polish Notation) **\n')
