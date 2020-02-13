@@ -1,6 +1,6 @@
 import os
 import tempfile
-from typing import Dict
+from typing import Dict, List, Union
 
 from . import std_print_enabled
 from . import elebuilder
@@ -50,7 +50,8 @@ def save_lattice_after_load_parameters(
         print(f'Failed to delete "{ele_filepath}"')
 
 def save_lattice_after_alter_elements(
-    input_LTE_filepath: str, new_LTE_filepath: str, alter_elements: Dict) -> None:
+    input_LTE_filepath: str, new_LTE_filepath: str,
+    alter_elements: Union[Dict, List]) -> None:
     """"""
 
     tmp = tempfile.NamedTemporaryFile(
@@ -68,7 +69,11 @@ def save_lattice_after_alter_elements(
 
     ed.add_newline()
 
-    ed.add_block('alter_elements', **alter_elements)
+    if isinstance(alter_elements, dict):
+        ed.add_block('alter_elements', **alter_elements)
+    else:
+        for block in alter_elements:
+            ed.add_block('alter_elements', **block)
 
     ed.add_newline()
 
