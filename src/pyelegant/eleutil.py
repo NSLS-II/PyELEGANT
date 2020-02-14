@@ -2,6 +2,8 @@ import os
 import tempfile
 from typing import Dict, List, Union, Optional
 
+import numpy as np
+
 from . import std_print_enabled
 from . import elebuilder
 from . import sdds
@@ -93,7 +95,7 @@ def save_lattice_after_alter_elements(
 
 def get_transport_matrices(
     input_LTE_filepath: str, use_beamline: Optional[str] = None,
-    individual_matrices: bool = False, del_tmp_files: bool = True) -> None:
+    individual_matrices: bool = False, del_tmp_files: bool = True) -> Dict:
     """"""
 
     tmp = tempfile.NamedTemporaryFile(
@@ -137,3 +139,49 @@ def get_transport_matrices(
                     print(f'Failed to delete "{fp}"')
 
     return data['columns']
+
+
+def get_M66(input_LTE_filepath: str, use_beamline: Optional[str] = None,
+            ini_elem_name: Optional[str] = None, ini_elem_occur: int = 1,
+            fin_elem_name: Optional[str] = None, fin_elem_occur: int = 1) -> np.array:
+    """
+    Returns the transport matrix (6x6 numpy array) from the beginning to the
+    end of the beamline specified by "use_beamline". You can also crop
+    the matrix to start from the beginning of the first element
+    specified by "ini_elem_name" and "ini_elem_occur" to the end of the last
+    element specified by "fin_elem_name" and "fin_elem_occur".
+    """
+
+    d = get_transport_matrices(input_LTE_filepath, use_beamline=use_beamline,
+                               individual_matrices=False, del_tmp_files=True)
+
+    if ini_elem_name is None:
+        ini_stop = 0
+    else:
+        ini_stop = np.where(np.logical_and(
+            d['ElementName'] == ini_elem_name,
+            d['ElementOccurence'] == ini_elem_occur))[0][0]
+
+    if fin_elem_name is None:
+        fin_stop = -1
+    else:
+        fin_stop = np.where(np.logical_and(
+            d['ElementName'] == fin_elem_name,
+            d['ElementOccurence'] == fin_elem_occur))[0][0] + 1
+
+    M_fin = np.full((6,6), np.nan)
+    for i in range(1, 6+1):
+        for j in range(1, 6+1):
+            M_fin[i-1, j-1] = d[f'R{i:d}{j:d}'][fin_stop]
+
+    if ini_stop == 0:
+        M = M_fin
+    else:
+        M_ini = np.full((6,6), np.nan)
+        for i in range(1, 6+1):
+            for j in range(1, 6+1):
+                M_ini[i-1, j-1] = d[f'R{i:d}{j:d}'][ini_stop - 1]
+
+        M = M_fin @ np.linalg.inv(M_ini)
+
+    return M
