@@ -48,6 +48,7 @@ class EleBlocks():
         self._parse_frequency_map()
         self._parse_insert_elements()
         self._parse_load_parameters()
+        self._parse_matrix_output()
         self._parse_momentum_aperture()
         self._parse_optimize()
         self._parse_optimization_covariable()
@@ -474,6 +475,36 @@ class EleBlocks():
             long use_first = 0;
         &end
         ''')
+
+    #----------------------------------------------------------------------
+    def _parse_matrix_output(self):
+        """"""
+
+        # Elegant Manual Section 7.35
+        self._parse_block_def('''
+        &matrix_output
+            STRING printout = NULL;
+            long printout_order = 1;
+            STRING printout_format = "%22.15e ";
+            long full_matrix_only = 0;
+            long mathematica_full_matrix = 0;
+            long print_element_data = 1;
+            STRING SDDS_output = NULL;
+            long SDDS_output_order = 1;
+            long individual_matrices = 0;
+            STRING SDDS_output_match = NULL;
+            long output_at_each_step = 0;
+            STRING start_from = NULL;
+            long start_from_occurence = 1;
+        &end
+        ''')
+
+        d = self.info['matrix_output']
+
+        # Fill recommended values
+        keys = [v[0] for v in d]
+        d[keys.index('printout')][3] = '%s.mpr'
+        d[keys.index('SDDS_output')][3] = '%s.mat'
 
     #----------------------------------------------------------------------
     def _parse_momentum_aperture(self):
