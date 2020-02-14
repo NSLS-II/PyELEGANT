@@ -15,6 +15,7 @@ from . import sdds
 def calc_ring_twiss(
     output_filepath, LTE_filepath, E_MeV, use_beamline=None, radiation_integrals=False,
     compute_driving_terms=False, concat_order=1, higher_order_chromaticity=False,
+    calc_matrix_lin_chrom=False,
     ele_filepath=None, twi_filepath='%s.twi', rootname=None, magnets=None,
     semaphore_file=None, parameters='%s.param', element_divisions=0, macros=None,
     alter_elements_list=None,
@@ -33,7 +34,7 @@ def calc_ring_twiss(
         rootname=rootname, magnets=magnets, semaphore_file=semaphore_file,
         parameters=parameters, element_divisions=element_divisions,
         macros=macros, alter_elements_list=alter_elements_list,
-        calc_correct_transport_line_linear_chrom=False,
+        calc_matrix_lin_chrom=calc_matrix_lin_chrom,
         output_file_type=output_file_type, del_tmp_files=del_tmp_files,
         run_local=run_local, remote_opts=remote_opts)
 
@@ -42,7 +43,7 @@ def calc_line_twiss(
     output_filepath, LTE_filepath, E_MeV, betax0, betay0, alphax0=0.0, alphay0=0.0,
     etax0=0.0, etay0=0.0, etaxp0=0.0, etayp0=0.0,
     use_beamline=None, radiation_integrals=False, compute_driving_terms=False,
-    concat_order=1, calc_correct_transport_line_linear_chrom=True,
+    concat_order=1, calc_matrix_lin_chrom=False,
     ele_filepath=None, twi_filepath='%s.twi', rootname=None, magnets=None,
     semaphore_file=None, parameters='%s.param', element_divisions=0, macros=None,
     alter_elements_list=None,
@@ -63,7 +64,7 @@ def calc_line_twiss(
         semaphore_file=semaphore_file, parameters=parameters,
         element_divisions=element_divisions, macros=macros,
         alter_elements_list=alter_elements_list,
-        calc_correct_transport_line_linear_chrom=calc_correct_transport_line_linear_chrom,
+        calc_matrix_lin_chrom=calc_matrix_lin_chrom,
         output_file_type=output_file_type, del_tmp_files=del_tmp_files,
         run_local=run_local, remote_opts=remote_opts)
 
@@ -75,7 +76,7 @@ def _calc_twiss(
     compute_driving_terms=False, concat_order=1, higher_order_chromaticity=False,
     rootname=None, magnets=None, semaphore_file=None, parameters='%s.param',
     element_divisions=0, macros=None, alter_elements_list=None,
-    calc_correct_transport_line_linear_chrom=False,
+    calc_matrix_lin_chrom=False,
     output_file_type=None, del_tmp_files=True,
     run_local=True, remote_opts=None):
     """"""
@@ -93,6 +94,9 @@ def _calc_twiss(
 
     if output_file_type.lower() not in ('hdf5', 'h5', 'pgz'):
         raise ValueError('Invalid output file type: {}'.format(output_file_type))
+
+    if calc_matrix_lin_chrom:
+        assert parameters is not None
 
     ele_contents = ''
 
@@ -160,16 +164,22 @@ def _calc_twiss(
                    print_stderr=std_print_enabled['err'],
                    output_filepaths=None)
 
-    if calc_correct_transport_line_linear_chrom:
-        # TODO
-        raise NotImplementedError('TODO: calc_correct_transport_line_linear_chrom')
-
     output, meta = {}, {}
     for k, v in tmp_filepaths.items():
         try:
             output[k], meta[k] = sdds.sdds2dicts(v)
         except:
             continue
+
+    if calc_matrix_lin_chrom:
+        lin_chrom_nat = _calc_matrix_elem_linear_natural_chrom(
+            output['twi']['columns'], output['parameters']['columns'])
+
+        output['lin_chrom_nat'] = dict(columns={})
+        meta['lin_chrom_nat'] = dict(columns={})
+        for k, v in lin_chrom_nat.items():
+            output['lin_chrom_nat']['columns'][k] = v
+            meta['lin_chrom_nat']['columns'][k] = {}
 
     output_file_type = output_file_type.lower()
 
@@ -207,6 +217,123 @@ def _calc_twiss(
         return
     else:
         return tmp_filepaths
+
+def _calc_matrix_elem_linear_natural_chrom(twi_arrays, parameters_arrays):
+    """
+    ELEGANT's linear natural chromaticity calculation sometimes cannot be trusted,
+    particularly for transport lines.
+
+    This function should correctly compute linear chromaticity, based on
+    matrix elements for quads and combined-function bends.
+
+    TODO: Currently, only sector bends can be handled (i.e., E1 = E2 = 0)
+    Deal with any arbitrary edge angles in the future.
+    """
+
+    twi = twi_arrays
+    para = parameters_arrays
+
+    quads_bends = np.logical_or(twi['ElementType'] == 'QUAD',
+                                twi['ElementType'] == 'SBEN')
+    quads_bends = np.logical_or(
+        quads_bends, twi['ElementType'] == 'KQUAD')
+    quads_bends = np.logical_or(
+        quads_bends, twi['ElementType'] == 'CSBEND')
+    quads_bends = np.where(quads_bends)[0]
+    #
+    elem_names = twi['ElementName'][quads_bends]
+    #
+    sbs = twi['s'][quads_bends - 1]
+    ses = twi['s'][quads_bends]
+    #
+    entrance_betaxs = twi['betax'][quads_bends - 1]
+    entrance_betays = twi['betay'][quads_bends - 1]
+    entrance_alphaxs = twi['alphax'][quads_bends - 1]
+    entrance_alphays = twi['alphay'][quads_bends - 1]
+
+
+    quads_bends = np.logical_or(para['ElementType'] == 'QUAD',
+                                para['ElementType'] == 'SBEN')
+    quads_bends = np.logical_or(
+        quads_bends, para['ElementType'] == 'KQUAD')
+    quads_bends = np.logical_or(
+        quads_bends, para['ElementType'] == 'CSBEND')
+    param_inds = {}
+    for k in ['K1', 'L', 'ANGLE']:
+        param_inds[k] = np.logical_and(quads_bends, para['ElementParameter'] == k)
+    #
+    param_vals = dict(K1=[], L=[], rhoinv_sqr=[])
+    for name in elem_names:
+        name_matches = (para['ElementName'] == name)
+
+        for k in ['K1', 'L', 'ANGLE']: # <= CRITICAL: "L" must come
+            # before "ANGLE" as the value "L" will be used to compute
+            # the value "rhoinv_sqr".
+            sel = np.logical_and(param_inds[k], name_matches)
+            vals = np.unique(para['ParameterValue'][sel])
+            if k == 'ANGLE':
+                if len(vals) == 0:
+                    param_vals['rhoinv_sqr'].append(0.0)
+                elif len(vals) == 1:
+                    one_over_rho = vals[0] / param_vals['L'][-1]
+                    param_vals['rhoinv_sqr'].append(one_over_rho**2)
+                else:
+                    raise RuntimeError(
+                        'Found non-unique bending angle for elements with same names')
+            else:
+                assert len(vals) == 1
+                param_vals[k].append(vals[0])
+    for k, v in param_vals.items():
+        param_vals[k] = np.array(v)
+
+    output = dict(
+        elem_name=elem_names, sb=sbs, se=ses, K1=param_vals['K1'],
+        L=param_vals['L'], rhoinv_sqr=param_vals['rhoinv_sqr'],
+        nat_ksi_x=[], nat_ksi_y=[])
+
+    n = len(elem_names)
+    assert n == len(sbs) == len(ses)
+    assert n == len(param_vals['K1']) == len(param_vals['L']) == len(param_vals['rhoinv_sqr'])
+    assert n == len(entrance_betaxs) == len(entrance_alphaxs)
+    assert n == len(entrance_betays) == len(entrance_alphays)
+    for name, sb, se, K1, L, rhoinv_sqr, bx0, ax0, by0, ay0 in zip(
+        elem_names, sbs, ses, param_vals['K1'], param_vals['L'],
+        param_vals['rhoinv_sqr'], entrance_betaxs, entrance_alphaxs,
+        entrance_betays, entrance_alphays):
+
+        if K1 > -rhoinv_sqr:
+            kx = np.sqrt(K1 + rhoinv_sqr)
+            dksi = (-1) * K1 / (16 * np.pi * bx0 * kx**3) * (
+                2 * kx * L * (ax0**2 + (bx0 * kx)**2 + 1)
+                - (ax0**2 - (bx0 * kx)**2 + 1) * np.sin(2 * kx * L)
+                - 4 * ax0 * bx0 * kx * (np.sin(kx * L)**2)
+            )
+        else:
+            kx = np.sqrt(-K1 - rhoinv_sqr)
+            dksi = (-1) * K1 / (16 * np.pi * bx0 * kx**3) * (
+                2 * kx * L * (-(ax0**2) + (bx0 * kx)**2 - 1)
+                + (ax0**2 + (bx0 * kx)**2 + 1) * np.sinh(2 * kx * L)
+                - 4 * ax0 * bx0 * kx * (np.sinh(kx * L)**2)
+            )
+        output['nat_ksi_x'].append(dksi)
+
+        if K1 < 0.0:
+            ky = np.sqrt(-K1)
+            dksi = (+1) * K1 / (16 * np.pi * by0 * ky**3) * (
+                2 * ky * L * (ay0**2 + (by0 * ky)**2 + 1)
+                - (ay0**2 - (by0 * ky)**2 + 1) * np.sin(2 * ky * L)
+                - 4 * ay0 * by0 * ky * (np.sin(ky * L)**2)
+            )
+        else:
+            ky = np.sqrt(K1)
+            dksi = (+1) * K1 / (16 * np.pi * by0 * ky**3) * (
+                2 * ky * L * (-(ay0**2) + (by0 * ky)**2 - 1)
+                + (ay0**2 + (by0 * ky)**2 + 1) * np.sinh(2 * ky * L)
+                - 4 * ay0 * by0 * ky * (np.sinh(ky * L)**2)
+            )
+        output['nat_ksi_y'].append(dksi)
+
+    return output
 
 def get_visible_inds(all_s_array, slim, s_margin_m=0.1):
     """
