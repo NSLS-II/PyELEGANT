@@ -160,6 +160,12 @@ class PrefixVisitor(Visitor):
 
         super(PrefixVisitor, self).__init__()
 
+    def visit_UnaryOp(self, node):
+        """"""
+
+        self.visit(node.operand)
+        self.visit(node.op)
+
     def visit_BinOp(self, node):
         """"""
 
@@ -315,6 +321,7 @@ if __name__ == '__main__':
         '(5 + 3) * ((3 **2 - 1) + sin(cos(x)))',
         'abs(dnux_dp * 15)',
         'abs(dnux_dp * 15.3)',
+        'sene(R22, -1.665389, 0.01)'
     ]
 
     if False:
