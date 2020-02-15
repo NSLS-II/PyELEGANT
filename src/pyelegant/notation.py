@@ -33,6 +33,11 @@ class Visitor(ast.NodeVisitor):
         self.tokens.append('&&')
         self.f_continue(node)
 
+    def visit_UnaryOp(self, node):
+        """"""
+
+        pass
+
     def visit_BinOp(self, node):
         """"""
 
@@ -82,6 +87,12 @@ class Visitor(ast.NodeVisitor):
         self.tokens.append('*')
         self.f_continue(node)
 
+    def visit_USub(self, node):
+        """"""
+
+        self.tokens[-1] *= -1.0
+        self.f_continue(node)
+
     def visit_Name(self, node):
         """"""
 
@@ -113,6 +124,12 @@ class PostfixVisitor(Visitor):
         """Constructor"""
 
         super(PostfixVisitor, self).__init__()
+
+    def visit_UnaryOp(self, node):
+        """"""
+
+        self.visit(node.operand)
+        self.visit(node.op)
 
     def visit_BinOp(self, node):
         """"""
