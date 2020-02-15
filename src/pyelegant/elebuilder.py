@@ -8,6 +8,7 @@ import tempfile
 import glob
 import ast
 import pickle
+import itertools
 
 from . import util
 from . import sdds
@@ -2536,6 +2537,21 @@ class EleDesigner():
 
         elif block_header in ('optimization_setup', 'parallel_optimization_setup'):
             new_var_names['optimization_term'].append('Particles')
+
+            # Add transport matrix elements for the terminal point of the beamline
+            matrix_order = kwargs.get('matrix_order', 1)
+            if matrix_order > 3:
+                raise ValueError(f'"matrix_order" for `{block_header}` cannot be larger than 3')
+            if matrix_order == 3:
+                new_var_names['optimization_term'].extend(
+                    [f'U{i}{j}{k}{l}' for i, j, k, l in itertools.product(
+                        range(1,6+1), range(1,6+1), range(1,6+1), range(1,6+1))])
+            if matrix_order >= 2:
+                new_var_names['optimization_term'].extend(
+                    [f'T{i}{j}{k}' for i, j, k in itertools.product(
+                        range(1,6+1), range(1,6+1), range(1,6+1))])
+            new_var_names['optimization_term'].extend(
+                [f'R{i}{j}' for i, j in itertools.product(range(1,6+1), range(1,6+1))])
 
         elif block_header == 'optimization_term':
             if isinstance(kwargs['term'], str):
