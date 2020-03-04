@@ -590,21 +590,26 @@ def plot_twiss(
 
     if disp_elem_names:
 
+        vis_elem_types = twi_ar['ElementType'][_vis]
+        vis_elem_names = twi_ar['ElementName'][_vis]
+        vis_s = twi_ar['s'][_vis]
+
         elem_names_to_show = disp_elem_names.get('elem_names', [])
         if disp_elem_names.get('quads', False):
-            inds = np.where(twi_ar['ElementType'] == 'QUAD')[0].tolist()
-            inds += np.where(twi_ar['ElementType'] == 'KQUAD')[0].tolist()
-            elem_names_to_show += twi_ar['ElementName'][inds].tolist()
+            inds = np.where(vis_elem_types == 'QUAD')[0].tolist()
+            inds += np.where(vis_elem_types == 'KQUAD')[0].tolist()
+            elem_names_to_show += vis_elem_names[inds].tolist()
         if disp_elem_names.get('sexts', False):
-            inds = np.where(twi_ar['ElementType'] == 'SEXT')[0].tolist()
-            inds += np.where(twi_ar['ElementType'] == 'KSEXT')[0].tolist()
-            elem_names_to_show += twi_ar['ElementName'][inds].tolist()
+            inds = np.where(vis_elem_types == 'SEXT')[0].tolist()
+            inds += np.where(vis_elem_types == 'KSEXT')[0].tolist()
+            elem_names_to_show += vis_elem_names[inds].tolist()
         if disp_elem_names.get('bends', False):
-            inds = np.where(twi_ar['ElementType'] == 'RBEND')[0].tolist()
-            inds += np.where(twi_ar['ElementType'] == 'SBEND')[0].tolist()
-            inds += np.where(twi_ar['ElementType'] == 'SBEN')[0].tolist()
-            inds += np.where(twi_ar['ElementType'] == 'CSBEND')[0].tolist()
-            elem_names_to_show += twi_ar['ElementName'][inds].tolist()
+            inds = np.where(vis_elem_types == 'RBEND')[0].tolist()
+            inds += np.where(vis_elem_types == 'RBEN')[0].tolist()
+            inds += np.where(vis_elem_types == 'SBEND')[0].tolist()
+            inds += np.where(vis_elem_types == 'SBEN')[0].tolist()
+            inds += np.where(vis_elem_types == 'CSBEND')[0].tolist()
+            elem_names_to_show += vis_elem_names[inds].tolist()
         elem_names_to_show = np.unique(elem_names_to_show).tolist()
 
         font_size = disp_elem_names.get('font_size', 10)
@@ -621,17 +626,18 @@ def plot_twiss(
         ax = ax1
         char_top = prof_center_y - sext_height
         for elem_name in elem_names_to_show:
-            s_inds = np.where(elem_name == twi_ar['ElementName'])[0]
+            s_inds = np.where(elem_name == vis_elem_names)[0]
             sb = None
             for _i in s_inds:
                 if sb is None:
-                    sb = twi_ar['s'][_i-1]
+                    sb = vis_s[_i-1]
 
-                se = twi_ar['s'][_i]
+                se = vis_s[_i]
                 if _i + 1 in s_inds:
                     continue
 
                 s = (sb + se) / 2
+                s -= s0_m
                 ax.text(s, char_top, elem_name, rotation='vertical',
                         rotation_mode='anchor', ha='right', va='center',
                         fontdict=dict(size=font_size))
