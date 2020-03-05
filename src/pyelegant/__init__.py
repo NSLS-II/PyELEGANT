@@ -1,7 +1,14 @@
-import os
 import matplotlib.pylab as plt
 plt.rcParams['mathtext.fontset'] = 'cm'
 plt.rcParams['mathtext.rm'] = 'serif'
+import os
+import json
+
+this_folder = os.path.dirname(os.path.abspath(__file__))
+with open(os.path.join(this_folder, 'version.json'), 'r') as f:
+    __version__ = json.load(f)
+
+del this_folder
 
 std_print_enabled = dict(out=True, err=True)
 

@@ -1,4 +1,5 @@
 program_name = 'pyelegant'
+version = '0.1.0'
 
 from setuptools import setup, find_packages
 from setuptools.command.install import install
@@ -36,6 +37,7 @@ import json
 #print(' ')
 
 facility_json_filename = 'facility.json'
+version_filename = 'version.json'
 
 if ('install' in sys.argv) or ('sdist' in sys.argv):
 
@@ -65,14 +67,18 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
         # Modify the tarball name to be "pyelegant-{facility_name}-?.?.?.tar.gz"
         program_name += f'-{facility_name}'
 
+    with open(os.path.join(
+        this_folder, 'src', 'pyelegant', version_filename), 'w') as f:
+        json.dump(version, f)
+
 setup(
     name = program_name,
-    version = '0.1.0',
+    version = version,
     packages=find_packages('src'),
     package_dir={'': 'src'},
     #include_package_data = True,
     package_data = {
-        'pyelegant': [facility_json_filename,]
+        'pyelegant': [facility_json_filename, version_filename]
     },
     zip_safe=False,
     description = 'Python Interface to Elegant',
@@ -81,3 +87,4 @@ setup(
     maintainer_email = 'yhidaka@bnl.gov',
     cmdclass={'install': InstallCommand},
 )
+
