@@ -56,6 +56,21 @@ if _out.strip() == '':
             else:
                 raise RuntimeError('# Loading module "elegant" failed.')
 
+try:
+    ver_prefix = 'This is elegant'
+    p = Popen(shlex.split('elegant'), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+    for line in out.split(','):
+        if ver_prefix in line:
+            __elegant_version__ = line[line.index(ver_prefix)+len(ver_prefix):].strip()
+            break
+    else:
+        __elegant_version__ = 'unknown'
+    del ver_prefix, p, out, err, line
+except FileNotFoundError:
+    print('\n*** WARNING: ELEGANT not available.')
+    __elegant_version__ = None
+
 # CRITICAL: The line "#!/bin/bash" must come on the first line, not the second or later.
 __sbatch_sh_example = '''#!/bin/bash
 #SBATCH --job-name={job_name}

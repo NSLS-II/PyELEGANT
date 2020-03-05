@@ -30,3 +30,5 @@ from . import util
 from .local import run, enable_stdout, enable_stderr, disable_stdout, disable_stderr
 from .remote import remote
 from .twiss import calc_line_twiss, calc_ring_twiss, plot_twiss
+
+__elegant_version__ = remote.__elegant_version__
