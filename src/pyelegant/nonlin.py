@@ -1685,7 +1685,8 @@ def calc_chrom_track(
     if courant_snyder:
         nus = calc_chrom_from_tbt_cs(
             delta_array, tbt['x'], tbt['y'], nux0, nuy0,
-            tbt['xp'], tbt['yp'], betax, alphax, betay, alphay)
+            tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
+            init_guess_from_prev_step=True)
         extra_save_kwargs = dict(
             xptbt=tbt['xp'], yptbt=tbt['yp'],
             betax=betax, alphax=alphax, betay=betay, alphay=alphay)
@@ -1840,11 +1841,19 @@ def approx_p2angle(px, py, delta):
 
     return xp, yp
 
-def calc_chrom_from_tbt_cs(delta_array, xtbt, ytbt, nux0, nuy0,
-                           xptbt, yptbt, betax, alphax, betay, alphay):
+def calc_chrom_from_tbt_cs(
+    delta_array, xtbt, ytbt, nux0, nuy0,
+    xptbt, yptbt, betax, alphax, betay, alphay, init_guess_from_prev_step=True):
     """
     Using Courant-Snyder (CS) coordinates "xhat" and "yhat", which enables
     determination of tunes within the range of [0, 1.0].
+
+    If `init_guess_from_prev_step` is True (recommended), then the tune peak
+    fine-tuning starts from the tune peak found from the previous momentum offset
+    to avoid any sudden tune jump along an increasing momentum offset vector.
+    If False, then a rough tune peak is found from a simple FFT spectrum, which
+    can potentially lead the initial search point to another strong resonance
+    peak, away from the fundamental tune peak.
     """
 
     frac_nux0 = nux0 - np.floor(nux0)
@@ -1899,21 +1908,31 @@ def calc_chrom_from_tbt_cs(delta_array, xtbt, ytbt, nux0, nuy0,
             hx = xhat - 1j * pxhat
             hy = yhat - 1j * pyhat
 
-            # Find the rough peak first
-            ff_rect = np.fft.fft(hx)
-            A_arb = np.abs(ff_rect)
-            init_nux = nu_vec[np.argmax(A_arb)]
-            # Then fine-tune
-            out = sigproc.getDftPeak(hx, init_nux, **opts)
-            nus['x'][i] = out['nu']
+            if init_guess_from_prev_step:
+                out = sigproc.getDftPeak(hx, init_nux, **opts)
+                nus['x'][i] = out['nu']
+                init_nux = out['nu']
+            else:
+                # Find the rough peak first
+                ff_rect = np.fft.fft(hx)
+                A_arb = np.abs(ff_rect)
+                init_nux = nu_vec[np.argmax(A_arb)]
+                # Then fine-tune
+                out = sigproc.getDftPeak(hx, init_nux, **opts)
+                nus['x'][i] = out['nu']
 
-            # Find the rough peak first
-            ff_rect = np.fft.fft(hy)
-            A_arb = np.abs(ff_rect)
-            init_nuy = nu_vec[np.argmax(A_arb)]
-            # Then fine-tune
-            out = sigproc.getDftPeak(hy, init_nuy, **opts)
-            nus['y'][i] = out['nu']
+            if init_guess_from_prev_step:
+                out = sigproc.getDftPeak(hy, init_nuy, **opts)
+                nus['y'][i] = out['nu']
+                init_nuy = out['nu']
+            else:
+                # Find the rough peak first
+                ff_rect = np.fft.fft(hy)
+                A_arb = np.abs(ff_rect)
+                init_nuy = nu_vec[np.argmax(A_arb)]
+                # Then fine-tune
+                out = sigproc.getDftPeak(hy, init_nuy, **opts)
+                nus['y'][i] = out['nu']
 
     nonnan_inds = np.where(~np.isnan(nus['x']))[0]
     neg_inds = nonnan_inds[nus['x'][nonnan_inds] < 0]
@@ -2479,7 +2498,8 @@ def _calc_tswa(
     if courant_snyder:
         nus, As = calc_tswa_from_tbt_cs(
             scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0,
-            tbt['xp'], tbt['yp'], betax, alphax, betay, alphay)
+            tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
+            init_guess_from_prev_step=True)
         extra_save_kwargs = dict(xptbt=tbt['xp'], yptbt=tbt['yp'])
     else:
         nus, As = calc_tswa_from_tbt_ps(
@@ -2604,11 +2624,19 @@ def calc_tswa_from_tbt_ps(scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0
 
     return nus, As
 
-def calc_tswa_from_tbt_cs(scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0,
-                          xptbt, yptbt, betax, alphax, betay, alphay):
+def calc_tswa_from_tbt_cs(
+    scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0,
+    xptbt, yptbt, betax, alphax, betay, alphay, init_guess_from_prev_step=True):
     """
     Using Courant-Snyder (CS) coordinates "xhat" and "yhat", which enables
     determination of tunes within the range of [0, 1.0].
+
+    If `init_guess_from_prev_step` is True (recommended), then the tune peak
+    fine-tuning starts from the tune peak found from the previous amplitude to
+    avoid any sudden tune jump along an increasing amplitude vector. If False,
+    then a rough tune peak is found from a simple FFT spectrum, which can
+    potentially lead the initial search point to another strong resonance peak,
+    away from the fundamental tune peak.
     """
 
     assert x0_array.shape == y0_array.shape
@@ -2658,23 +2686,33 @@ def calc_tswa_from_tbt_cs(scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0
         hx = xhat - 1j * pxhat
         hy = yhat - 1j * pyhat
 
-        # Find the rough peak first
-        ff_rect = np.fft.fft(hx)
-        A_arb = np.abs(ff_rect)
-        init_nux = nu_vec[np.argmax(A_arb)]
-        # Then fine-tune
-        out = sigproc.getDftPeak(hx, init_nux, **opts)
-        nus['x'][i] = out['nu']
+        if init_guess_from_prev_step:
+            out = sigproc.getDftPeak(hx, init_nux, **opts)
+            nus['x'][i] = out['nu']
+            init_nux = out['nu']
+        else:
+            # Find the rough peak first
+            ff_rect = np.fft.fft(hx)
+            A_arb = np.abs(ff_rect)
+            init_nux = nu_vec[np.argmax(A_arb)]
+            # Then fine-tune
+            out = sigproc.getDftPeak(hx, init_nux, **opts)
+            nus['x'][i] = out['nu']
         sqrt_twoJx = out['A']
         As['x'][i] = sqrt_twoJx * np.sqrt(betax) # Convert CS amplitude to phase-space amplitude
 
-        # Find the rough peak first
-        ff_rect = np.fft.fft(hy)
-        A_arb = np.abs(ff_rect)
-        init_nuy = nu_vec[np.argmax(A_arb)]
-        # Then fine-tune
-        out = sigproc.getDftPeak(hy, init_nuy, **opts)
-        nus['y'][i] = out['nu']
+        if init_guess_from_prev_step:
+            out = sigproc.getDftPeak(hy, init_nuy, **opts)
+            nus['y'][i] = out['nu']
+            init_nuy = out['nu']
+        else:
+            # Find the rough peak first
+            ff_rect = np.fft.fft(hy)
+            A_arb = np.abs(ff_rect)
+            init_nuy = nu_vec[np.argmax(A_arb)]
+            # Then fine-tune
+            out = sigproc.getDftPeak(hy, init_nuy, **opts)
+            nus['y'][i] = out['nu']
         sqrt_twoJy = out['A']
         As['y'][i] = sqrt_twoJy * np.sqrt(betay) # Convert CS amplitude to phase-space amplitude
 
