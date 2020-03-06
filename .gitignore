@@ -11,6 +11,7 @@ tests/
 .ipynb_checkpoints/
 
 facility.json
+version.json
 
 demo/*.hdf5
 demo/*.pgz
