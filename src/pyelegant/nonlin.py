@@ -2811,7 +2811,8 @@ def _save_tswa_data(
 def plot_tswa(
     output_filepath, title='', fit_abs_xmax=None, fit_abs_ymax=None,
     Axlim=None, Aylim=None, nuxlim=None, nuylim=None, max_resonance_line_order=5,
-    ax_nu_vs_A=None, ax_nuy_vs_nux=None, ax_fft_hx=None, ax_fft_hy=None):
+    ax_nu_vs_A=None, ax_nuy_vs_nux=None,
+    plot_fft=False, ax_fft_hx=None, ax_fft_hy=None):
     """"""
 
     assert max_resonance_line_order <= 5
@@ -3076,7 +3077,7 @@ def plot_tswa(
     plt.tight_layout()
 
 
-    if fft_d is not None:
+    if (fft_d is not None) and plot_fft:
 
         use_log = True
 
@@ -3087,8 +3088,16 @@ def plot_tswa(
             EQ_STR = r'$A/\mathrm{max}A$'
 
         if scan_plane == 'x':
+            if np.sign(x0s[-1]) > 0:
+                kick_sign_str = ''
+            else:
+                kick_sign_str = '-'
             v1array = np.abs(x0s)
         else:
+            if np.sign(y0s[-1]) > 0:
+                kick_sign_str = ''
+            else:
+                kick_sign_str = '-'
             v1array = np.abs(y0s)
 
         for _nu_plane in ['x', 'y']:
@@ -3125,7 +3134,7 @@ def plot_tswa(
                 plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap='jet')
             else:
                 plt.pcolor(V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap='jet')
-            plt.xlabel(fr'${scan_plane}\, [\mathrm{{mm}}]$', size=font_sz)
+            plt.xlabel(fr'${kick_sign_str}{scan_plane}\, [\mathrm{{mm}}]$', size=font_sz)
             plt.ylabel(fr'$\nu_{_nu_plane}$', size=font_sz)
             ax1.set_ylim(ylim)
             cb = plt.colorbar()
