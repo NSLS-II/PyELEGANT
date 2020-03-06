@@ -2262,9 +2262,9 @@ def plot_chrom(
 
 def calc_tswa_x(
     output_filepath, LTE_filepath, E_MeV, abs_xmax, nx, xsign='+',
-    courant_snyder=True, n_turns=256, y0_offset=1e-5, use_beamline=None, N_KICKS=None,
-    transmute_elements=None, ele_filepath=None, output_file_type=None,
-    del_tmp_files=True, print_cmd=False,
+    courant_snyder=True, return_fft_spec=True, n_turns=256, y0_offset=1e-5,
+    use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
+    output_file_type=None, del_tmp_files=True, print_cmd=False,
     run_local=True, remote_opts=None):
     """"""
 
@@ -2281,7 +2281,7 @@ def calc_tswa_x(
     return _calc_tswa(
         'x', plane_specific_input, output_filepath, LTE_filepath, E_MeV,
         x0_array, y0_array, courant_snyder=courant_snyder,
-        n_turns=n_turns, use_beamline=use_beamline,
+        return_fft_spec=return_fft_spec, n_turns=n_turns, use_beamline=use_beamline,
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, output_file_type=output_file_type,
         del_tmp_files=del_tmp_files, print_cmd=print_cmd,
@@ -2289,9 +2289,9 @@ def calc_tswa_x(
 
 def calc_tswa_y(
     output_filepath, LTE_filepath, E_MeV, abs_ymax, ny, ysign='+',
-    courant_snyder=True, n_turns=256, x0_offset=1e-5, use_beamline=None, N_KICKS=None,
-    transmute_elements=None, ele_filepath=None, output_file_type=None,
-    del_tmp_files=True, print_cmd=False,
+    courant_snyder=True, return_fft_spec=True, n_turns=256, x0_offset=1e-5,
+    use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
+    output_file_type=None, del_tmp_files=True, print_cmd=False,
     run_local=True, remote_opts=None):
     """"""
 
@@ -2308,7 +2308,7 @@ def calc_tswa_y(
     return _calc_tswa(
         'y', plane_specific_input, output_filepath, LTE_filepath, E_MeV,
         x0_array, y0_array, courant_snyder=courant_snyder,
-        n_turns=n_turns, use_beamline=use_beamline,
+        return_fft_spec=return_fft_spec, n_turns=n_turns, use_beamline=use_beamline,
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, output_file_type=output_file_type,
         del_tmp_files=del_tmp_files, print_cmd=print_cmd,
@@ -2316,7 +2316,7 @@ def calc_tswa_y(
 
 def _calc_tswa(
     scan_plane, plane_specific_input, output_filepath, LTE_filepath, E_MeV,
-    x0_array, y0_array, courant_snyder=True,
+    x0_array, y0_array, courant_snyder=True, return_fft_spec=True,
     n_turns=256, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
@@ -2334,7 +2334,7 @@ def _calc_tswa(
         scan_plane=scan_plane, plane_specific_input=plane_specific_input,
         LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
         x0_array=x0_array, y0_array=y0_array, courant_snyder=courant_snyder,
-        n_turns=n_turns,
+        return_fft_spec=return_fft_spec, n_turns=n_turns,
         use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
         run_local=run_local, remote_opts=remote_opts,
@@ -2496,11 +2496,21 @@ def _calc_tswa(
     #t0 = time.time()
     # Estimate tunes and amplitudes from TbT data
     if courant_snyder:
-        nus, As = calc_tswa_from_tbt_cs(
-            scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0,
-            tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
-            init_guess_from_prev_step=True)
-        extra_save_kwargs = dict(xptbt=tbt['xp'], yptbt=tbt['yp'])
+        if return_fft_spec:
+            nus, As, fft_nus, fft_hAxs, fft_hAys = calc_tswa_from_tbt_cs(
+                scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0,
+                tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
+                init_guess_from_prev_step=True, return_fft_spec=True)
+            extra_save_kwargs = dict(
+                xptbt=tbt['xp'], yptbt=tbt['yp'],
+                fft_nus=fft_nus, fft_hAxs=fft_hAxs, fft_hAys=fft_hAys,
+            )
+        else:
+            nus, As = calc_tswa_from_tbt_cs(
+                scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0,
+                tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
+                init_guess_from_prev_step=True, return_fft_spec=False)
+            extra_save_kwargs = dict(xptbt=tbt['xp'], yptbt=tbt['yp'])
     else:
         nus, As = calc_tswa_from_tbt_ps(
             scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0)
@@ -2626,7 +2636,8 @@ def calc_tswa_from_tbt_ps(scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0
 
 def calc_tswa_from_tbt_cs(
     scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0,
-    xptbt, yptbt, betax, alphax, betay, alphay, init_guess_from_prev_step=True):
+    xptbt, yptbt, betax, alphax, betay, alphay, init_guess_from_prev_step=True,
+    return_fft_spec=True):
     """
     Using Courant-Snyder (CS) coordinates "xhat" and "yhat", which enables
     determination of tunes within the range of [0, 1.0].
@@ -2657,9 +2668,13 @@ def calc_tswa_from_tbt_cs(
     n_turns, nscans = xtbt.shape
     nu_vec = np.fft.fftfreq(n_turns)
 
-    opts = dict(window='sine', resolution=1e-8)
+    opts = dict(window='sine', resolution=1e-8, return_fft_spec=return_fft_spec)
     init_nux = frac_nux0
     init_nuy = frac_nuy0
+    if return_fft_spec:
+        fft_nus = None
+        fft_hAxs = []
+        fft_hAys = []
     for i in range(nscans):
         xarray = xtbt[:, i]
         yarray = ytbt[:, i]
@@ -2700,6 +2715,10 @@ def calc_tswa_from_tbt_cs(
             nus['x'][i] = out['nu']
         sqrt_twoJx = out['A']
         As['x'][i] = sqrt_twoJx * np.sqrt(betax) # Convert CS amplitude to phase-space amplitude
+        if return_fft_spec:
+            if fft_nus is None:
+                fft_nus = out['fft_nus']
+            fft_hAxs.append(out['fft_As'])
 
         if init_guess_from_prev_step:
             out = sigproc.getDftPeak(hy, init_nuy, **opts)
@@ -2715,6 +2734,8 @@ def calc_tswa_from_tbt_cs(
             nus['y'][i] = out['nu']
         sqrt_twoJy = out['A']
         As['y'][i] = sqrt_twoJy * np.sqrt(betay) # Convert CS amplitude to phase-space amplitude
+        if return_fft_spec:
+            fft_hAys.append(out['fft_As'])
 
     nonnan_inds = np.where(~np.isnan(nus['x']))[0]
     neg_inds = nonnan_inds[nus['x'][nonnan_inds] < 0]
@@ -2723,12 +2744,16 @@ def calc_tswa_from_tbt_cs(
     neg_inds = nonnan_inds[nus['y'][nonnan_inds] < 0]
     nus['y'][neg_inds] += 1
 
-    return nus, As
+    if not return_fft_spec:
+        return nus, As
+    else:
+        return nus, As, fft_nus, np.array(fft_hAxs).T, np.array(fft_hAys).T
 
 def _save_tswa_data(
     output_filepath, output_file_type, x0_array, y0_array, xtbt, ytbt,
     betax, alphax, betay, alphay, nux0, nuy0, nuxs, nuys, Axs, Ays,
-    timestamp_fin, input_dict, xptbt=None, yptbt=None):
+    timestamp_fin, input_dict, xptbt=None, yptbt=None,
+    fft_nus=None, fft_hAxs=None, fft_hAys=None):
     """
     """
 
@@ -2745,6 +2770,10 @@ def _save_tswa_data(
             f.create_dataset('xptbt', data=xptbt, **_kwargs)
         if yptbt is not None:
             f.create_dataset('yptbt', data=xptbt, **_kwargs)
+        if fft_nus is not None:
+            f.create_dataset('fft_nus', data=fft_nus, **_kwargs)
+            f.create_dataset('fft_hAxs', data=fft_hAxs, **_kwargs)
+            f.create_dataset('fft_hAys', data=fft_hAys, **_kwargs)
         f['betax'] = betax
         f['betay'] = betay
         f['alphax'] = alphax
@@ -2767,6 +2796,10 @@ def _save_tswa_data(
             d['xptbt'] = xptbt
         if yptbt is not None:
             d['yptbt'] = yptbt
+        if fft_nus is not None:
+            d['fft_nus'] = fft_nus
+            d['fft_hAxs'] = fft_hAxs
+            d['fft_hAys'] = fft_hAys
         d['betax'] = betax
         d['betay'] = betay
         d['alphax'] = alphax
@@ -2778,7 +2811,7 @@ def _save_tswa_data(
 def plot_tswa(
     output_filepath, title='', fit_abs_xmax=None, fit_abs_ymax=None,
     Axlim=None, Aylim=None, nuxlim=None, nuylim=None, max_resonance_line_order=5,
-    ax_nu_vs_A=None, ax_nuy_vs_nux=None):
+    ax_nu_vs_A=None, ax_nuy_vs_nux=None, ax_fft_hx=None, ax_fft_hy=None):
     """"""
 
     assert max_resonance_line_order <= 5
@@ -2809,6 +2842,10 @@ def plot_tswa(
         nux0, nuy0 = d['nux0'], d['nuy0']
         betax, betay = d['betax'], d['betay']
         #alphax, alphay = d['alphax'], d['alphay']
+        if 'fft_nus' in d:
+            fft_d = {k: d[k] for k in ['fft_nus', 'fft_hAxs', 'fft_hAys']}
+        else:
+            fft_d = None
     except:
         f = h5py.File(output_filepath, 'r')
         scan_plane = f['input']['scan_plane'][()]
@@ -2824,6 +2861,10 @@ def plot_tswa(
         betay = f['betay'][()]
         #alphax = f['alphax'][()]
         #alphay = f['alphay'][()]
+        if 'fft_nus' in f:
+            fft_d = {k: f[k][()] for k in ['fft_nus', 'fft_hAxs', 'fft_hAys']}
+        else:
+            fft_d = None
         f.close()
 
     nux0_int = np.floor(nux0)
@@ -3033,6 +3074,64 @@ def plot_tswa(
         ax.set_title(title, size=font_sz)
     plt.sca(ax)
     plt.tight_layout()
+
+
+    if fft_d is not None:
+
+        use_log = True
+
+        font_sz = 18
+        if use_log:
+            EQ_STR = r'$\rm{log}_{10}(A/\mathrm{max}A)$'
+        else:
+            EQ_STR = r'$A/\mathrm{max}A$'
+
+        if scan_plane == 'x':
+            v1array = np.abs(x0s)
+        else:
+            v1array = np.abs(y0s)
+
+        for _nu_plane in ['x', 'y']:
+
+            v2array = fft_d['fft_nus'].copy()
+            v2array[v2array < 0.0] += 1
+
+            if _nu_plane == 'x':
+                v2array += nux0_int
+
+                if ax_fft_hx:
+                    ax1 = ax_fft_hx
+                else:
+                    fig, ax1 = plt.subplots()
+
+                norm_fft_hAs = fft_d['fft_hAxs'] / np.max(fft_d['fft_hAxs'], axis=0)
+
+                ylim = nuxlim
+            else:
+                v2array += nuy0_int
+
+                if ax_fft_hy:
+                    ax1 = ax_fft_hy
+                else:
+                    fig, ax1 = plt.subplots()
+
+                norm_fft_hAs = fft_d['fft_hAys'] / np.max(fft_d['fft_hAys'], axis=0)
+
+                ylim = nuylim
+
+            V1, V2 = np.meshgrid(v1array, v2array)
+
+            if not use_log:
+                plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap='jet')
+            else:
+                plt.pcolor(V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap='jet')
+            plt.xlabel(fr'${scan_plane}\, [\mathrm{{mm}}]$', size=font_sz)
+            plt.ylabel(fr'$\nu_{_nu_plane}$', size=font_sz)
+            ax1.set_ylim(ylim)
+            cb = plt.colorbar()
+            cb.ax.set_title(EQ_STR)
+            cb.ax.title.set_position((0.5, 1.02))
+            plt.tight_layout()
 
 
 def plot_tswa_both_sides(

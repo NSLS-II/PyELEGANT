@@ -129,7 +129,8 @@ def _dft_peak_finding_objective(
 
     return -new_A
 
-def getDftPeak(x_rect, init_nu, window='sine', resolution=1e-8):
+def getDftPeak(x_rect, init_nu, window='sine', resolution=1e-8,
+               return_fft_spec=True):
     """
     `x_rect` must be a rectangular-windowed vector.
 
@@ -223,5 +224,10 @@ def getDftPeak(x_rect, init_nu, window='sine', resolution=1e-8):
     if np.iscomplex(x_rect[0]): dft_peak_A /= 2.0
     dft_peak_phi = np.angle(_dft)
 
-    return dict(A=dft_peak_A, nu=dft_peak_nu, phi=dft_peak_phi)
+    out = dict(A=dft_peak_A, nu=dft_peak_nu, phi=dft_peak_phi)
+    if return_fft_spec:
+        out['fft_nus'] = nus
+        out['fft_As'] = A
+
+    return out
 
