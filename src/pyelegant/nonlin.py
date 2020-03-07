@@ -2903,49 +2903,51 @@ def plot_tswa(
                 '(x_0 < 0)$' '\n'
                 fr'$(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})')
 
-        coeffs = np.polyfit(Jxs[fit_roi], nuxs[fit_roi], 1)
-        dnux_dJx = coeffs[0]
-        nux_fit = np.poly1d(coeffs)
+        if plot_Axy:
+            coeffs = np.polyfit(Jxs[fit_roi], nuxs[fit_roi], 1)
+            dnux_dJx = coeffs[0]
+            nux_fit = np.poly1d(coeffs)
 
-        coeffs = np.polyfit(Jxs[fit_roi], nuys[fit_roi], 1)
-        dnuy_dJx = coeffs[0]
-        nuy_fit = np.poly1d(coeffs)
+            coeffs = np.polyfit(Jxs[fit_roi], nuys[fit_roi], 1)
+            dnuy_dJx = coeffs[0]
+            nuy_fit = np.poly1d(coeffs)
 
-        dnux_dJy = np.polyfit(Jys[fit_roi], nuxs[fit_roi], 1)[0]
-        dnuy_dJy = np.polyfit(Jys[fit_roi], nuys[fit_roi], 1)[0]
+            dnux_dJy = np.polyfit(Jys[fit_roi], nuxs[fit_roi], 1)[0]
+            dnuy_dJy = np.polyfit(Jys[fit_roi], nuys[fit_roi], 1)[0]
 
-        Ax_fit = np.linspace(np.min(Axs), np.max(Axs), 101)
-        Jx_fit = (Ax_fit**2 / betax) / 2
+            Ax_fit = np.linspace(np.min(Axs), np.max(Axs), 101)
+            Jx_fit = (Ax_fit**2 / betax) / 2
 
-        dnux_dJx_str = util.pprint_sci_notation(dnux_dJx, '+.3g')
-        dnuy_dJx_str = util.pprint_sci_notation(dnuy_dJx, '+.3g')
+            dnux_dJx_str = util.pprint_sci_notation(dnux_dJx, '+.3g')
+            dnuy_dJx_str = util.pprint_sci_notation(dnuy_dJx, '+.3g')
 
-        fit_label = dict(
-            nux=fr'$d\nu_x / d J_x = {dnux_dJx_str}\, [\mathrm{{m}}^{{-1}}]$',
-            nuy=fr'$d\nu_y / d J_x = {dnuy_dJx_str}\, [\mathrm{{m}}^{{-1}}]$',
-        )
+            fit_label = dict(
+                nux=fr'$d\nu_x / d J_x = {dnux_dJx_str}\, [\mathrm{{m}}^{{-1}}]$',
+                nuy=fr'$d\nu_y / d J_x = {dnuy_dJx_str}\, [\mathrm{{m}}^{{-1}}]$',
+            )
 
-        coeffs = np.polyfit(Jx0s[fit_roi], nuxs[fit_roi], 1)
-        dnux_dJx0 = coeffs[0]
-        nux_fit0 = np.poly1d(coeffs)
+        if plot_xy0:
+            coeffs = np.polyfit(Jx0s[fit_roi], nuxs[fit_roi], 1)
+            dnux_dJx0 = coeffs[0]
+            nux_fit0 = np.poly1d(coeffs)
 
-        coeffs = np.polyfit(Jx0s[fit_roi], nuys[fit_roi], 1)
-        dnuy_dJx0 = coeffs[0]
-        nuy_fit0 = np.poly1d(coeffs)
+            coeffs = np.polyfit(Jx0s[fit_roi], nuys[fit_roi], 1)
+            dnuy_dJx0 = coeffs[0]
+            nuy_fit0 = np.poly1d(coeffs)
 
-        dnux_dJy0 = np.polyfit(Jy0s[fit_roi], nuxs[fit_roi], 1)[0]
-        dnuy_dJy0 = np.polyfit(Jy0s[fit_roi], nuys[fit_roi], 1)[0]
+            dnux_dJy0 = np.polyfit(Jy0s[fit_roi], nuxs[fit_roi], 1)[0]
+            dnuy_dJy0 = np.polyfit(Jy0s[fit_roi], nuys[fit_roi], 1)[0]
 
-        x0_fit = np.linspace(np.min(np.abs(x0s)), np.max(np.abs(x0s)), 101)
-        Jx0_fit = (x0_fit**2 / betax) / 2
+            x0_fit = np.linspace(np.min(np.abs(x0s)), np.max(np.abs(x0s)), 101)
+            Jx0_fit = (x0_fit**2 / betax) / 2
 
-        dnux_dJx0_str = util.pprint_sci_notation(dnux_dJx0, '+.3g')
-        dnuy_dJx0_str = util.pprint_sci_notation(dnuy_dJx0, '+.3g')
+            dnux_dJx0_str = util.pprint_sci_notation(dnux_dJx0, '+.3g')
+            dnuy_dJx0_str = util.pprint_sci_notation(dnuy_dJx0, '+.3g')
 
-        fit0_label = dict(
-            nux=fr'$d\nu_x / d J_x = {dnux_dJx0_str}\, [\mathrm{{m}}^{{-1}}]$',
-            nuy=fr'$d\nu_y / d J_x = {dnuy_dJx0_str}\, [\mathrm{{m}}^{{-1}}]$',
-        )
+            fit0_label = dict(
+                nux=fr'$d\nu_x / d J_x = {dnux_dJx0_str}\, [\mathrm{{m}}^{{-1}}]$',
+                nuy=fr'$d\nu_y / d J_x = {dnuy_dJx0_str}\, [\mathrm{{m}}^{{-1}}]$',
+            )
 
     elif scan_plane == 'y':
         if np.sign(y0s[-1]) > 0:
@@ -2963,80 +2965,139 @@ def plot_tswa(
                 '(y_0 < 0)$' '\n'
                 fr'$(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})')
 
-        coeffs = np.polyfit(Jys[fit_roi], nuxs[fit_roi], 1)
-        dnux_dJy = coeffs[0]
-        nux_fit = np.poly1d(coeffs)
+        if plot_Axy:
+            coeffs = np.polyfit(Jys[fit_roi], nuxs[fit_roi], 1)
+            dnux_dJy = coeffs[0]
+            nux_fit = np.poly1d(coeffs)
 
-        coeffs = np.polyfit(Jys[fit_roi], nuys[fit_roi], 1)
-        dnuy_dJy = coeffs[0]
-        nuy_fit = np.poly1d(coeffs)
+            coeffs = np.polyfit(Jys[fit_roi], nuys[fit_roi], 1)
+            dnuy_dJy = coeffs[0]
+            nuy_fit = np.poly1d(coeffs)
 
-        dnux_dJx = np.polyfit(Jxs[fit_roi], nuxs[fit_roi], 1)[0]
-        dnuy_dJx = np.polyfit(Jxs[fit_roi], nuys[fit_roi], 1)[0]
+            dnux_dJx = np.polyfit(Jxs[fit_roi], nuxs[fit_roi], 1)[0]
+            dnuy_dJx = np.polyfit(Jxs[fit_roi], nuys[fit_roi], 1)[0]
 
-        Ay_fit = np.linspace(np.min(Ays), np.max(Ays), 101)
-        Jy_fit = (Ay_fit**2 / betay) / 2
+            Ay_fit = np.linspace(np.min(Ays), np.max(Ays), 101)
+            Jy_fit = (Ay_fit**2 / betay) / 2
 
-        dnux_dJy_str = util.pprint_sci_notation(dnux_dJy, '+.3g')
-        dnuy_dJy_str = util.pprint_sci_notation(dnuy_dJy, '+.3g')
+            dnux_dJy_str = util.pprint_sci_notation(dnux_dJy, '+.3g')
+            dnuy_dJy_str = util.pprint_sci_notation(dnuy_dJy, '+.3g')
 
-        fit_label = dict(
-            nux=fr'$d\nu_x / d J_y = {dnux_dJy_str}\, [\mathrm{{m}}^{{-1}}]$',
-            nuy=fr'$d\nu_y / d J_y = {dnuy_dJy_str}\, [\mathrm{{m}}^{{-1}}]$',
-        )
+            fit_label = dict(
+                nux=fr'$d\nu_x / d J_y = {dnux_dJy_str}\, [\mathrm{{m}}^{{-1}}]$',
+                nuy=fr'$d\nu_y / d J_y = {dnuy_dJy_str}\, [\mathrm{{m}}^{{-1}}]$',
+            )
 
-        coeffs = np.polyfit(Jy0s[fit_roi], nuxs[fit_roi], 1)
-        dnux_dJy0 = coeffs[0]
-        nux_fit0 = np.poly1d(coeffs)
+        if plot_xy0:
+            coeffs = np.polyfit(Jy0s[fit_roi], nuxs[fit_roi], 1)
+            dnux_dJy0 = coeffs[0]
+            nux_fit0 = np.poly1d(coeffs)
 
-        coeffs = np.polyfit(Jy0s[fit_roi], nuys[fit_roi], 1)
-        dnuy_dJy0 = coeffs[0]
-        nuy_fit0 = np.poly1d(coeffs)
+            coeffs = np.polyfit(Jy0s[fit_roi], nuys[fit_roi], 1)
+            dnuy_dJy0 = coeffs[0]
+            nuy_fit0 = np.poly1d(coeffs)
 
-        dnux_dJx0 = np.polyfit(Jx0s[fit_roi], nuxs[fit_roi], 1)[0]
-        dnuy_dJx0 = np.polyfit(Jx0s[fit_roi], nuys[fit_roi], 1)[0]
+            dnux_dJx0 = np.polyfit(Jx0s[fit_roi], nuxs[fit_roi], 1)[0]
+            dnuy_dJx0 = np.polyfit(Jx0s[fit_roi], nuys[fit_roi], 1)[0]
 
-        y0_fit = np.linspace(np.min(np.abs(y0s)), np.max(np.abs(y0s)), 101)
-        Jy0_fit = (y0_fit**2 / betay) / 2
+            y0_fit = np.linspace(np.min(np.abs(y0s)), np.max(np.abs(y0s)), 101)
+            Jy0_fit = (y0_fit**2 / betay) / 2
 
-        dnux_dJy0_str = util.pprint_sci_notation(dnux_dJy0, '+.3g')
-        dnuy_dJy0_str = util.pprint_sci_notation(dnuy_dJy0, '+.3g')
+            dnux_dJy0_str = util.pprint_sci_notation(dnux_dJy0, '+.3g')
+            dnuy_dJy0_str = util.pprint_sci_notation(dnuy_dJy0, '+.3g')
 
-        fit0_label = dict(
-            nux=fr'$d\nu_x / d J_y = {dnux_dJy0_str}\, [\mathrm{{m}}^{{-1}}]$',
-            nuy=fr'$d\nu_y / d J_y = {dnuy_dJy0_str}\, [\mathrm{{m}}^{{-1}}]$',
-        )
+            fit0_label = dict(
+                nux=fr'$d\nu_x / d J_y = {dnux_dJy0_str}\, [\mathrm{{m}}^{{-1}}]$',
+                nuy=fr'$d\nu_y / d J_y = {dnuy_dJy0_str}\, [\mathrm{{m}}^{{-1}}]$',
+            )
 
     else:
         raise ValueError
 
 
     if _plot_nu_frac:
-        offset = dict(nux = np.floor(nuxs), nuy = np.floor(nuys))
-        offset0 = offset
-        if scan_plane == 'x':
-            offset['fit_nux'] = np.floor(nux_fit(Jx_fit))
-            offset['fit_nuy'] = np.floor(nuy_fit(Jx_fit))
-            offset0['fit_nux'] = np.floor(nux_fit0(Jx0_fit))
-            offset0['fit_nuy'] = np.floor(nuy_fit0(Jx0_fit))
-        elif scan_plane == 'y':
-            offset['fit_nux'] = np.floor(nux_fit(Jy_fit))
-            offset['fit_nuy'] = np.floor(nuy_fit(Jy_fit))
-            offset0['fit_nux'] = np.floor(nux_fit0(Jy0_fit))
-            offset0['fit_nuy'] = np.floor(nuy_fit0(Jy0_fit))
+        if plot_xy0:
+            offset0 = dict(nux = np.floor(nuxs), nuy = np.floor(nuys))
+            if scan_plane == 'x':
+                offset0['fit_nux'] = np.floor(nux_fit0(Jx0_fit))
+                offset0['fit_nuy'] = np.floor(nuy_fit0(Jx0_fit))
+            elif scan_plane == 'y':
+                offset0['fit_nux'] = np.floor(nux_fit0(Jy0_fit))
+                offset0['fit_nuy'] = np.floor(nuy_fit0(Jy0_fit))
+        if plot_Axy:
+            offset = dict(nux = np.floor(nuxs), nuy = np.floor(nuys))
+            if scan_plane == 'x':
+                offset['fit_nux'] = np.floor(nux_fit(Jx_fit))
+                offset['fit_nuy'] = np.floor(nuy_fit(Jx_fit))
+            elif scan_plane == 'y':
+                offset['fit_nux'] = np.floor(nux_fit(Jy_fit))
+                offset['fit_nuy'] = np.floor(nuy_fit(Jy_fit))
     else:
-        offset = dict(nux = np.zeros(nuxs.shape), nuy = np.zeros(nuys.shape))
-        offset0 = offset
-        if scan_plane == 'x':
-            offset['fit_nux'] = offset['fit_nuy'] = np.zeros(Jx_fit.shape)
-            offset0['fit_nux'] = offset0['fit_nuy'] = np.zeros(Jx0_fit.shape)
-        elif scan_plane == 'y':
-            offset['fit_nux'] = offset['fit_nuy'] = np.zeros(Jy_fit.shape)
-            offset0['fit_nux'] = offset0['fit_nuy'] = np.zeros(Jy0_fit.shape)
+        if plot_xy0:
+            offset0 = dict(nux = np.zeros(nuxs.shape), nuy = np.zeros(nuys.shape))
+            if scan_plane == 'x':
+                offset0['fit_nux'] = offset0['fit_nuy'] = np.zeros(Jx0_fit.shape)
+            elif scan_plane == 'y':
+                offset0['fit_nux'] = offset0['fit_nuy'] = np.zeros(Jy0_fit.shape)
+        if plot_Axy:
+            offset = dict(nux = np.zeros(nuxs.shape), nuy = np.zeros(nuys.shape))
+            if scan_plane == 'x':
+                offset['fit_nux'] = offset['fit_nuy'] = np.zeros(Jx_fit.shape)
+            elif scan_plane == 'y':
+                offset['fit_nux'] = offset['fit_nuy'] = np.zeros(Jy_fit.shape)
+
 
 
     A_font_sz = 18
     font_sz = 22
+
+    if plot_xy0:
+
+        if ax_nu_vs_xy0:
+            ax1 = ax_nu_vs_xy0
+        else:
+            fig, ax1 = plt.subplots()
+        #
+        if scan_plane == 'x':
+            lines1 = ax1.plot(scan_sign * x0s * 1e3, nuxs - offset0['nux'], 'b.', label=r'$\nu_x$')
+            fit_lines1 = ax1.plot(
+                x0_fit * 1e3, nux_fit0(Jx0_fit) - offset0['fit_nux'], 'b-', label=fit0_label['nux'])
+            ax2 = ax1.twinx()
+            lines2 = ax2.plot(scan_sign * x0s * 1e3, nuys - offset0['nuy'], 'r.', label=r'$\nu_y$')
+            fit_lines2 = ax2.plot(
+                x0_fit * 1e3, nuy_fit0(Jx0_fit) - offset0['fit_nuy'], 'r-', label=fit0_label['nuy'])
+            ax1.set_xlabel(fr'${scan_sign_str}x_0\, [\mathrm{{mm}}]\, {beta_str}$', size=A_font_sz)
+            if x0lim is not None:
+                ax1.set_xlim([v * 1e3 for v in x0lim])
+        elif scan_plane == 'y':
+            lines1 = ax1.plot(scan_sign * y0s * 1e3, nuxs - offset0['nux'], 'b.', label=r'$\nu_x$')
+            fit_lines1 = ax1.plot(
+                y0_fit * 1e3, nux_fit0(Jy0_fit) - offset0['fit_nux'], 'b-', label=fit0_label['nux'])
+            ax2 = ax1.twinx()
+            lines2 = ax2.plot(scan_sign * y0s * 1e3, nuys - offset0['nuy'], 'r.', label=r'$\nu_y$')
+            fit_lines2 = ax2.plot(
+                y0_fit * 1e3, nuy_fit0(Jy0_fit) - offset0['fit_nuy'], 'r-', label=fit0_label['nuy'])
+            ax1.set_xlabel(fr'${scan_sign_str}y_0\, [\mathrm{{mm}}]\, {beta_str}$', size=A_font_sz)
+            if y0lim is not None:
+                ax1.set_xlim([v * 1e3 for v in y0lim])
+        ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
+        ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
+        if nuxlim:
+            ax1.set_ylim(nuxlim)
+        else:
+            nuxlim = ax1.get_ylim()
+        if nuylim:
+            ax2.set_ylim(nuylim)
+        else:
+            nuylim = ax2.get_ylim()
+        if title != '':
+            ax1.set_title(title, size=font_sz, pad=60)
+        combined_lines = fit_lines1 + fit_lines2
+        leg = ax2.legend(combined_lines, [L.get_label() for L in combined_lines],
+                         loc='upper center', ncol=2, bbox_to_anchor=(0.5, 1.2),
+                         fancybox=True, shadow=True, prop=dict(size=12))
+        plt.sca(ax1)
+        plt.tight_layout()
 
     if plot_Axy:
 
@@ -3088,53 +3149,6 @@ def plot_tswa(
         plt.sca(ax1)
         plt.tight_layout()
 
-    if plot_xy0:
-
-        if ax_nu_vs_xy0:
-            ax1 = ax_nu_vs_xy0
-        else:
-            fig, ax1 = plt.subplots()
-        #
-        if scan_plane == 'x':
-            lines1 = ax1.plot(scan_sign * x0s * 1e3, nuxs - offset0['nux'], 'b.', label=r'$\nu_x$')
-            fit_lines1 = ax1.plot(
-                x0_fit * 1e3, nux_fit0(Jx0_fit) - offset0['fit_nux'], 'b-', label=fit0_label['nux'])
-            ax2 = ax1.twinx()
-            lines2 = ax2.plot(scan_sign * x0s * 1e3, nuys - offset0['nuy'], 'r.', label=r'$\nu_y$')
-            fit_lines2 = ax2.plot(
-                x0_fit * 1e3, nuy_fit0(Jx0_fit) - offset0['fit_nuy'], 'r-', label=fit0_label['nuy'])
-            ax1.set_xlabel(fr'${scan_sign_str}x_0\, [\mathrm{{mm}}]\, {beta_str}$', size=A_font_sz)
-            if x0lim is not None:
-                ax1.set_xlim([v * 1e3 for v in x0lim])
-        elif scan_plane == 'y':
-            lines1 = ax1.plot(scan_sign * y0s * 1e3, nuxs - offset0['nux'], 'b.', label=r'$\nu_x$')
-            fit_lines1 = ax1.plot(
-                y0_fit * 1e3, nux_fit0(Jy0_fit) - offset0['fit_nux'], 'b-', label=fit0_label['nux'])
-            ax2 = ax1.twinx()
-            lines2 = ax2.plot(scan_sign * y0s * 1e3, nuys - offset0['nuy'], 'r.', label=r'$\nu_y$')
-            fit_lines2 = ax2.plot(
-                y0_fit * 1e3, nuy_fit0(Jy0_fit) - offset0['fit_nuy'], 'r-', label=fit0_label['nuy'])
-            ax1.set_xlabel(fr'${scan_sign_str}y_0\, [\mathrm{{mm}}]\, {beta_str}$', size=A_font_sz)
-            if y0lim is not None:
-                ax1.set_xlim([v * 1e3 for v in y0lim])
-        ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
-        ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
-        if nuxlim:
-            ax1.set_ylim(nuxlim)
-        else:
-            nuxlim = ax1.get_ylim()
-        if nuylim:
-            ax2.set_ylim(nuylim)
-        else:
-            nuylim = ax2.get_ylim()
-        if title != '':
-            ax1.set_title(title, size=font_sz, pad=60)
-        combined_lines = fit_lines1 + fit_lines2
-        leg = ax2.legend(combined_lines, [L.get_label() for L in combined_lines],
-                         loc='upper center', ncol=2, bbox_to_anchor=(0.5, 1.2),
-                         fancybox=True, shadow=True, prop=dict(size=12))
-        plt.sca(ax1)
-        plt.tight_layout()
 
 
     if scan_plane == 'x':
