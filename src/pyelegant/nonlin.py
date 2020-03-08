@@ -3085,6 +3085,8 @@ def plot_tswa(
     font_sz = 22
     fit_x_line_style = 'b-'
     fit_y_line_style = 'r-'
+    fit_x_extrap_line_style = 'b:'
+    fit_y_extrap_line_style = 'r:'
 
     if plot_xy0:
 
@@ -3095,27 +3097,49 @@ def plot_tswa(
         #
         if scan_plane == 'x':
             lines1 = ax1.plot(scan_sign * x0s * 1e3, nuxs - offset0['nux'], 'b.', label=r'$\nu_x$')
+            interp_roi = x0_fit <= fit_abs_xmax
             fit_lines1 = ax1.plot(
-                x0_fit * 1e3, nux_fit0(Jx0_fit) - offset0['fit_nux'],
+                x0_fit[interp_roi] * 1e3,
+                nux_fit0(Jx0_fit[interp_roi]) - offset0['fit_nux'][interp_roi],
                 fit_x_line_style, label=fit0_label['nux'])
+            ax1.plot(
+                x0_fit[~interp_roi] * 1e3,
+                nux_fit0(Jx0_fit[~interp_roi]) - offset0['fit_nux'][~interp_roi],
+                fit_x_extrap_line_style)
             ax2 = ax1.twinx()
             lines2 = ax2.plot(scan_sign * x0s * 1e3, nuys - offset0['nuy'], 'r.', label=r'$\nu_y$')
             fit_lines2 = ax2.plot(
-                x0_fit * 1e3, nuy_fit0(Jx0_fit) - offset0['fit_nuy'],
+                x0_fit[interp_roi] * 1e3,
+                nuy_fit0(Jx0_fit[interp_roi]) - offset0['fit_nuy'][interp_roi],
                 fit_y_line_style, label=fit0_label['nuy'])
+            ax2.plot(
+                x0_fit[~interp_roi] * 1e3,
+                nuy_fit0(Jx0_fit[~interp_roi]) - offset0['fit_nuy'][~interp_roi],
+                fit_y_extrap_line_style)
             ax1.set_xlabel(fr'${scan_sign_str}x_0\, [\mathrm{{mm}}]\, {beta_str}$', size=A_font_sz)
             if x0lim is not None:
                 ax1.set_xlim([v * 1e3 for v in x0lim])
         elif scan_plane == 'y':
             lines1 = ax1.plot(scan_sign * y0s * 1e3, nuxs - offset0['nux'], 'b.', label=r'$\nu_x$')
+            interp_roi = y0_fit <= fit_abs_ymax
             fit_lines1 = ax1.plot(
-                y0_fit * 1e3, nux_fit0(Jy0_fit) - offset0['fit_nux'],
+                y0_fit[interp_roi] * 1e3,
+                nux_fit0(Jy0_fit[interp_roi]) - offset0['fit_nux'][interp_roi],
                 fit_x_line_style, label=fit0_label['nux'])
+            ax1.plot(
+                y0_fit[~interp_roi] * 1e3,
+                nux_fit0(Jy0_fit[~interp_roi]) - offset0['fit_nux'][~interp_roi],
+                fit_x_extrap_line_style)
             ax2 = ax1.twinx()
             lines2 = ax2.plot(scan_sign * y0s * 1e3, nuys - offset0['nuy'], 'r.', label=r'$\nu_y$')
             fit_lines2 = ax2.plot(
-                y0_fit * 1e3, nuy_fit0(Jy0_fit) - offset0['fit_nuy'],
+                y0_fit[interp_roi] * 1e3,
+                nuy_fit0(Jy0_fit[interp_roi]) - offset0['fit_nuy'][interp_roi],
                 fit_y_line_style, label=fit0_label['nuy'])
+            ax2.plot(
+                y0_fit[~interp_roi] * 1e3,
+                nuy_fit0(Jy0_fit[~interp_roi]) - offset0['fit_nuy'][~interp_roi],
+                fit_y_extrap_line_style)
             ax1.set_xlabel(fr'${scan_sign_str}y_0\, [\mathrm{{mm}}]\, {beta_str}$', size=A_font_sz)
             if y0lim is not None:
                 ax1.set_xlim([v * 1e3 for v in y0lim])
@@ -3155,27 +3179,49 @@ def plot_tswa(
         #
         if scan_plane == 'x':
             lines1 = ax1.plot(Axs * 1e3, nuxs - offset['nux'], 'b.', label=r'$\nu_x$')
+            interp_roi = Ax_fit <= fit_abs_xmax
             fit_lines1 = ax1.plot(
-                Ax_fit * 1e3, nux_fit(Jx_fit) - offset['fit_nux'],
+                Ax_fit[interp_roi] * 1e3,
+                nux_fit(Jx_fit[interp_roi]) - offset['fit_nux'][interp_roi],
                 fit_x_line_style, label=fit_label['nux'])
+            ax1.plot(
+                Ax_fit[~interp_roi] * 1e3,
+                nux_fit(Jx_fit[~interp_roi]) - offset['fit_nux'][~interp_roi],
+                fit_x_extrap_line_style)
             ax2 = ax1.twinx()
             lines2 = ax2.plot(Axs * 1e3, nuys - offset['nuy'], 'r.', label=r'$\nu_y$')
             fit_lines2 = ax2.plot(
-                Ax_fit * 1e3, nuy_fit(Jx_fit) - offset['fit_nuy'],
+                Ax_fit[interp_roi] * 1e3,
+                nuy_fit(Jx_fit[interp_roi]) - offset['fit_nuy'][interp_roi],
                 fit_y_line_style, label=fit_label['nuy'])
+            ax2.plot(
+                Ax_fit[~interp_roi] * 1e3,
+                nuy_fit(Jx_fit[~interp_roi]) - offset['fit_nuy'][~interp_roi],
+                fit_y_extrap_line_style)
             ax1.set_xlabel(fr'$A_x\, [\mathrm{{mm}}]\, {scan_sign_beta_str}$', size=A_font_sz)
             if Axlim is not None:
                 ax1.set_xlim([v * 1e3 for v in Axlim])
         elif scan_plane == 'y':
             lines1 = ax1.plot(Ays * 1e3, nuxs - offset['nux'], 'b.', label=r'$\nu_x$')
+            interp_roi = Ay_fit <= fit_abs_ymax
             fit_lines1 = ax1.plot(
-                Ay_fit * 1e3, nux_fit(Jy_fit) - offset['fit_nux'],
+                Ay_fit[interp_roi] * 1e3,
+                nux_fit(Jy_fit[interp_roi]) - offset['fit_nux'][interp_roi],
                 fit_x_line_style, label=fit_label['nux'])
+            ax1.plot(
+                Ay_fit[~interp_roi] * 1e3,
+                nux_fit(Jy_fit[~interp_roi]) - offset['fit_nux'][~interp_roi],
+                fit_x_extrap_line_style)
             ax2 = ax1.twinx()
             lines2 = ax2.plot(Ays * 1e3, nuys - offset['nuy'], 'r.', label=r'$\nu_y$')
             fit_lines2 = ax2.plot(
-                Ay_fit * 1e3, nuy_fit(Jy_fit) - offset['fit_nuy'],
+                Ay_fit[interp_roi] * 1e3,
+                nuy_fit(Jy_fit[interp_roi]) - offset['fit_nuy'][interp_roi],
                 fit_y_line_style, label=fit_label['nuy'])
+            ax2.plot(
+                Ay_fit[~interp_roi] * 1e3,
+                nuy_fit(Jy_fit[~interp_roi]) - offset['fit_nuy'][~interp_roi],
+                fit_y_extrap_line_style)
             ax1.set_xlabel(fr'$A_y\, [\mathrm{{mm}}]\, {scan_sign_beta_str}$', size=A_font_sz)
             if Aylim is not None:
                 ax1.set_xlim([v * 1e3 for v in Aylim])
