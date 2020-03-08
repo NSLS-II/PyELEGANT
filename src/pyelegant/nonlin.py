@@ -1909,7 +1909,10 @@ def calc_chrom_from_tbt_cs(
             hy = yhat - 1j * pyhat
 
             if init_guess_from_prev_step:
-                out = sigproc.getDftPeak(hx, init_nux, **opts)
+                rough_peak_nux = sigproc.findNearestFftPeak(
+                    hx, init_nux, window=opts['window'])['nu']
+                #print(f'init/rough nux: {init_nux:.6f}/{rough_peak_nux:.6f}')
+                out = sigproc.getDftPeak(hx, rough_peak_nux, **opts)
                 nus['x'][i] = out['nu']
                 init_nux = out['nu']
             else:
@@ -1922,7 +1925,10 @@ def calc_chrom_from_tbt_cs(
                 nus['x'][i] = out['nu']
 
             if init_guess_from_prev_step:
-                out = sigproc.getDftPeak(hy, init_nuy, **opts)
+                rough_peak_nuy = sigproc.findNearestFftPeak(
+                    hy, init_nuy, window=opts['window'])['nu']
+                #print(f'init/rough nuy: {init_nuy:.6f}/{rough_peak_nuy:.6f}')
+                out = sigproc.getDftPeak(hy, rough_peak_nuy, **opts)
                 nus['y'][i] = out['nu']
                 init_nuy = out['nu']
             else:
@@ -2705,7 +2711,10 @@ def calc_tswa_from_tbt_cs(
         hy = yhat - 1j * pyhat
 
         if init_guess_from_prev_step:
-            out = sigproc.getDftPeak(hx, init_nux, **opts)
+            rough_peak_nux = sigproc.findNearestFftPeak(
+                hx, init_nux, window=opts['window'])['nu']
+            #print(f'init/rough nux: {init_nux:.6f}/{rough_peak_nux:.6f}')
+            out = sigproc.getDftPeak(hx, rough_peak_nux, **opts)
             nus['x'][i] = out['nu']
             init_nux = out['nu']
         else:
@@ -2724,7 +2733,10 @@ def calc_tswa_from_tbt_cs(
             fft_hAxs.append(out['fft_As'])
 
         if init_guess_from_prev_step:
-            out = sigproc.getDftPeak(hy, init_nuy, **opts)
+            rough_peak_nuy = sigproc.findNearestFftPeak(
+                hy, init_nuy, window=opts['window'])['nu']
+            #print(f'init/rough nuy: {init_nuy:.6f}/{rough_peak_nuy:.6f}')
+            out = sigproc.getDftPeak(hy, rough_peak_nuy, **opts)
             nus['y'][i] = out['nu']
             init_nuy = out['nu']
         else:

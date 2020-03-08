@@ -231,3 +231,53 @@ def getDftPeak(x_rect, init_nu, window='sine', resolution=1e-8,
 
     return out
 
+def findNearestFftPeak(x_rect, init_nu, window='sine'):
+    """
+    `x_rect` must be a rectangular-windowed vector.
+    """
+
+    n = len(x_rect)
+    nus = np.fft.fftfreq(n)
+
+    x_det = x_rect - np.mean(x_rect)
+
+    xwin = apply_window(x_det, window)
+
+    if window == 'rect':
+        amp_corr_fac = 1.0 / np.sinc(0.0) # = 1.0
+    elif window == 'sine':
+        amp_corr_fac = 1.0 / \
+            ((np.sinc(0.0 + 0.5) + np.sinc(0.0 - 0.5))/2.0) # ~ 0.63662
+    elif window == 'sine_squared':
+        amp_corr_fac = 1.0 / \
+            (np.sinc(0.0) / (1.0 - 0.0**2) / 2.0) # = 0.5
+
+    ffwin = np.fft.fft(xwin)
+    A = np.abs(ffwin) * 2.0 / n * amp_corr_fac
+
+    closest_index = np.argmin(np.abs(nus - init_nu))
+    #
+    downturns = np.where(np.diff(A[:(closest_index+1)][::-1]) < 0.0)[0]
+    if downturns.size == 0:
+        us_peak_ind = 0
+    else:
+        us_peak_ind = closest_index - downturns[0]
+    #
+    downturns = np.where(np.diff(A[closest_index:]) < 0.0)[0]
+    if downturns.size == 0:
+        ds_peak_ind = A.size - 1
+    else:
+        ds_peak_ind = closest_index + downturns[0]
+    #
+    if us_peak_ind == ds_peak_ind:
+        peak_ind = us_peak_ind
+    elif A[us_peak_ind] >= A[ds_peak_ind]:
+        peak_ind = us_peak_ind
+    else:
+        peak_ind = ds_peak_ind
+
+    return dict(A=A[peak_ind], nu=nus[peak_ind])
+
+
+
+
