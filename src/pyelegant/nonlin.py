@@ -1505,7 +1505,7 @@ def calc_chrom_twiss(
 
 def calc_chrom_track(
     output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, ndelta,
-    courant_snyder=True,
+    courant_snyder=True, return_fft_spec=True,
     n_turns=256, x0_offset=1e-5, y0_offset=1e-5, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
@@ -1519,7 +1519,7 @@ def calc_chrom_track(
     input_dict = dict(
         LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
         delta_min=delta_min, delta_max=delta_max, ndelta=ndelta,
-        courant_snyder=courant_snyder,
+        courant_snyder=courant_snyder, return_fft_spec=return_fft_spec,
         n_turns=n_turns, x0_offset=x0_offset, y0_offset=y0_offset,
         use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
@@ -1683,13 +1683,23 @@ def calc_chrom_track(
     #t0 = time.time()
     # Estimate tunes from TbT data
     if courant_snyder:
-        nus = calc_chrom_from_tbt_cs(
-            delta_array, tbt['x'], tbt['y'], nux0, nuy0,
-            tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
-            init_guess_from_prev_step=True)
-        extra_save_kwargs = dict(
-            xptbt=tbt['xp'], yptbt=tbt['yp'],
-            betax=betax, alphax=alphax, betay=betay, alphay=alphay)
+        if return_fft_spec:
+            nus, fft_nus, fft_hAxs, fft_hAys = calc_chrom_from_tbt_cs(
+                delta_array, tbt['x'], tbt['y'], nux0, nuy0,
+                tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
+                init_guess_from_prev_step=True, return_fft_spec=True)
+            extra_save_kwargs = dict(
+                xptbt=tbt['xp'], yptbt=tbt['yp'],
+                betax=betax, alphax=alphax, betay=betay, alphay=alphay,
+                fft_nus=fft_nus, fft_hAxs=fft_hAxs, fft_hAys=fft_hAys)
+        else:
+            nus = calc_chrom_from_tbt_cs(
+                delta_array, tbt['x'], tbt['y'], nux0, nuy0,
+                tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
+                init_guess_from_prev_step=True)
+            extra_save_kwargs = dict(
+                xptbt=tbt['xp'], yptbt=tbt['yp'],
+                betax=betax, alphax=alphax, betay=betay, alphay=alphay)
     else:
         nus = calc_chrom_from_tbt_ps(delta_array, tbt['x'], tbt['y'], nux0, nuy0)
         extra_save_kwargs = {}
@@ -1843,7 +1853,8 @@ def approx_p2angle(px, py, delta):
 
 def calc_chrom_from_tbt_cs(
     delta_array, xtbt, ytbt, nux0, nuy0,
-    xptbt, yptbt, betax, alphax, betay, alphay, init_guess_from_prev_step=True):
+    xptbt, yptbt, betax, alphax, betay, alphay, init_guess_from_prev_step=True,
+    return_fft_spec=True):
     """
     Using Courant-Snyder (CS) coordinates "xhat" and "yhat", which enables
     determination of tunes within the range of [0, 1.0].
@@ -1878,10 +1889,17 @@ def calc_chrom_from_tbt_cs(
     n_turns = xtbt.shape[0]
     nu_vec = np.fft.fftfreq(n_turns)
 
-    opts = dict(window='sine', resolution=1e-8)
+    opts = dict(window='sine', resolution=1e-8, return_fft_spec=return_fft_spec)
+    if return_fft_spec:
+        fft_nus = None
+        fft_hAxs_list = []
+        fft_hAys_list = []
     for sorted_delta_inds in [sorted_neg_delta_inds, sorted_pos_delta_inds]:
         init_nux = frac_nux0
         init_nuy = frac_nuy0
+        if return_fft_spec:
+            fft_hAxs = []
+            fft_hAys = []
         for i in sorted_delta_inds:
             xarray = xtbt[:, i]
             yarray = ytbt[:, i]
@@ -1923,6 +1941,10 @@ def calc_chrom_from_tbt_cs(
                 # Then fine-tune
                 out = sigproc.getDftPeak(hx, init_nux, **opts)
                 nus['x'][i] = out['nu']
+            if return_fft_spec:
+                if fft_nus is None:
+                    fft_nus = out['fft_nus']
+                fft_hAxs.append(out['fft_As'])
 
             if init_guess_from_prev_step:
                 rough_peak_nuy = sigproc.findNearestFftPeak(
@@ -1939,6 +1961,12 @@ def calc_chrom_from_tbt_cs(
                 # Then fine-tune
                 out = sigproc.getDftPeak(hy, init_nuy, **opts)
                 nus['y'][i] = out['nu']
+            if return_fft_spec:
+                fft_hAys.append(out['fft_As'])
+
+        if return_fft_spec:
+            fft_hAxs_list.append(np.array(fft_hAxs).T)
+            fft_hAys_list.append(np.array(fft_hAys).T)
 
     nonnan_inds = np.where(~np.isnan(nus['x']))[0]
     neg_inds = nonnan_inds[nus['x'][nonnan_inds] < 0]
@@ -1947,7 +1975,12 @@ def calc_chrom_from_tbt_cs(
     neg_inds = nonnan_inds[nus['y'][nonnan_inds] < 0]
     nus['y'][neg_inds] += 1
 
-    return nus
+    if not return_fft_spec:
+        return nus
+    else:
+        fft_hAxs = np.hstack((fft_hAxs_list[0][:, ::-1], fft_hAxs_list[1]))
+        fft_hAys = np.hstack((fft_hAys_list[0][:, ::-1], fft_hAys_list[1]))
+        return nus, fft_nus, fft_hAxs, fft_hAys
 
 def _calc_chrom_track_get_tbt(
     delta_sub_array, ele_contents, ele_filename, watch_filename,
@@ -1991,7 +2024,8 @@ def _calc_chrom_track_get_tbt(
 def _save_chrom_data(
     output_filepath, output_file_type, delta_array, nuxs, nuys, timestamp_fin,
     input_dict, xtbt=None, ytbt=None, nux0=None, nuy0=None,
-    xptbt=None, yptbt=None, betax=None, alphax=None, betay=None, alphay=None):
+    xptbt=None, yptbt=None, betax=None, alphax=None, betay=None, alphay=None,
+    fft_nus=None, fft_hAxs=None, fft_hAys=None):
     """
     nux0, nuy0: on-momentum tunes
     """
@@ -2014,6 +2048,10 @@ def _save_chrom_data(
             f.create_dataset('xptbt', data=xptbt, **_kwargs)
         if yptbt is not None:
             f.create_dataset('yptbt', data=yptbt, **_kwargs)
+        if fft_nus is not None:
+            f.create_dataset('fft_nus', data=fft_nus, **_kwargs)
+            f.create_dataset('fft_hAxs', data=fft_hAxs, **_kwargs)
+            f.create_dataset('fft_hAys', data=fft_hAys, **_kwargs)
         if betax:
             f['betax'] = betax
         if alphax:
@@ -2040,6 +2078,10 @@ def _save_chrom_data(
             d['xptbt'] = xptbt
         if yptbt is not None:
             d['yptbt'] = yptbt
+        if fft_nus is not None:
+            d['fft_nus'] = fft_nus
+            d['fft_hAxs'] = fft_hAxs
+            d['fft_hAys'] = fft_hAys
         if betax:
             d['betax'] = betax
         if alphax:
@@ -2055,7 +2097,8 @@ def _save_chrom_data(
 def plot_chrom(
     output_filepath, max_chrom_order=3, title='', deltalim=None, fit_deltalim=None,
     nuxlim=None, nuylim=None, max_resonance_line_order=5, fit_label_format='+.3g',
-    ax_nu_vs_delta=None, ax_nuy_vs_nux=None):
+    ax_nu_vs_delta=None, ax_nuy_vs_nux=None,
+    plot_fft=False, ax_fft_hx=None, ax_fft_hy=None):
     """"""
 
     assert max_resonance_line_order <= 5
@@ -2097,6 +2140,10 @@ def plot_chrom(
 
             nux0_int = np.floor(nux0)
             nuy0_int = np.floor(nuy0)
+        if 'fft_nus' in d:
+            fft_d = {k: d[k] for k in ['fft_nus', 'fft_hAxs', 'fft_hAys']}
+        else:
+            fft_d = None
     except:
         f = h5py.File(output_filepath, 'r')
         deltas = f['deltas'][()]
@@ -2117,9 +2164,13 @@ def plot_chrom(
 
             nux0_int = np.floor(nux0)
             nuy0_int = np.floor(nuy0)
+        if 'fft_nus' in f:
+            fft_d = {k: f[k][()] for k in ['fft_nus', 'fft_hAxs', 'fft_hAys']}
+        else:
+            fft_d = None
         f.close()
 
-    if deltalim:
+    if deltalim is not None:
         delta_incl = np.logical_and(deltas >= np.min(deltalim),
                                     deltas <= np.max(deltalim))
     else:
@@ -2128,13 +2179,17 @@ def plot_chrom(
     nuxs = nuxs[delta_incl]
     nuys = nuys[delta_incl]
 
-    if fit_deltalim:
-        fit_delta_incl = np.logical_and(deltas >= np.min(fit_deltalim),
-                                        deltas <= np.max(fit_deltalim))
+    fit_deltas_for_plot = np.linspace(np.min(deltas), np.max(deltas), 101)
+
+    if fit_deltalim is not None:
+        fit_delta_min, fit_delta_max = np.min(fit_deltalim), np.max(fit_deltalim)
+        fit_delta_incl = np.logical_and(deltas >= fit_delta_min,
+                                        deltas <= fit_delta_max)
         fit_deltas = deltas[fit_delta_incl]
         fit_nuxs = nuxs[fit_delta_incl]
         fit_nuys = nuys[fit_delta_incl]
     else:
+        fit_delta_min, fit_delta_max = np.min(deltas), np.max(deltas)
         fit_delta_incl = np.ones(deltas.shape).astype(bool)
         fit_deltas = deltas
         fit_nuxs = nuxs
@@ -2173,31 +2228,72 @@ def plot_chrom(
     else:
         offset = np.zeros(nuxs.shape)
     lines1 = ax1.plot(deltas * 1e2, nuxs - offset, 'b.', label=r'$\nu_x$')
+    if nuxlim:
+        ax1.set_ylim(nuxlim)
+    else:
+        nuxlim = ax1.get_ylim()
+    #fit_lines1 = ax1.plot(
+        #fit_deltas * 1e2, np.poly1d(coeffs['x'])(fit_deltas) - offset[fit_delta_incl], 'b-',
+        #label=fit_label['x'])
+    interp_roi = np.logical_and(fit_deltas_for_plot >= fit_delta_min,
+                                fit_deltas_for_plot <= fit_delta_max)
+    if _plot_nu_frac:
+        fit_offset = np.floor(np.poly1d(coeffs['x'])(fit_deltas_for_plot[interp_roi]))
+    else:
+        fit_offset = np.zeros(fit_deltas_for_plot[interp_roi].shape)
     fit_lines1 = ax1.plot(
-        fit_deltas * 1e2, np.poly1d(coeffs['x'])(fit_deltas) - offset[fit_delta_incl], 'b-',
-        label=fit_label['x'])
+        fit_deltas_for_plot[interp_roi] * 1e2,
+        np.poly1d(coeffs['x'])(fit_deltas_for_plot[interp_roi]) - fit_offset,
+        'b-', label=fit_label['x'])
+    for extrap_roi in [fit_deltas_for_plot < fit_delta_min,
+                       fit_deltas_for_plot > fit_delta_max]:
+        if _plot_nu_frac:
+            fit_offset = np.floor(np.poly1d(coeffs['x'])(fit_deltas_for_plot[extrap_roi]))
+        else:
+            fit_offset = np.zeros(fit_deltas_for_plot[extrap_roi].shape)
+        ax1.plot(
+            fit_deltas_for_plot[extrap_roi] * 1e2,
+            np.poly1d(coeffs['x'])(fit_deltas_for_plot[extrap_roi]) - fit_offset,
+            'b:')
     ax2 = ax1.twinx()
     if _plot_nu_frac:
         offset = np.floor(nuys)
     else:
         offset = np.zeros(nuys.shape)
     lines2 = ax2.plot(deltas * 1e2, nuys - offset, 'r.', label=r'$\nu_y$')
+    if nuylim:
+        ax2.set_ylim(nuylim)
+    else:
+        nuylim = ax2.get_ylim()
+    #fit_lines2 = ax2.plot(
+        #fit_deltas * 1e2, np.poly1d(coeffs['y'])(fit_deltas) - offset[fit_delta_incl], 'r-',
+        #label=fit_label['y'])
+    if _plot_nu_frac:
+        fit_offset = np.floor(np.poly1d(coeffs['y'])(fit_deltas_for_plot[interp_roi]))
+    else:
+        fit_offset = np.zeros(fit_deltas_for_plot[interp_roi].shape)
     fit_lines2 = ax2.plot(
-        fit_deltas * 1e2, np.poly1d(coeffs['y'])(fit_deltas) - offset[fit_delta_incl], 'r-',
-        label=fit_label['y'])
+        fit_deltas_for_plot[interp_roi] * 1e2,
+        np.poly1d(coeffs['y'])(fit_deltas_for_plot[interp_roi]) - fit_offset,
+        'r-', label=fit_label['y'])
+    for extrap_roi in [fit_deltas_for_plot < fit_delta_min,
+                       fit_deltas_for_plot > fit_delta_max]:
+        if _plot_nu_frac:
+            fit_offset = np.floor(np.poly1d(coeffs['y'])(fit_deltas_for_plot[extrap_roi]))
+        else:
+            fit_offset = np.zeros(fit_deltas_for_plot[extrap_roi].shape)
+        ax2.plot(
+            fit_deltas_for_plot[extrap_roi] * 1e2,
+            np.poly1d(coeffs['y'])(fit_deltas_for_plot[extrap_roi]) - fit_offset,
+            'r:')
     ax1.set_xlabel(r'$\delta\, [\%]$', size=font_sz)
     ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
     ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
     if deltalim is not None:
         ax1.set_xlim([v * 1e2 for v in deltalim])
-    if nuxlim:
-        ax1.set_ylim(nuxlim)
-    else:
-        nuxlim = ax1.get_ylim()
-    if nuylim:
-        ax2.set_ylim(nuylim)
-    else:
-        nuylim = ax2.get_ylim()
+    # Reset nux/nuy limits, which may have been changed by adding fitted lines
+    ax1.set_ylim(nuxlim)
+    ax2.set_ylim(nuylim)
     if title != '':
         ax1.set_title(title, size=font_sz, pad=60)
     combined_lines = fit_lines1 + fit_lines2
@@ -2264,7 +2360,59 @@ def plot_chrom(
     plt.sca(ax)
     plt.tight_layout()
 
+    if (fft_d is not None) and plot_fft:
 
+        use_log = True
+
+        font_sz = 18
+        if use_log:
+            EQ_STR = r'$\rm{log}_{10}(A/\mathrm{max}A)$'
+        else:
+            EQ_STR = r'$A/\mathrm{max}A$'
+
+        v1array = deltas
+
+        for _nu_plane in ['x', 'y']:
+
+            v2array = fft_d['fft_nus'].copy()
+            v2array[v2array < 0.0] += 1
+
+            if _nu_plane == 'x':
+                v2array += nux0_int
+
+                if ax_fft_hx:
+                    ax1 = ax_fft_hx
+                else:
+                    fig, ax1 = plt.subplots()
+
+                norm_fft_hAs = fft_d['fft_hAxs'] / np.max(fft_d['fft_hAxs'], axis=0)
+
+                ylim = nuxlim
+            else:
+                v2array += nuy0_int
+
+                if ax_fft_hy:
+                    ax1 = ax_fft_hy
+                else:
+                    fig, ax1 = plt.subplots()
+
+                norm_fft_hAs = fft_d['fft_hAys'] / np.max(fft_d['fft_hAys'], axis=0)
+
+                ylim = nuylim
+
+            V1, V2 = np.meshgrid(v1array, v2array)
+
+            if not use_log:
+                plt.pcolor(V1 * 1e2, V2, norm_fft_hAs, cmap='jet')
+            else:
+                plt.pcolor(V1 * 1e2, V2, np.log10(norm_fft_hAs), cmap='jet')
+            plt.xlabel(fr'$\delta\, [\%]$', size=font_sz)
+            plt.ylabel(fr'$\nu_{_nu_plane}$', size=font_sz)
+            ax1.set_ylim(ylim)
+            cb = plt.colorbar()
+            cb.ax.set_title(EQ_STR)
+            cb.ax.title.set_position((0.5, 1.02))
+            plt.tight_layout()
 
 def calc_tswa_x(
     output_filepath, LTE_filepath, E_MeV, abs_xmax, nx, xsign='+',
