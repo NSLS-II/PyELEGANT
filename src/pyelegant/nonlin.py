@@ -2830,8 +2830,8 @@ def plot_tswa(
     output_filepath, title='', fit_abs_xmax=None, fit_abs_ymax=None,
     plot_xy0=True, x0lim=None, y0lim=None,
     plot_Axy=False, use_time_domain_amplitude=True, Axlim=None, Aylim=None,
-    nuxlim=None, nuylim=None, max_resonance_line_order=5,
-    ax_nu_vs_xy0=None, ax_nu_vs_A=None, ax_nuy_vs_nux=None,
+    nuxlim=None, nuylim=None, footprint_nuxlim=None, footprint_nuylim=None,
+    max_resonance_line_order=5, ax_nu_vs_xy0=None, ax_nu_vs_A=None, ax_nuy_vs_nux=None,
     plot_fft=False, ax_fft_hx=None, ax_fft_hy=None):
     """"""
 
@@ -2891,7 +2891,6 @@ def plot_tswa(
             fft_d = None
         f.close()
 
-    use_time_domain_amplitude = True
     if use_time_domain_amplitude:
         Axs = time_domain_Axs
         Ays = time_domain_Ays
@@ -3255,32 +3254,56 @@ def plot_tswa(
 
 
     if scan_plane == 'x':
-        As = Axs
+        #As = Axs
+        xy0s = x0s
     else:
-        As = Ays
+        #As = Ays
+        xy0s = y0s
 
-    if _plot_nu_frac:
+    is_fp_nuxlim_frac = False
+    if footprint_nuxlim is not None:
+        if (0.0 <= footprint_nuxlim[0] <= 1.0) and (0.0 <= footprint_nuxlim[1] <= 1.0):
+            is_fp_nuxlim_frac = True
+    else:
+        footprint_nuxlim = nuxlim.copy()
+    #
+    is_fp_nuylim_frac = False
+    if footprint_nuylim is not None:
+        if (0.0 <= footprint_nuylim[0] <= 1.0) and (0.0 <= footprint_nuylim[1] <= 1.0):
+            is_fp_nuylim_frac = True
+    else:
+        footprint_nuylim = nuylim.copy()
+    #
+    if is_fp_nuxlim_frac and is_fp_nuylim_frac:
+        _plot_fp_nu_frac = True
+    elif (not is_fp_nuxlim_frac) and (not is_fp_nuylim_frac):
+        _plot_fp_nu_frac = False
+    else:
+        raise ValueError(
+            ('"footprint_nuxlim" and "footprint_nuylim" must be either '
+             'both fractional or both non-fractional'))
+
+    if _plot_fp_nu_frac:
         _nuxs = nuxs - nux0_int
         _nuys = nuys - nuy0_int
 
-        frac_nuxlim = nuxlim
-        frac_nuylim = nuylim
+        frac_nuxlim = footprint_nuxlim
+        frac_nuylim = footprint_nuylim
     else:
         _nuxs = nuxs
         _nuys = nuys
 
-        frac_nuxlim = nuxlim - nux0_int
-        frac_nuylim = nuylim - nuy0_int
+        frac_nuxlim = footprint_nuxlim - nux0_int
+        frac_nuylim = footprint_nuylim - nuy0_int
 
     if ax_nuy_vs_nux:
         ax = ax_nuy_vs_nux
     else:
         _, ax = plt.subplots()
-    sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=As * 1e3, marker='o', cmap='jet')
-    if nuxlim is not None:
-        ax.set_xlim(nuxlim)
-    if nuylim is not None:
-        ax.set_ylim(nuylim)
+    #sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=As * 1e3, marker='o', cmap='jet')
+    sc_obj = ax.scatter(_nuxs, _nuys, s=3, c=xy0s * 1e3, marker='o', cmap='jet')
+    ax.set_xlim(footprint_nuxlim)
+    ax.set_ylim(footprint_nuylim)
     ax.set_xlabel(r'$\nu_x$', size=font_sz)
     ax.set_ylabel(r'$\nu_y$', size=font_sz)
     #
@@ -3292,11 +3315,11 @@ def plot_tswa(
     )
     for n in range(1, max_resonance_line_order):
         d = rd.getResonanceCoeffsAndLines(
-            n, np.array(frac_nuxlim) + nux0_int, frac_nuylim + nuy0_int) # <= CRITICAL: Must pass tunes w/ integer parts
+            n, np.array(frac_nuxlim) + nux0_int, np.array(frac_nuylim) + nuy0_int) # <= CRITICAL: Must pass tunes w/ integer parts
         prop = {k: lineprops[k][n-1] for k in ['color', 'linestyle', 'linewidth']}
         assert len(d['lines']) == len(d['coeffs'])
         for ((nux1, nuy1), (nux2, nuy2)), (nx, ny, _) in zip(d['lines'], d['coeffs']):
-            if _plot_nu_frac:
+            if _plot_fp_nu_frac:
                 _x = np.array([nux1 - nux0_int, nux2 - nux0_int])
                 _y = np.array([nuy1 - nuy0_int, nuy2 - nuy0_int])
             else:
@@ -3307,7 +3330,8 @@ def plot_tswa(
     #leg.set_draggable(True, use_blit=True)
     #
     cb = plt.colorbar(sc_obj, ax=ax)
-    cb.ax.set_title(fr'$A_{scan_plane}\, [\mathrm{{mm}}]$', size=16)
+    #cb.ax.set_title(fr'$A_{scan_plane}\, [\mathrm{{mm}}]$', size=16)
+    cb.ax.set_title(fr'${scan_plane}_0\, [\mathrm{{mm}}]$', size=16)
     if title != '':
         ax.set_title(title, size=font_sz)
     plt.sca(ax)
@@ -3363,7 +3387,7 @@ def plot_tswa(
                 plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap='jet')
             else:
                 plt.pcolor(V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap='jet')
-            plt.xlabel(fr'${scan_sign_str}{scan_plane}\, [\mathrm{{mm}}]$', size=font_sz)
+            plt.xlabel(fr'${scan_sign_str}{scan_plane}_0\, [\mathrm{{mm}}]$', size=font_sz)
             plt.ylabel(fr'$\nu_{_nu_plane}$', size=font_sz)
             ax1.set_ylim(ylim)
             cb = plt.colorbar()
@@ -3375,8 +3399,11 @@ def plot_tswa(
 def plot_tswa_both_sides(
     output_filepath_positive, output_filepath_negative, title='',
     fit_xmax=None, fit_xmin=None, fit_ymax=None, fit_ymin=None,
-    Axlim=None, Aylim=None, nuxlim=None, nuylim=None, max_resonance_line_order=5,
-    ax_nu_vs_A=None, ax_nuy_vs_nux=None):
+    plot_xy0=True, x0lim=None, y0lim=None,
+    plot_Axy=False, use_time_domain_amplitude=True, Axlim=None, Aylim=None,
+    nuxlim=None, nuylim=None, footprint_nuxlim=None, footprint_nuylim=None,
+    max_resonance_line_order=5, ax_nu_vs_xy0=None, ax_nu_vs_A=None, ax_nuy_vs_nux=None,
+    plot_fft=False, ax_fft_hx=None, ax_fft_hy=None):
     """"""
 
     assert max_resonance_line_order <= 5
@@ -3398,8 +3425,9 @@ def plot_tswa_both_sides(
     else:
         raise ValueError('"nuxlim" and "nuylim" must be either both fractional or both non-fractional')
 
-    scan_plane, x0s, y0s, nuxs, nuys, Axs, Ays, nux0, nuy0, betax, betay = [
-        {} for _ in range(11)]
+    (scan_plane, x0s, y0s, nuxs, nuys, Axs, Ays, time_domain_Axs, time_domain_Ays,
+     nux0, nuy0, betax, betay, fft_d) = [
+         {} for _ in range(14)]
 
     for side, output_filepath in [('+', output_filepath_positive),
                                   ('-', output_filepath_negative)]:
@@ -3409,8 +3437,12 @@ def plot_tswa_both_sides(
             x0s[side], y0s[side] = d['x0s'], d['y0s']
             nuxs[side], nuys[side] = d['nuxs'], d['nuys']
             Axs[side], Ays[side] = d['Axs'], d['Ays']
+            time_domain_Axs[side], time_domain_Ays[side] = \
+                d['time_domain_Axs'], d['time_domain_Ays']
             nux0[side], nuy0[side] = d['nux0'], d['nuy0']
             betax[side], betay[side] = d['betax'], d['betay']
+            if 'fft_nus' in d:
+                fft_d[side] = {k: d[k] for k in ['fft_nus', 'fft_hAxs', 'fft_hAys']}
         except:
             f = h5py.File(output_filepath, 'r')
             scan_plane[side] = f['input']['scan_plane'][()]
@@ -3420,11 +3452,18 @@ def plot_tswa_both_sides(
             nuys[side] = f['nuys'][()]
             Axs[side] = f['Axs'][()]
             Ays[side] = f['Ays'][()]
+            time_domain_Axs[side] = f['time_domain_Axs'][()]
+            time_domain_Ays[side] = f['time_domain_Ays'][()]
             nux0[side] = f['nux0'][()]
             nuy0[side] = f['nuy0'][()]
             betax[side] = f['betax'][()]
             betay[side] = f['betay'][()]
+            if 'fft_nus' in f:
+                fft_d[side] = {k: f[k][()] for k in ['fft_nus', 'fft_hAxs', 'fft_hAys']}
             f.close()
+
+    if fft_d == {}:
+        fft_d = None
 
     # Check consistency between the positive and negative results (i.e.,
     # see if the results are likley from the same lattice)
@@ -3446,16 +3485,24 @@ def plot_tswa_both_sides(
     else:
         raise ValueError
 
+    if use_time_domain_amplitude:
+        Axs = time_domain_Axs
+        Ays = time_domain_Ays
+
     nux0_int = np.floor(nux0)
     nuy0_int = np.floor(nuy0)
 
     twoJxs, twoJys, Jxs, Jys, nux_fit, nuy_fit, fit_label = [{} for _ in range(7)]
+    twoJx0s, twoJy0s, Jx0s, Jy0s, nux_fit0, nuy_fit0, fit0_label = [{} for _ in range(7)]
     if scan_plane == 'x':
         Ax_fit, Jx_fit = {}, {}
+        x0_fit, Jx0_fit = {}, {}
     elif scan_plane == 'y':
         Ay_fit , Jy_fit = {}, {}
+        y0_fit, Jy0_fit = {}, {}
 
-    beta_str = fr'(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})'
+    #beta_str = fr'(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})'
+    beta_str = fr'\{{(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})\}}'
 
     for side in ['+', '-']:
         nuxs[side] += nux0_int
@@ -3466,30 +3513,62 @@ def plot_tswa_both_sides(
         Jxs[side] = twoJxs[side] / 2
         Jys[side] = twoJys[side] / 2
 
+        twoJx0s[side] = x0s[side]**2 / betax
+        twoJy0s[side] = y0s[side]**2 / betay
+        Jx0s[side] = twoJx0s[side] / 2
+        Jy0s[side] = twoJy0s[side] / 2
+
         if scan_plane == 'x':
             if side == '+':
                 fit_roi = (x0s[side] <= fit_xmax)
             else:
                 fit_roi = (x0s[side] >= fit_xmin)
 
-            coeffs = np.polyfit(Jxs[side][fit_roi], nuxs[side][fit_roi], 1)
-            dnux_dJx = coeffs[0]
-            nux_fit[side] = np.poly1d(coeffs)
+            if plot_xy0:
+                coeffs = np.polyfit(Jx0s[side][fit_roi], nuxs[side][fit_roi], 1)
+                dnux_dJx0 = coeffs[0]
+                nux_fit0[side] = np.poly1d(coeffs)
 
-            coeffs = np.polyfit(Jxs[side][fit_roi], nuys[side][fit_roi], 1)
-            dnuy_dJx = coeffs[0]
-            nuy_fit[side] = np.poly1d(coeffs)
+                coeffs = np.polyfit(Jx0s[side][fit_roi], nuys[side][fit_roi], 1)
+                dnuy_dJx0 = coeffs[0]
+                nuy_fit0[side] = np.poly1d(coeffs)
 
-            dnux_dJy = np.polyfit(Jys[side][fit_roi], nuxs[side][fit_roi], 1)[0]
-            dnuy_dJy = np.polyfit(Jys[side][fit_roi], nuys[side][fit_roi], 1)[0]
+                if False: # Not being used and will generate warning about poor fit
+                          # because the elements of Jy0s are all the same
+                    dnux_dJy0 = np.polyfit(Jy0s[side][fit_roi], nuxs[side][fit_roi], 1)[0]
+                    dnuy_dJy0 = np.polyfit(Jy0s[side][fit_roi], nuys[side][fit_roi], 1)[0]
 
-            Ax_fit[side] = np.linspace(np.min(Axs[side]), np.max(Axs[side]), 101)
-            Jx_fit[side] = (Ax_fit[side]**2 / betax) / 2
+                x0_fit[side] = np.linspace(np.min(np.abs(x0s[side])),
+                                           np.max(np.abs(x0s[side])), 101)
+                if side == '-':
+                    x0_fit[side] *= -1
+                Jx0_fit[side] = (x0_fit[side]**2 / betax) / 2
 
-            dnux_dJx_str = util.pprint_sci_notation(dnux_dJx, '+.3g')
-            dnuy_dJx_str = util.pprint_sci_notation(dnuy_dJx, '+.3g')
+                dnux_dJx0_str = util.pprint_sci_notation(dnux_dJx0, '+.3g')
+                dnuy_dJx0_str = util.pprint_sci_notation(dnuy_dJx0, '+.3g')
 
-            fit_label[side] = dict(nux=dnux_dJx_str, nuy=dnuy_dJx_str,)
+                fit0_label[side] = dict(nux=dnux_dJx0_str, nuy=dnuy_dJx0_str,)
+
+            if plot_Axy:
+                coeffs = np.polyfit(Jxs[side][fit_roi], nuxs[side][fit_roi], 1)
+                dnux_dJx = coeffs[0]
+                nux_fit[side] = np.poly1d(coeffs)
+
+                coeffs = np.polyfit(Jxs[side][fit_roi], nuys[side][fit_roi], 1)
+                dnuy_dJx = coeffs[0]
+                nuy_fit[side] = np.poly1d(coeffs)
+
+                if False: # Not being used
+                    dnux_dJy = np.polyfit(Jys[side][fit_roi], nuxs[side][fit_roi], 1)[0]
+                    dnuy_dJy = np.polyfit(Jys[side][fit_roi], nuys[side][fit_roi], 1)[0]
+
+                Ax_fit[side] = np.linspace(np.min(Axs[side]), np.max(Axs[side]), 101)
+                Jx_fit[side] = (Ax_fit[side]**2 / betax) / 2
+
+                dnux_dJx_str = util.pprint_sci_notation(dnux_dJx, '+.3g')
+                dnuy_dJx_str = util.pprint_sci_notation(dnuy_dJx, '+.3g')
+
+                fit_label[side] = dict(nux=dnux_dJx_str, nuy=dnuy_dJx_str,)
 
         elif scan_plane == 'y':
             if side == '+':
@@ -3497,157 +3576,400 @@ def plot_tswa_both_sides(
             else:
                 fit_roi = (y0s[side] >= fit_ymin)
 
-            coeffs = np.polyfit(Jys[side][fit_roi], nuxs[side][fit_roi], 1)
-            dnux_dJy = coeffs[0]
-            nux_fit[side] = np.poly1d(coeffs)
+            if plot_xy0:
+                coeffs = np.polyfit(Jy0s[side][fit_roi], nuxs[side][fit_roi], 1)
+                dnux_dJy0 = coeffs[0]
+                nux_fit0[side] = np.poly1d(coeffs)
 
-            coeffs = np.polyfit(Jys[side][fit_roi], nuys[side][fit_roi], 1)
-            dnuy_dJy = coeffs[0]
-            nuy_fit[side] = np.poly1d(coeffs)
+                coeffs = np.polyfit(Jy0s[side][fit_roi], nuys[side][fit_roi], 1)
+                dnuy_dJy0 = coeffs[0]
+                nuy_fit0[side] = np.poly1d(coeffs)
 
-            dnux_dJx = np.polyfit(Jxs[side][fit_roi], nuxs[side][fit_roi], 1)[0]
-            dnuy_dJx = np.polyfit(Jxs[side][fit_roi], nuys[side][fit_roi], 1)[0]
+                if False: # Not being used and will generate warning about poor fit
+                          # because the elements of Jy0s are all the same
+                    dnux_dJx0 = np.polyfit(Jx0s[side][fit_roi], nuxs[side][fit_roi], 1)[0]
+                    dnuy_dJx0 = np.polyfit(Jx0s[side][fit_roi], nuys[side][fit_roi], 1)[0]
 
-            Ay_fit[side] = np.linspace(np.min(Ays[side]), np.max(Ays[side]), 101)
-            Jy_fit[side] = (Ay_fit[side]**2 / betay) / 2
+                y0_fit[side] = np.linspace(np.min(np.abs(y0s[side])),
+                                           np.max(np.abs(y0s[side])), 101)
+                if side == '-':
+                    y0_fit[side] *= -1
+                Jy0_fit[side] = (y0_fit[side]**2 / betay) / 2
 
-            dnux_dJy_str = util.pprint_sci_notation(dnux_dJy, '+.3g')
-            dnuy_dJy_str = util.pprint_sci_notation(dnuy_dJy, '+.3g')
+                dnux_dJy0_str = util.pprint_sci_notation(dnux_dJy0, '+.3g')
+                dnuy_dJy0_str = util.pprint_sci_notation(dnuy_dJy0, '+.3g')
 
-            fit_label[side] = dict(nux=dnux_dJy_str, nuy=dnuy_dJy_str,)
+                fit0_label[side] = dict(nux=dnux_dJy0_str, nuy=dnuy_dJy0_str,)
+
+            if plot_Axy:
+                coeffs = np.polyfit(Jys[side][fit_roi], nuxs[side][fit_roi], 1)
+                dnux_dJy = coeffs[0]
+                nux_fit[side] = np.poly1d(coeffs)
+
+                coeffs = np.polyfit(Jys[side][fit_roi], nuys[side][fit_roi], 1)
+                dnuy_dJy = coeffs[0]
+                nuy_fit[side] = np.poly1d(coeffs)
+
+                if False: # Not being used
+                    dnux_dJx = np.polyfit(Jxs[side][fit_roi], nuxs[side][fit_roi], 1)[0]
+                    dnuy_dJx = np.polyfit(Jxs[side][fit_roi], nuys[side][fit_roi], 1)[0]
+
+                Ay_fit[side] = np.linspace(np.min(Ays[side]), np.max(Ays[side]), 101)
+                Jy_fit[side] = (Ay_fit[side]**2 / betay) / 2
+
+                dnux_dJy_str = util.pprint_sci_notation(dnux_dJy, '+.3g')
+                dnuy_dJy_str = util.pprint_sci_notation(dnuy_dJy, '+.3g')
+
+                fit_label[side] = dict(nux=dnux_dJy_str, nuy=dnuy_dJy_str,)
 
     if scan_plane == 'x':
-        fit_label_combo = dict(
-            nux=r'$d\nu_x / d J_x [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
-                fit_label['-']['nux'], fit_label['+']['nux']),
-            nuy=r'$d\nu_y / d J_x [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
-                fit_label['-']['nuy'], fit_label['+']['nuy']),
-        )
+        if plot_xy0:
+            fit0_label_combo = dict(
+                nux=r'$d\nu_x / d J_x [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                    fit0_label['-']['nux'], fit0_label['+']['nux']),
+                nuy=r'$d\nu_y / d J_x [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                    fit0_label['-']['nuy'], fit0_label['+']['nuy']),
+            )
+        if plot_Axy:
+            fit_label_combo = dict(
+                nux=r'$d\nu_x / d J_x [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                    fit_label['-']['nux'], fit_label['+']['nux']),
+                nuy=r'$d\nu_y / d J_x [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                    fit_label['-']['nuy'], fit_label['+']['nuy']),
+            )
     elif scan_plane == 'y':
-        fit_label_combo = dict(
-            nux=r'$d\nu_x / d J_y [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
-                fit_label['-']['nux'], fit_label['+']['nux']),
-            nuy=r'$d\nu_y / d J_y [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
-                fit_label['-']['nuy'], fit_label['+']['nuy']),
-        )
+        if plot_xy0:
+            fit0_label_combo = dict(
+                nux=r'$d\nu_x / d J_y [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                    fit0_label['-']['nux'], fit0_label['+']['nux']),
+                nuy=r'$d\nu_y / d J_y [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                    fit0_label['-']['nuy'], fit0_label['+']['nuy']),
+            )
+        if plot_Axy:
+            fit_label_combo = dict(
+                nux=r'$d\nu_x / d J_y [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                    fit_label['-']['nux'], fit_label['+']['nux']),
+                nuy=r'$d\nu_y / d J_y [\mathrm{{m}}^{{-1}}] = {} (-); {} (+)$'.format(
+                    fit_label['-']['nuy'], fit_label['+']['nuy']),
+            )
+
 
 
     A_font_sz = 18
     font_sz = 22
+    fit_x_line_style = 'b-'
+    fit_y_line_style = 'r-'
+    fit_x_extrap_line_style = 'b:'
+    fit_y_extrap_line_style = 'r:'
 
-    if ax_nu_vs_A:
-        ax1 = ax_nu_vs_A
-    else:
-        fig, ax1 = plt.subplots()
-    #
-    nuxs_combo = np.append(nuxs['-'][::-1], nuxs['+'])
-    nuys_combo = np.append(nuys['-'][::-1], nuys['+'])
-    #
-    if scan_plane == 'x':
-        nux_fit_combo = np.append(nux_fit['-'](Jx_fit['-'])[::-1], nux_fit['+'](Jx_fit['+']))
-        nuy_fit_combo = np.append(nuy_fit['-'](Jx_fit['-'])[::-1], nuy_fit['+'](Jx_fit['+']))
-    elif scan_plane == 'y':
-        nux_fit_combo = np.append(nux_fit['-'](Jy_fit['-'])[::-1], nux_fit['+'](Jy_fit['+']))
-        nuy_fit_combo = np.append(nuy_fit['-'](Jy_fit['-'])[::-1], nuy_fit['+'](Jy_fit['+']))
-    #
-    if _plot_nu_frac:
-        offset_combo = dict(nux = np.floor(nuxs_combo), nuy = np.floor(nuys_combo))
+    if plot_xy0:
+
+        if ax_nu_vs_xy0:
+            ax1 = ax_nu_vs_xy0
+        else:
+            fig, ax1 = plt.subplots()
+        #
+        nuxs_combo = np.append(nuxs['-'][::-1], nuxs['+'])
+        nuys_combo = np.append(nuys['-'][::-1], nuys['+'])
+        #
         if scan_plane == 'x':
-            offset_combo['fit_nux'] = np.floor(nux_fit_combo)
-            offset_combo['fit_nuy'] = np.floor(nuy_fit_combo)
+            nux_fit0_combo = np.append(nux_fit0['-'](Jx0_fit['-'])[::-1],
+                                       nux_fit0['+'](Jx0_fit['+']))
+            nuy_fit0_combo = np.append(nuy_fit0['-'](Jx0_fit['-'])[::-1],
+                                       nuy_fit0['+'](Jx0_fit['+']))
         elif scan_plane == 'y':
-            offset_combo['fit_nux'] = np.floor(nux_fit_combo)
-            offset_combo['fit_nuy'] = np.floor(nuy_fit_combo)
-    else:
-        offset_combo = dict(nux = np.zeros(nuxs_combo.shape), nuy = np.zeros(nuys_combo.shape))
+            nux_fit0_combo = np.append(nux_fit0['-'](Jy0_fit['-'])[::-1],
+                                       nux_fit0['+'](Jy0_fit['+']))
+            nuy_fit0_combo = np.append(nuy_fit0['-'](Jy0_fit['-'])[::-1],
+                                       nuy_fit0['+'](Jy0_fit['+']))
+        #
+        if _plot_nu_frac:
+            offset0_combo = dict(nux = np.floor(nuxs_combo),
+                                 nuy = np.floor(nuys_combo))
+            if scan_plane == 'x':
+                offset0_combo['fit_nux'] = np.floor(nux_fit0_combo)
+                offset0_combo['fit_nuy'] = np.floor(nuy_fit0_combo)
+            elif scan_plane == 'y':
+                offset0_combo['fit_nux'] = np.floor(nux_fit0_combo)
+                offset0_combo['fit_nuy'] = np.floor(nuy_fit0_combo)
+        else:
+            offset0_combo = dict(nux = np.zeros(nuxs_combo.shape),
+                                 nuy = np.zeros(nuys_combo.shape))
+            if scan_plane == 'x':
+                offset0_combo['fit_nux'] = offset0_combo['fit_nuy'] = np.zeros(
+                    np.append(Jx0_fit['-'][::-1], Jx0_fit['+']).shape)
+            elif scan_plane == 'y':
+                offset0_combo['fit_nux'] = offset0_combo['fit_nuy'] = np.zeros(
+                    np.append(Jy0_fit['-'][::-1], Jy0_fit['+']).shape)
+        #
         if scan_plane == 'x':
-            offset_combo['fit_nux'] = offset_combo['fit_nuy'] = np.zeros(
-                np.append(Jx_fit['-'][::-1], Jx_fit['+']).shape)
+            x0s_combo = np.append(x0s['-'][::-1], x0s['+'])
+            x0_fit_combo = np.append(x0_fit['-'][::-1], x0_fit['+'])
+            lines1 = ax1.plot(x0s_combo * 1e3, nuxs_combo - offset0_combo['nux'], 'b.',
+                              label=r'$\nu_x$')
+            interp_roi = np.logical_and(
+                fit_xmin <= x0_fit_combo, x0_fit_combo <= fit_xmax)
+            fit_lines1 = ax1.plot(
+                x0_fit_combo[interp_roi] * 1e3,
+                nux_fit0_combo[interp_roi] - offset0_combo['fit_nux'][interp_roi],
+                fit_x_line_style, label=fit0_label_combo['nux'])
+            for extrap_roi in [x0_fit_combo < fit_xmin, x0_fit_combo > fit_xmax]:
+                ax1.plot(
+                    x0_fit_combo[extrap_roi] * 1e3,
+                    nux_fit0_combo[extrap_roi] - offset0_combo['fit_nux'][extrap_roi],
+                    fit_x_extrap_line_style)
+            ax2 = ax1.twinx()
+            lines2 = ax2.plot(x0s_combo * 1e3, nuys_combo - offset0_combo['nuy'], 'r.',
+                              label=r'$\nu_y$')
+            fit_lines2 = ax2.plot(
+                x0_fit_combo[interp_roi] * 1e3,
+                nuy_fit0_combo[interp_roi] - offset0_combo['fit_nuy'][interp_roi],
+                fit_y_line_style, label=fit0_label_combo['nuy'])
+            for extrap_roi in [x0_fit_combo < fit_xmin, x0_fit_combo > fit_xmax]:
+                ax2.plot(
+                    x0_fit_combo[extrap_roi] * 1e3,
+                    nuy_fit0_combo[extrap_roi] - offset0_combo['fit_nuy'][extrap_roi],
+                    fit_y_extrap_line_style)
+            ax1.set_xlabel(fr'$x_0\, [\mathrm{{mm}}]\, {beta_str}$', size=A_font_sz)
+            if x0lim is not None:
+                ax1.set_xlim([v * 1e3 for v in x0lim])
         elif scan_plane == 'y':
-            offset_combo['fit_nux'] = offset_combo['fit_nuy'] = np.zeros(
-                np.append(Jy_fit['-'][::-1], Jy_fit['+']).shape)
+            y0s_combo = np.append(y0s['-'][::-1], y0s['+'])
+            y0_fit_combo = np.append(y0_fit['-'][::-1], y0_fit['+'])
+            lines1 = ax1.plot(y0s_combo * 1e3, nuxs_combo - offset0_combo['nux'], 'b.',
+                              label=r'$\nu_x$')
+            interp_roi = np.logical_and(
+                fit_ymin <= y0_fit_combo, y0_fit_combo <= fit_ymax)
+            fit_lines1 = ax1.plot(
+                y0_fit_combo[interp_roi] * 1e3,
+                nux_fit0_combo[interp_roi] - offset0_combo['fit_nux'][interp_roi],
+                fit_x_line_style, label=fit0_label_combo['nux'])
+            for extrap_roi in [y0_fit_combo < fit_ymin, y0_fit_combo > fit_ymax]:
+                ax1.plot(
+                    y0_fit_combo[extrap_roi] * 1e3,
+                    nux_fit0_combo[extrap_roi] - offset0_combo['fit_nux'][extrap_roi],
+                    fit_x_extrap_line_style)
+            ax2 = ax1.twinx()
+            lines2 = ax2.plot(y0s_combo * 1e3, nuys_combo - offset0_combo['nuy'], 'r.',
+                              label=r'$\nu_y$')
+            fit_lines2 = ax2.plot(
+                y0_fit_combo[interp_roi] * 1e3,
+                nuy_fit0_combo[interp_roi] - offset0_combo['fit_nuy'][interp_roi],
+                fit_y_line_style, label=fit0_label_combo['nuy'])
+            for extrap_roi in [y0_fit_combo < fit_ymin, y0_fit_combo > fit_ymax]:
+                ax2.plot(
+                    y0_fit_combo[extrap_roi] * 1e3,
+                    nuy_fit0_combo[extrap_roi] - offset0_combo['fit_nuy'][extrap_roi],
+                    fit_y_extrap_line_style)
+            ax1.set_xlabel(fr'$y_0\, [\mathrm{{mm}}]\, {beta_str}$', size=A_font_sz)
+            if y0lim is not None:
+                ax1.set_xlim([v * 1e3 for v in y0lim])
+        ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
+        ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
+        if nuxlim is not None:
+            ax1.set_ylim(nuxlim)
+        else:
+            nuxlim = np.array(ax1.get_ylim())
+            # The fitted lines for nux & nuy will often overlap each other
+            # with default ylim. So, here, nux range is slided up.
+            nuxlim[0] -= (nuxlim[1] - nuxlim[0]) * 0.1
+            ax1.set_ylim(nuxlim)
+        if nuylim is not None:
+            ax2.set_ylim(nuylim)
+        else:
+            nuylim = np.array(ax2.get_ylim())
+            # The fitted lines for nux & nuy will often overlap each other
+            # with default ylim. So, here, nuy range is slided down.
+            nuylim[1] += (nuylim[1] - nuylim[0]) * 0.1
+            ax2.set_ylim(nuylim)
+        if title != '':
+            ax1.set_title(title, size=font_sz, pad=60)
+        combined_lines = fit_lines1 + fit_lines2
+        leg = ax2.legend(combined_lines, [L.get_label() for L in combined_lines],
+                         loc='upper center', ncol=1, bbox_to_anchor=(0.5, 1.3),
+                         fancybox=True, shadow=True, prop=dict(size=12))
+        plt.sca(ax1)
+        plt.tight_layout()
+
+
+    if plot_Axy:
+
+        if ax_nu_vs_A:
+            ax1 = ax_nu_vs_A
+        else:
+            fig, ax1 = plt.subplots()
+        #
+        nuxs_combo = np.append(nuxs['-'][::-1], nuxs['+'])
+        nuys_combo = np.append(nuys['-'][::-1], nuys['+'])
+        #
+        if scan_plane == 'x':
+            nux_fit_combo = np.append(nux_fit['-'](Jx_fit['-'])[::-1], nux_fit['+'](Jx_fit['+']))
+            nuy_fit_combo = np.append(nuy_fit['-'](Jx_fit['-'])[::-1], nuy_fit['+'](Jx_fit['+']))
+        elif scan_plane == 'y':
+            nux_fit_combo = np.append(nux_fit['-'](Jy_fit['-'])[::-1], nux_fit['+'](Jy_fit['+']))
+            nuy_fit_combo = np.append(nuy_fit['-'](Jy_fit['-'])[::-1], nuy_fit['+'](Jy_fit['+']))
+        #
+        if _plot_nu_frac:
+            offset_combo = dict(nux = np.floor(nuxs_combo), nuy = np.floor(nuys_combo))
+            if scan_plane == 'x':
+                offset_combo['fit_nux'] = np.floor(nux_fit_combo)
+                offset_combo['fit_nuy'] = np.floor(nuy_fit_combo)
+            elif scan_plane == 'y':
+                offset_combo['fit_nux'] = np.floor(nux_fit_combo)
+                offset_combo['fit_nuy'] = np.floor(nuy_fit_combo)
+        else:
+            offset_combo = dict(nux = np.zeros(nuxs_combo.shape), nuy = np.zeros(nuys_combo.shape))
+            if scan_plane == 'x':
+                offset_combo['fit_nux'] = offset_combo['fit_nuy'] = np.zeros(
+                    np.append(Jx_fit['-'][::-1], Jx_fit['+']).shape)
+            elif scan_plane == 'y':
+                offset_combo['fit_nux'] = offset_combo['fit_nuy'] = np.zeros(
+                    np.append(Jy_fit['-'][::-1], Jy_fit['+']).shape)
+        #
+        if scan_plane == 'x':
+            Axs_combo = np.append(Axs['-'][::-1] * (-1), Axs['+'])
+            Ax_fit_combo = np.append(Ax_fit['-'][::-1] * (-1), Ax_fit['+'])
+            lines1 = ax1.plot(Axs_combo * 1e3, nuxs_combo - offset_combo['nux'], 'b.',
+                              label=r'$\nu_x$')
+            interp_roi = np.logical_and(
+                fit_xmin <= Ax_fit_combo, Ax_fit_combo <= fit_xmax)
+            fit_lines1 = ax1.plot(
+                Ax_fit_combo[interp_roi] * 1e3,
+                nux_fit_combo[interp_roi] - offset_combo['fit_nux'][interp_roi],
+                fit_x_line_style, label=fit_label_combo['nux'])
+            for extrap_roi in [Ax_fit_combo < fit_xmin, Ax_fit_combo > fit_xmax]:
+                ax1.plot(
+                    Ax_fit_combo[extrap_roi] * 1e3,
+                    nux_fit_combo[extrap_roi] - offset_combo['fit_nux'][extrap_roi],
+                    fit_x_extrap_line_style)
+            ax2 = ax1.twinx()
+            lines2 = ax2.plot(Axs_combo * 1e3, nuys_combo - offset_combo['nuy'], 'r.',
+                              label=r'$\nu_y$')
+            fit_lines2 = ax2.plot(
+                Ax_fit_combo[interp_roi] * 1e3,
+                nuy_fit_combo[interp_roi] - offset_combo['fit_nuy'][interp_roi],
+                fit_y_line_style, label=fit_label_combo['nuy'])
+            for extrap_roi in [Ax_fit_combo < fit_xmin, Ax_fit_combo > fit_xmax]:
+                ax2.plot(
+                    Ax_fit_combo[extrap_roi] * 1e3,
+                    nuy_fit_combo[extrap_roi] - offset_combo['fit_nuy'][extrap_roi],
+                    fit_y_extrap_line_style)
+            ax1.set_xlabel(fr'$A_x\, [\mathrm{{mm}}]\, {beta_str}$', size=A_font_sz)
+            if Axlim is not None:
+                ax1.set_xlim([v * 1e3 for v in Axlim])
+        elif scan_plane == 'y':
+            Ays_combo = np.append(Ays['-'][::-1] * (-1), Ays['+'])
+            Ay_fit_combo = np.append(Ay_fit['-'][::-1] * (-1), Ay_fit['+'])
+            lines1 = ax1.plot(Ays_combo * 1e3, nuxs_combo - offset_combo['nux'], 'b.',
+                              label=r'$\nu_x$')
+            interp_roi = np.logical_and(
+                fit_ymin <= Ay_fit_combo, Ay_fit_combo <= fit_ymax)
+            fit_lines1 = ax1.plot(
+                Ay_fit_combo[interp_roi] * 1e3,
+                nux_fit_combo[interp_roi] - offset_combo['fit_nux'][interp_roi],
+                fit_x_line_style, label=fit_label_combo['nux'])
+            for extrap_roi in [Ay_fit_combo < fit_ymin, Ay_fit_combo > fit_ymax]:
+                ax1.plot(
+                    Ay_fit_combo[extrap_roi] * 1e3,
+                    nux_fit_combo[extrap_roi] - offset_combo['fit_nux'][extrap_roi],
+                    fit_x_extrap_line_style)
+            ax2 = ax1.twinx()
+            lines2 = ax2.plot(Ays_combo * 1e3, nuys_combo - offset_combo['nuy'], 'r.',
+                              label=r'$\nu_y$')
+            fit_lines2 = ax2.plot(
+                Ay_fit_combo[interp_roi] * 1e3,
+                nuy_fit_combo[interp_roi] - offset_combo['fit_nuy'][interp_roi],
+                fit_y_line_style, label=fit_label_combo['nuy'])
+            for extrap_roi in [Ay_fit_combo < fit_ymin, Ay_fit_combo > fit_ymax]:
+                ax2.plot(
+                    Ay_fit_combo[extrap_roi] * 1e3,
+                    nuy_fit_combo[extrap_roi] - offset_combo['fit_nuy'][extrap_roi],
+                    fit_y_extrap_line_style)
+            ax1.set_xlabel(fr'$A_y\, [\mathrm{{mm}}]\, {beta_str}$', size=A_font_sz)
+            if Aylim is not None:
+                ax1.set_xlim([v * 1e3 for v in Aylim])
+        ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
+        ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
+        if nuxlim is not None:
+            ax1.set_ylim(nuxlim)
+        else:
+            nuxlim = np.array(ax1.get_ylim())
+            # The fitted lines for nux & nuy will often overlap each other
+            # with default ylim. So, here, nux range is slided up.
+            nuxlim[0] -= (nuxlim[1] - nuxlim[0]) * 0.1
+            ax1.set_ylim(nuxlim)
+        if nuylim is not None:
+            ax2.set_ylim(nuylim)
+        else:
+            nuylim = np.array(ax2.get_ylim())
+            # The fitted lines for nux & nuy will often overlap each other
+            # with default ylim. So, here, nuy range is slided down.
+            nuylim[1] += (nuylim[1] - nuylim[0]) * 0.1
+            ax2.set_ylim(nuylim)
+        if title != '':
+            ax1.set_title(title, size=font_sz, pad=60)
+        combined_lines = fit_lines1 + fit_lines2
+        leg = ax2.legend(combined_lines, [L.get_label() for L in combined_lines],
+                         loc='upper center', ncol=1, bbox_to_anchor=(0.5, 1.3),
+                         fancybox=True, shadow=True, prop=dict(size=12))
+        plt.sca(ax1)
+        plt.tight_layout()
+
+
+
+    if scan_plane == 'x':
+        #As = np.append(Axs['-'][::-1] * (-1), Axs['+'])
+        x0s_combo = np.append(x0s['-'][::-1], x0s['+'])
+        xy0s = x0s_combo
+    else:
+        #As = np.append(Ays['-'][::-1] * (-1), Ays['+'])
+        y0s_combo = np.append(y0s['-'][::-1], y0s['+'])
+        xy0s = y0s_combo
+
+    is_fp_nuxlim_frac = False
+    if footprint_nuxlim is not None:
+        if (0.0 <= footprint_nuxlim[0] <= 1.0) and (0.0 <= footprint_nuxlim[1] <= 1.0):
+            is_fp_nuxlim_frac = True
+    else:
+        footprint_nuxlim = nuxlim.copy()
     #
-    if scan_plane == 'x':
-        Axs_combo = np.append(Axs['-'][::-1] * (-1), Axs['+'])
-        Ax_fit_combo = np.append(Ax_fit['-'][::-1] * (-1), Ax_fit['+'])
-        lines1 = ax1.plot(Axs_combo * 1e3, nuxs_combo - offset_combo['nux'], 'b.',
-                          label=r'$\nu_x$')
-        fit_lines1 = ax1.plot(
-            Ax_fit_combo * 1e3, nux_fit_combo - offset_combo['fit_nux'], 'b-',
-            label=fit_label_combo['nux'])
-        ax2 = ax1.twinx()
-        lines2 = ax2.plot(Axs_combo * 1e3, nuys_combo - offset_combo['nuy'], 'r.',
-                          label=r'$\nu_y$')
-        fit_lines2 = ax2.plot(
-            Ax_fit_combo * 1e3, nuy_fit_combo - offset_combo['fit_nuy'], 'r-',
-            label=fit_label_combo['nuy'])
-        ax1.set_xlabel(fr'$A_x\, [\mathrm{{mm}}];\, {beta_str}$', size=A_font_sz)
-        if Axlim is not None:
-            ax1.set_xlim([v * 1e3 for v in Axlim])
-    elif scan_plane == 'y':
-        Ays_combo = np.append(Ays['-'][::-1] * (-1), Ays['+'])
-        Ay_fit_combo = np.append(Ay_fit['-'][::-1] * (-1), Ay_fit['+'])
-        lines1 = ax1.plot(Ays_combo * 1e3, nuxs_combo - offset_combo['nux'], 'b.',
-                          label=r'$\nu_x$')
-        fit_lines1 = ax1.plot(
-            Ay_fit_combo * 1e3, nux_fit_combo - offset_combo['fit_nux'], 'b-',
-            label=fit_label_combo['nux'])
-        ax2 = ax1.twinx()
-        lines2 = ax2.plot(Ays_combo * 1e3, nuys_combo - offset_combo['nuy'], 'r.',
-                          label=r'$\nu_y$')
-        fit_lines2 = ax2.plot(
-            Ay_fit_combo * 1e3, nuy_fit_combo - offset_combo['fit_nuy'], 'r-',
-            label=fit_label_combo['nuy'])
-        ax1.set_xlabel(fr'$A_y\, [\mathrm{{mm}}];\, {beta_str}$', size=A_font_sz)
-        if Aylim is not None:
-            ax1.set_xlim([v * 1e3 for v in Aylim])
-    ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
-    ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
-    if nuxlim:
-        ax1.set_ylim(nuxlim)
+    is_fp_nuylim_frac = False
+    if footprint_nuylim is not None:
+        if (0.0 <= footprint_nuylim[0] <= 1.0) and (0.0 <= footprint_nuylim[1] <= 1.0):
+            is_fp_nuylim_frac = True
     else:
-        nuxlim = ax1.get_ylim()
-    if nuylim:
-        ax2.set_ylim(nuylim)
+        footprint_nuylim = nuylim.copy()
+    #
+    if is_fp_nuxlim_frac and is_fp_nuylim_frac:
+        _plot_fp_nu_frac = True
+    elif (not is_fp_nuxlim_frac) and (not is_fp_nuylim_frac):
+        _plot_fp_nu_frac = False
     else:
-        nuylim = ax2.get_ylim()
-    if title != '':
-        ax1.set_title(title, size=font_sz, pad=60)
-    combined_lines = fit_lines1 + fit_lines2
-    leg = ax2.legend(combined_lines, [L.get_label() for L in combined_lines],
-                     loc='upper center', ncol=1, bbox_to_anchor=(0.5, 1.3),
-                     fancybox=True, shadow=True, prop=dict(size=12))
-    plt.sca(ax1)
-    plt.tight_layout()
+        raise ValueError(
+            ('"footprint_nuxlim" and "footprint_nuylim" must be either '
+             'both fractional or both non-fractional'))
 
-
-    if scan_plane == 'x':
-        As = np.append(Axs['-'][::-1] * (-1), Axs['+'])
-    else:
-        As = np.append(Ays['-'][::-1] * (-1), Ays['+'])
-
-    if _plot_nu_frac:
+    if _plot_fp_nu_frac:
         _nuxs = nuxs_combo - nux0_int
         _nuys = nuys_combo - nuy0_int
 
-        frac_nuxlim = nuxlim
-        frac_nuylim = nuylim
+        frac_nuxlim = footprint_nuxlim
+        frac_nuylim = footprint_nuylim
     else:
         _nuxs = nuxs_combo
         _nuys = nuys_combo
 
-        frac_nuxlim = nuxlim - nux0_int
-        frac_nuylim = nuylim - nuy0_int
+        frac_nuxlim = footprint_nuxlim - nux0_int
+        frac_nuylim = footprint_nuylim - nuy0_int
 
     if ax_nuy_vs_nux:
         ax = ax_nuy_vs_nux
     else:
         _, ax = plt.subplots()
-    sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=As * 1e3, marker='o', cmap='jet')
-    if nuxlim:
-        ax.set_xlim(nuxlim)
-    if nuylim:
-        ax.set_ylim(nuylim)
+    #sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=As * 1e3, marker='o', cmap='jet')
+    sc_obj = ax.scatter(_nuxs, _nuys, s=3, c=xy0s * 1e3, marker='o', cmap='jet')
+    ax.set_xlim(footprint_nuxlim)
+    ax.set_ylim(footprint_nuylim)
     ax.set_xlabel(r'$\nu_x$', size=font_sz)
     ax.set_ylabel(r'$\nu_y$', size=font_sz)
     #
@@ -3659,11 +3981,11 @@ def plot_tswa_both_sides(
     )
     for n in range(1, max_resonance_line_order):
         d = rd.getResonanceCoeffsAndLines(
-            n, np.array(frac_nuxlim) + nux0_int, frac_nuylim + nuy0_int) # <= CRITICAL: Must pass tunes w/ integer parts
+            n, np.array(frac_nuxlim) + nux0_int, np.array(frac_nuylim) + nuy0_int) # <= CRITICAL: Must pass tunes w/ integer parts
         prop = {k: lineprops[k][n-1] for k in ['color', 'linestyle', 'linewidth']}
         assert len(d['lines']) == len(d['coeffs'])
         for ((nux1, nuy1), (nux2, nuy2)), (nx, ny, _) in zip(d['lines'], d['coeffs']):
-            if _plot_nu_frac:
+            if _plot_fp_nu_frac:
                 _x = np.array([nux1 - nux0_int, nux2 - nux0_int])
                 _y = np.array([nuy1 - nuy0_int, nuy2 - nuy0_int])
             else:
@@ -3674,13 +3996,78 @@ def plot_tswa_both_sides(
     #leg.set_draggable(True, use_blit=True)
     #
     cb = plt.colorbar(sc_obj, ax=ax)
-    cb.ax.set_title(fr'$A_{scan_plane}\, [\mathrm{{mm}}]$', size=16)
+    #cb.ax.set_title(fr'$A_{scan_plane}\, [\mathrm{{mm}}]$', size=16)
+    cb.ax.set_title(fr'${scan_plane}_0\, [\mathrm{{mm}}]$', size=16)
     if title != '':
         ax.set_title(title, size=font_sz)
     plt.sca(ax)
     plt.tight_layout()
 
+    if (fft_d is not None) and plot_fft:
 
+        use_log = True
+
+        font_sz = 18
+        if use_log:
+            EQ_STR = r'$\rm{log}_{10}(A/\mathrm{max}A)$'
+        else:
+            EQ_STR = r'$A/\mathrm{max}A$'
+
+        if scan_plane == 'x':
+            x0s_combo = np.append(x0s['-'][::-1], x0s['+'])
+            v1array = x0s_combo
+        else:
+            y0s_combo = np.append(y0s['-'][::-1], y0s['+'])
+            v1array = y0s_combo
+
+        for _nu_plane in ['x', 'y']:
+
+            assert np.all(fft_d['+']['fft_nus'] == fft_d['-']['fft_nus'])
+            v2array = fft_d['+']['fft_nus'].copy()
+            v2array[v2array < 0.0] += 1
+
+            if _nu_plane == 'x':
+                v2array += nux0_int
+
+                if ax_fft_hx:
+                    ax1 = ax_fft_hx
+                else:
+                    fig, ax1 = plt.subplots()
+
+                norm_fft_hAs = np.hstack((
+                    (fft_d['-']['fft_hAxs'] / np.max(fft_d['-']['fft_hAxs'], axis=0))[:, ::-1],
+                    fft_d['+']['fft_hAxs'] / np.max(fft_d['+']['fft_hAxs'], axis=0)
+                ))
+
+                ylim = nuxlim
+            else:
+                v2array += nuy0_int
+
+                if ax_fft_hy:
+                    ax1 = ax_fft_hy
+                else:
+                    fig, ax1 = plt.subplots()
+
+                norm_fft_hAs = np.hstack((
+                    (fft_d['-']['fft_hAys'] / np.max(fft_d['-']['fft_hAys'], axis=0))[:, ::-1],
+                    fft_d['+']['fft_hAys'] / np.max(fft_d['+']['fft_hAys'], axis=0)
+                ))
+
+                ylim = nuylim
+
+            V1, V2 = np.meshgrid(v1array, v2array)
+
+            if not use_log:
+                plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap='jet')
+            else:
+                plt.pcolor(V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap='jet')
+            plt.xlabel(fr'${scan_plane}_0\, [\mathrm{{mm}}]$', size=font_sz)
+            plt.ylabel(fr'$\nu_{_nu_plane}$', size=font_sz)
+            ax1.set_ylim(ylim)
+            cb = plt.colorbar()
+            cb.ax.set_title(EQ_STR)
+            cb.ax.title.set_position((0.5, 1.02))
+            plt.tight_layout()
 
 def track(
     output_filepath, LTE_filepath, E_MeV, n_turns,
