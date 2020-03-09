@@ -310,12 +310,14 @@ def pprint_optim_term_log(tlog_sdds_dict):
 
     tlog = tlog_sdds_dict
 
+    total_term_val = np.sum(tlog['columns']['Contribution'])
     max_term_val = np.max(tlog['columns']['Contribution'])
     full_bar_char_width = 6
     for val, expr in zip(tlog['columns']['Contribution'],
                          tlog['columns']['Term']):
         bar_width = int(np.ceil( (val / max_term_val) / (1 / full_bar_char_width) ))
         print(f'{"*" * bar_width:>{full_bar_char_width:d}} {val:9.4g}  ::  "{expr}"')
+    print(f'## Sum of All Terms = {total_term_val:9.4g}')
 
 ########################################################################
 class ResonanceDiagram():
