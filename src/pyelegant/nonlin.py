@@ -198,7 +198,7 @@ def _calc_cmap(
     if output_file_type in ('hdf5', 'h5'):
         util.robust_sdds_hdf5_write(
             output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
-        f = h5py.File(output_filepath)
+        f = h5py.File(output_filepath, 'a')
         f['timestamp_fin'] = timestamp_fin
         f.close()
 
@@ -598,7 +598,7 @@ def _calc_fma(
     if output_file_type in ('hdf5', 'h5'):
         util.robust_sdds_hdf5_write(
             output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
-        f = h5py.File(output_filepath)
+        f = h5py.File(output_filepath, 'a')
         f['timestamp_fin'] = timestamp_fin
         f.close()
 
@@ -945,7 +945,7 @@ def calc_find_aper_nlines(
     if output_file_type in ('hdf5', 'h5'):
         util.robust_sdds_hdf5_write(
             output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
-        f = h5py.File(output_filepath)
+        f = h5py.File(output_filepath, 'a')
         f['timestamp_fin'] = timestamp_fin
         f.close()
 
@@ -1143,7 +1143,7 @@ def calc_mom_aper(
     if output_file_type in ('hdf5', 'h5'):
         util.robust_sdds_hdf5_write(
             output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
-        f = h5py.File(output_filepath)
+        f = h5py.File(output_filepath, 'a')
         f['timestamp_fin'] = timestamp_fin
         f.close()
 
@@ -1329,7 +1329,7 @@ def calc_Touschek_lifetime(
     if output_file_type in ('hdf5', 'h5'):
         util.robust_sdds_hdf5_write(
             output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
-        f = h5py.File(output_filepath)
+        f = h5py.File(output_filepath, 'a')
         f['timestamp_fin'] = timestamp_fin
         f.close()
 
@@ -2052,7 +2052,7 @@ def _save_chrom_data(
 
     if output_file_type in ('hdf5', 'h5'):
         _kwargs = dict(compression='gzip')
-        f = h5py.File(output_filepath)
+        f = h5py.File(output_filepath, 'a')
         f['_version_PyELEGANT'] = __version__['PyELEGANT']
         f['_version_ELEGANT'] = __version__['ELEGANT']
         f.create_dataset('deltas', data=delta_array, **_kwargs)
@@ -2947,7 +2947,7 @@ def _save_tswa_data(
 
     if output_file_type in ('hdf5', 'h5'):
         _kwargs = dict(compression='gzip')
-        f = h5py.File(output_filepath)
+        f = h5py.File(output_filepath, 'a')
         f['_version_PyELEGANT'] = __version__['PyELEGANT']
         f['_version_ELEGANT'] = __version__['ELEGANT']
         f.create_dataset('x0s', data=x0_array, **_kwargs)
@@ -4388,7 +4388,7 @@ def track(
 
     if output_file_type in ('hdf5', 'h5'):
         _kwargs = dict(compression='gzip')
-        f = h5py.File(output_filepath)
+        f = h5py.File(output_filepath, 'a')
         for coord in output_coordinates:
             f.create_dataset(coord, data=tbt[coord], **_kwargs)
         f['timestamp_fin'] = timestamp_fin

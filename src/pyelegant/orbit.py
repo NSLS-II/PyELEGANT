@@ -186,7 +186,7 @@ def calc_closed_orbit(
     if output_file_type in ('hdf5', 'h5'):
         util.robust_sdds_hdf5_write(
             output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
-        f = h5py.File(output_filepath)
+        f = h5py.File(output_filepath, 'a')
         f['timestamp_fin'] = timestamp_fin
         f.close()
 
