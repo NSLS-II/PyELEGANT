@@ -5,8 +5,9 @@ import os
 import json
 
 this_folder = os.path.dirname(os.path.abspath(__file__))
+__version__ = {}
 with open(os.path.join(this_folder, 'version.json'), 'r') as f:
-    __version__ = json.load(f)
+    __version__['PyELEGANT'] = json.load(f)
 
 del this_folder
 
@@ -31,4 +32,4 @@ from .local import run, enable_stdout, enable_stderr, disable_stdout, disable_st
 from .remote import remote
 from .twiss import calc_line_twiss, calc_ring_twiss, plot_twiss
 
-__elegant_version__ = remote.__elegant_version__
+__version__['ELEGANT'] = remote.__elegant_version__

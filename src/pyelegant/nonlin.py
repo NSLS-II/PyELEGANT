@@ -12,7 +12,7 @@ import time
 
 from .local import run
 from .remote import remote
-from . import std_print_enabled
+from . import __version__, std_print_enabled
 from . import elebuilder
 from . import util
 from . import sdds
@@ -218,8 +218,12 @@ def _calc_cmap(
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
         util.robust_pgz_file_write(
-            output_filepath, dict(data=mod_output, meta=mod_meta,
-                                  input=input_dict, timestamp_fin=timestamp_fin),
+            output_filepath, dict(
+                data=mod_output, meta=mod_meta,
+                input=input_dict, timestamp_fin=timestamp_fin,
+                _version_PyELEGANT=__version__['PyELEGANT'],
+                _version_ELEGANT=__version__['ELEGANT'],
+                ),
             nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
@@ -614,8 +618,12 @@ def _calc_fma(
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
         util.robust_pgz_file_write(
-            output_filepath, dict(data=mod_output, meta=mod_meta,
-                                  input=input_dict, timestamp_fin=timestamp_fin),
+            output_filepath, dict(
+                data=mod_output, meta=mod_meta,
+                input=input_dict, timestamp_fin=timestamp_fin,
+                _version_PyELEGANT=__version__['PyELEGANT'],
+                _version_ELEGANT=__version__['ELEGANT'],
+                ),
             nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
@@ -957,8 +965,12 @@ def calc_find_aper_nlines(
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
         util.robust_pgz_file_write(
-            output_filepath, dict(data=mod_output, meta=mod_meta,
-                                  input=input_dict, timestamp_fin=timestamp_fin),
+            output_filepath, dict(
+                data=mod_output, meta=mod_meta,
+                input=input_dict, timestamp_fin=timestamp_fin,
+                _version_PyELEGANT=__version__['PyELEGANT'],
+                _version_ELEGANT=__version__['ELEGANT'],
+                ),
             nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
@@ -1151,8 +1163,12 @@ def calc_mom_aper(
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
         util.robust_pgz_file_write(
-            output_filepath, dict(data=mod_output, meta=mod_meta,
-                                  input=input_dict, timestamp_fin=timestamp_fin),
+            output_filepath, dict(
+                data=mod_output, meta=mod_meta,
+                input=input_dict, timestamp_fin=timestamp_fin,
+                _version_PyELEGANT=__version__['PyELEGANT'],
+                _version_ELEGANT=__version__['ELEGANT'],
+                ),
             nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
@@ -1333,8 +1349,12 @@ def calc_Touschek_lifetime(
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
         util.robust_pgz_file_write(
-            output_filepath, dict(data=mod_output, meta=mod_meta,
-                                  input=input_dict, timestamp_fin=timestamp_fin),
+            output_filepath, dict(
+                data=mod_output, meta=mod_meta,
+                input=input_dict, timestamp_fin=timestamp_fin,
+                _version_PyELEGANT=__version__['PyELEGANT'],
+                _version_ELEGANT=__version__['ELEGANT'],
+                ),
             nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
@@ -2033,6 +2053,8 @@ def _save_chrom_data(
     if output_file_type in ('hdf5', 'h5'):
         _kwargs = dict(compression='gzip')
         f = h5py.File(output_filepath)
+        f['_version_PyELEGANT'] = __version__['PyELEGANT']
+        f['_version_ELEGANT'] = __version__['ELEGANT']
         f.create_dataset('deltas', data=delta_array, **_kwargs)
         f.create_dataset('nuxs', data=nuxs, **_kwargs)
         f.create_dataset('nuys', data=nuys, **_kwargs)
@@ -2065,7 +2087,10 @@ def _save_chrom_data(
 
     elif output_file_type == 'pgz':
         d = dict(deltas=delta_array, nuxs=nuxs, nuys=nuys,
-                 input=input_dict, timestamp_fin=timestamp_fin)
+                 input=input_dict, timestamp_fin=timestamp_fin,
+                 _version_PyELEGANT=__version__['PyELEGANT'],
+                 _version_ELEGANT=__version__['ELEGANT'],
+                 )
         if xtbt is not None:
             d['xtbt'] = xtbt
         if ytbt is not None:
@@ -2923,6 +2948,8 @@ def _save_tswa_data(
     if output_file_type in ('hdf5', 'h5'):
         _kwargs = dict(compression='gzip')
         f = h5py.File(output_filepath)
+        f['_version_PyELEGANT'] = __version__['PyELEGANT']
+        f['_version_ELEGANT'] = __version__['ELEGANT']
         f.create_dataset('x0s', data=x0_array, **_kwargs)
         f.create_dataset('y0s', data=y0_array, **_kwargs)
         f.create_dataset('xtbt', data=xtbt, **_kwargs)
@@ -2957,7 +2984,10 @@ def _save_tswa_data(
             betax=betax, betay=betay, alphax=alphax, alphay=alphay,
             nuxs=nuxs, nuys=nuys, Axs=Axs, Ays=Ays,
             time_domain_Axs=time_domain_Axs, time_domain_Ays=time_domain_Ays,
-            input=input_dict, timestamp_fin=timestamp_fin)
+            input=input_dict, timestamp_fin=timestamp_fin,
+            _version_PyELEGANT=__version__['PyELEGANT'],
+            _version_ELEGANT=__version__['ELEGANT'],
+        )
         if xptbt is not None:
             d['xptbt'] = xptbt
         if yptbt is not None:
@@ -4365,7 +4395,10 @@ def track(
         f.close()
 
     elif output_file_type == 'pgz':
-        d = dict(input=input_dict, timestamp_fin=timestamp_fin)
+        d = dict(input=input_dict, timestamp_fin=timestamp_fin,
+                 _version_PyELEGANT=__version__['PyELEGANT'],
+                 _version_ELEGANT=__version__['ELEGANT'],
+                 )
         for coord in output_coordinates:
             d[coord] = tbt[coord]
         util.robust_pgz_file_write(output_filepath, d, nMaxTry=10, sleep=10.0)

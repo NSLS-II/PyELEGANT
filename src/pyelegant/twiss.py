@@ -7,7 +7,7 @@ import matplotlib.patches as patches
 
 from .local import run
 from .remote import remote
-from . import std_print_enabled
+from . import __version__, std_print_enabled
 from . import elebuilder
 from . import util
 from . import sdds
@@ -202,7 +202,10 @@ def _calc_twiss(
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
         util.robust_pgz_file_write(
-            output_filepath, dict(data=mod_output, meta=mod_meta),
+            output_filepath, dict(
+                data=mod_output, meta=mod_meta,
+                _version_PyELEGANT=__version__['PyELEGANT'],
+                _version_ELEGANT=__version__['ELEGANT']),
             nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
@@ -381,14 +384,14 @@ def plot_twiss(
     """"""
 
     if result_file_type in ('hdf5', 'h5'):
-        d, meta = util.load_sdds_hdf5_file(result_filepath)
+        d, meta, version = util.load_sdds_hdf5_file(result_filepath)
     elif result_file_type == 'pgz':
         _d = util.load_pgz_file(result_filepath)
         d = _d['data']
         meta = _d['meta']
     elif result_file_type is None:
         try:
-            d, meta = util.load_sdds_hdf5_file(result_filepath)
+            d, meta, version = util.load_sdds_hdf5_file(result_filepath)
         except OSError:
             _d = util.load_pgz_file(result_filepath)
             d = _d['data']

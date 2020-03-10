@@ -9,6 +9,8 @@ import numpy as np
 import itertools
 from pathlib import Path
 
+from . import __version__
+
 def get_current_local_time_str():
     """"""
 
@@ -88,6 +90,18 @@ def robust_sdds_hdf5_write(
             if iTry != nMaxTry - 1:
                 time.sleep(sleep)
                 continue
+
+        try:
+            if '_version_PyELEGANT' not in f:
+                f['_version_PyELEGANT'] = __version__['PyELEGANT']
+        except:
+            pass
+        try:
+            if '_version_ELEGANT' not in f:
+                f['_version_ELEGANT'] = __version__['ELEGANT']
+        except:
+            pass
+
         try:
             for sdds_file_type, v1 in output.items():
                 g1 = f.create_group(sdds_file_type)
@@ -145,9 +159,17 @@ def load_sdds_hdf5_file(hdf5_filepath):
 
     d = {}
     meta = {}
+    version = {}
 
     f = h5py.File(hdf5_filepath, 'r')
-    for sdds_file_type in list(f):
+    for k in list(f):
+
+        if k.startswith('_version_'):
+            version[k[len('_version_'):]] = f[k][()]
+            continue
+        else:
+            sdds_file_type = k
+
         g1 = f[sdds_file_type]
 
         try:
@@ -201,7 +223,7 @@ def load_sdds_hdf5_file(hdf5_filepath):
 
     f.close()
 
-    return d, meta
+    return d, meta, version
 
 def get_abspath(filepath_in_ele_file, ele_filepath, rootname=None):
     """"""
