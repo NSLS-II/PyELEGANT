@@ -473,7 +473,7 @@ def summarize_lin(
     existing_fignums = plt.get_fignums()
     fignums = {}
 
-    sel_data = {}
+    sel_data = {'E_GeV': E_MeV / 1e3}
     interm_array_data = {} # holds data that will be only used to derive some other quantities
 
     raw_keys = dict(
@@ -498,6 +498,7 @@ def summarize_lin(
     )
 
     output_filepath = 'test.pgz'
+    #output_filepath = 'test.hdf5'
 
     pe.calc_ring_twiss(
         output_filepath, LTE_filepath, E_MeV, radiation_integrals=True,
@@ -531,7 +532,12 @@ def summarize_lin(
                 existing_fignums.append(fignum)
 
 
-    twi = pe.util.load_pgz_file(output_filepath)['data']['twi']
+    if output_filepath.endswith('.pgz'):
+        twi = pe.util.load_pgz_file(output_filepath)['data']['twi']
+    elif output_filepath.endswith(('.h5', '.hdf5')):
+        twi = pe.util.load_sdds_hdf5_file(output_filepath)[0]['twi']
+    else:
+        raise ValueError
 
     for k, ele_k in raw_keys['one_period'].items():
         sel_data[k] = twi['scalars'][ele_k]
@@ -543,7 +549,12 @@ def summarize_lin(
             output_filepath, zeroSexts_LTE_filepath, E_MeV, radiation_integrals=True,
             use_beamline=use_beamline_ring)
 
-        twi = pe.util.load_pgz_file(output_filepath)['data']['twi']
+        if output_filepath.endswith('.pgz'):
+            twi = pe.util.load_pgz_file(output_filepath)['data']['twi']
+        elif output_filepath.endswith(('.h5', '.hdf5')):
+            twi = pe.util.load_sdds_hdf5_file(output_filepath)[0]['twi']
+        else:
+            raise ValueError
 
         for k, ele_k in raw_keys['ring_natural'].items():
             sel_data[k] = twi['scalars'][ele_k]
@@ -552,7 +563,12 @@ def summarize_lin(
         output_filepath, LTE_filepath, E_MeV, radiation_integrals=True,
         use_beamline=use_beamline_ring)
 
-    twi = pe.util.load_pgz_file(output_filepath)['data']['twi']
+    if output_filepath.endswith('.pgz'):
+        twi = pe.util.load_pgz_file(output_filepath)['data']['twi']
+    elif output_filepath.endswith(('.h5', '.hdf5')):
+        twi = pe.util.load_sdds_hdf5_file(output_filepath)[0]['twi']
+    else:
+        raise ValueError
 
     for k, ele_k in raw_keys['ring'].items():
         sel_data[k] = twi['scalars'][ele_k]
@@ -729,7 +745,7 @@ def summarize_lin(
     #print(f'LS Source Diff. (dx, dz) [mm] = ({(N2U_X["LS"] - N2_X["LS"]) * 1e3:.3g}, {(N2U_Z["LS"] - N2_Z["LS"]) * 1e3:.3g})')
     #print(f'SS Source Diff. (dx, dz) [mm] = ({(N2U_X["SS"] - N2_X["SS"]) * 1e3:.3g}, {(N2U_Z["SS"] - N2_Z["SS"]) * 1e3:.3g})')
 
-    return dict(fignums=fignums, sel_data=sel_data)
+    return dict(versions=pe.__version__, fignums=fignums, sel_data=sel_data)
 
 def summarize_nonlin(
     LTE_filepath, E_MeV, N_KICKS=None, use_beamline='RING',
@@ -966,6 +982,9 @@ def get_nonlin_data_filepaths(LTE_filepath, nonlin_config):
 
     assert LTE_filepath.endswith('.lte')
 
+    output_filetype = 'pgz'
+    #output_filetype = 'hdf5'
+
     ncf = nonlin_config
 
     suffix_list = []
@@ -981,15 +1000,15 @@ def get_nonlin_data_filepaths(LTE_filepath, nonlin_config):
         n_turns = calc_opts['n_turns']
 
         if calc_type.startswith(('fmap', 'cmap')):
-            suffix_list.append(f'_{calc_type[:4]}_{grid_name}_n{n_turns}.pgz')
+            suffix_list.append(f'_{calc_type[:4]}_{grid_name}_n{n_turns}.{output_filetype}')
             data_file_key_list.append(calc_type)
         elif calc_type == 'tswa':
             for plane in ['x', 'y']:
                 for sign in ['plus', 'minus']:
-                    suffix_list.append(f'_tswa_{grid_name}_n{n_turns}_{plane}{sign}.pgz')
+                    suffix_list.append(f'_tswa_{grid_name}_n{n_turns}_{plane}{sign}.{output_filetype}')
                     data_file_key_list.append(f'tswa_{plane}{sign}')
         elif calc_type == 'nonlin_chrom':
-            suffix_list.append(f'_nonlin_chrom_{grid_name}_n{n_turns}.pgz')
+            suffix_list.append(f'_nonlin_chrom_{grid_name}_n{n_turns}.{output_filetype}')
             data_file_key_list.append(calc_type)
         else:
             raise ValueError
@@ -1224,7 +1243,8 @@ def calc_nonlin_chrom(
 
     pe.nonlin.calc_chrom_track(
         output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, ndelta,
-        courant_snyder=True, use_beamline=use_beamline, N_KICKS=N_KICKS,
+        courant_snyder=True, return_fft_spec=True,
+        use_beamline=use_beamline, N_KICKS=N_KICKS,
         n_turns=n_turns, x0_offset=x_offset, y0_offset=y_offset,
         del_tmp_files=True, run_local=False, remote_opts=remote_opts)
 
@@ -1291,7 +1311,7 @@ def calc_nonlin_props(LTE_filepath, E_MeV, nonlin_config):
 
     return nonlin_data_filepaths
 
-def plot_nonlin_props(LTE_filepath, nonlin_config):
+def plot_nonlin_props(LTE_filepath, nonlin_config, pdf_file_prefix):
     """"""
 
     ncf = nonlin_config
@@ -1299,7 +1319,6 @@ def plot_nonlin_props(LTE_filepath, nonlin_config):
     nonlin_data_filepaths = get_nonlin_data_filepaths(LTE_filepath, ncf)
 
     existing_fignums = plt.get_fignums()
-    fignums = {}
 
     calc_type = 'fmap_xy'
     if calc_type in nonlin_data_filepaths:
@@ -1307,9 +1326,13 @@ def plot_nonlin_props(LTE_filepath, nonlin_config):
             nonlin_data_filepaths[calc_type], title='',
             is_diffusion=True, scatter=False)
 
-        fignums[calc_type] = [fignum for fignum in plt.get_fignums()
-                              if fignum not in existing_fignums]
-        existing_fignums.extend(fignums[calc_type])
+        pp = PdfPages(f'{pdf_file_prefix}.{calc_type}.pdf')
+        for fignum in [fignum for fignum in plt.get_fignums()
+                       if fignum not in existing_fignums]:
+            pp.savefig(figure=fignum)
+            plt.close(fignum)
+        pp.close()
+
 
     calc_type = 'fmap_px'
     if calc_type in nonlin_data_filepaths:
@@ -1317,66 +1340,222 @@ def plot_nonlin_props(LTE_filepath, nonlin_config):
             nonlin_data_filepaths[calc_type], title='',
             is_diffusion=True, scatter=False)
 
-        fignums[calc_type] = [fignum for fignum in plt.get_fignums()
-                              if fignum not in existing_fignums]
-        existing_fignums.extend(fignums[calc_type])
+        pp = PdfPages(f'{pdf_file_prefix}.{calc_type}.pdf')
+        for fignum in [fignum for fignum in plt.get_fignums()
+                       if fignum not in existing_fignums]:
+            pp.savefig(figure=fignum)
+            plt.close(fignum)
+        pp.close()
 
     calc_type = 'cmap_xy'
     if calc_type in nonlin_data_filepaths:
+        _plot_kwargs = ncf.get(f'{calc_type}_plot_opts', {})
         pe.nonlin.plot_cmap_xy(
-            nonlin_data_filepaths[calc_type], title='', cmin=-24, cmax=-10,
-            is_log10=True, scatter=False)
+            nonlin_data_filepaths[calc_type], title='', is_log10=True,
+            scatter=False, **_plot_kwargs)
 
-        fignums[calc_type] = [fignum for fignum in plt.get_fignums()
-                              if fignum not in existing_fignums]
-        existing_fignums.extend(fignums[calc_type])
+        pp = PdfPages(f'{pdf_file_prefix}.{calc_type}.pdf')
+        for fignum in [fignum for fignum in plt.get_fignums()
+                       if fignum not in existing_fignums]:
+            pp.savefig(figure=fignum)
+            plt.close(fignum)
+        pp.close()
 
     calc_type = 'cmap_px'
     if calc_type in nonlin_data_filepaths:
+        _plot_kwargs = ncf.get(f'{calc_type}_plot_opts', {})
         pe.nonlin.plot_cmap_px(
-            nonlin_data_filepaths[calc_type], title='', cmin=-24, cmax=-10, #xlim=[-10e-3, +10e-3],
-            is_log10=True, scatter=False)
+            nonlin_data_filepaths[calc_type], title='', #xlim=[-10e-3, +10e-3],
+            is_log10=True, scatter=False, **_plot_kwargs)
 
-        fignums[calc_type] = [fignum for fignum in plt.get_fignums()
-                              if fignum not in existing_fignums]
-        existing_fignums.extend(fignums[calc_type])
+        pp = PdfPages(f'{pdf_file_prefix}.{calc_type}.pdf')
+        for fignum in [fignum for fignum in plt.get_fignums()
+                       if fignum not in existing_fignums]:
+            pp.savefig(figure=fignum)
+            plt.close(fignum)
+        pp.close()
 
     calc_type = 'tswa'
     if f'tswa_xplus' in nonlin_data_filepaths:
-        plot_xy0 = True
-        #plot_Axy = True
-        plot_Axy = False
-        #plot_fft = True
-        plot_fft = False
-        _kwargs = dict(plot_xy0=plot_xy0, plot_Axy=plot_Axy, plot_fft=plot_fft)
-        for plane in ['x', 'y']:
-            for sign in ['plus', 'minus']:
-                data_key = f'tswa_{plane}{sign}'
-                if plane == 'x':
-                    pe.nonlin.plot_tswa(
-                        nonlin_data_filepaths[data_key],
-                        title='', fit_abs_xmax=0.5e-3, **_kwargs)
-                else:
-                    pe.nonlin.plot_tswa(
-                        nonlin_data_filepaths[data_key],
-                        title='', fit_abs_ymax=0.25e-3, **_kwargs)
+        if False:
+            #plot_plus_minus_combined = False
+            plot_plus_minus_combined = True
 
-        fignums[calc_type] = [fignum for fignum in plt.get_fignums()
-                              if fignum not in existing_fignums]
-        existing_fignums.extend(fignums[calc_type])
+            plot_xy0 = True
+            #plot_xy0 = False
+
+            #plot_Axy = True
+            plot_Axy = False
+
+            use_time_domain_amplitude = True # Only relevant when "plot_Axy=True"
+            #use_time_domain_amplitude = False # Only relevant when "plot_Axy=True"
+
+            #plot_fft = True
+            plot_fft = False
+
+            _plot_kwargs = dict(
+                plot_plus_minus_combined=plot_plus_minus_combined,
+                footprint_nuxlim=[0.0, 1.0], footprint_nuylim=[0.0, 1.0],
+                plot_xy0=plot_xy0, plot_Axy=plot_Axy, plot_fft=plot_fft,
+                use_time_domain_amplitude=use_time_domain_amplitude)
+
+            _plot_kwargs['fit_xmin'] = -0.5e-3
+            _plot_kwargs['fit_xmax'] = +0.5e-3
+            _plot_kwargs['fit_ymin'] = -0.25e-3
+            _plot_kwargs['fit_ymax'] = +0.25e-3
+
+        else:
+            _plot_kwargs = ncf.get(f'{calc_type}_plot_opts', {})
+
+        plot_plus_minus_combined = _plot_kwargs.get(
+            'plot_plus_minus_combined', True)
+        del _plot_kwargs['plot_plus_minus_combined']
+
+        if plot_plus_minus_combined:
+            sel_tswa_caption_keys = [
+                'nu_vs_x0', 'tunefootprint_vs_x0',
+                'nu_vs_y0', 'tunefootprint_vs_y0']
+        else:
+            sel_tswa_caption_keys = [
+                'nu_vs_x0plus', 'nu_vs_x0minus',
+                'tunefootprint_vs_x0plus', 'tunefootprint_vs_x0minus',
+                'nu_vs_y0plus', 'nu_vs_y0minus',
+                'tunefootprint_vs_y0plus', 'tunefootprint_vs_y0minus',
+            ]
+
+        tswa_captions = []
+        tswa_caption_keys = []
+        if not plot_plus_minus_combined:
+
+            fit_abs_xmax = dict(plus=_plot_kwargs['fit_xmax'],
+                                minus=np.abs(_plot_kwargs['fit_xmin']))
+            fit_abs_ymax = dict(plus=_plot_kwargs['fit_ymax'],
+                                minus=np.abs(_plot_kwargs['fit_ymin']))
+
+            for plane in ['x', 'y']:
+                for sign in ['plus', 'minus']:
+                    data_key = f'tswa_{plane}{sign}'
+                    if plane == 'x':
+                        pe.nonlin.plot_tswa(
+                            nonlin_data_filepaths[data_key],
+                            title='', fit_abs_xmax=fit_abs_xmax[sign], #0.5e-3,
+                            **_plot_kwargs)
+                    else:
+                        pe.nonlin.plot_tswa(
+                            nonlin_data_filepaths[data_key],
+                            title='', fit_abs_ymax=fit_abs_ymax[sign], #0.25e-3,
+                            **_plot_kwargs)
+
+                    if sign == 'plus':
+                        if plot_xy0:
+                            tswa_captions.append(
+                                MathText(r'\nu') + ' vs. ' + MathText(fr'{plane}_0'))
+                            tswa_caption_keys.append(f'nu_vs_{plane}0{sign}')
+                        if plot_Axy:
+                            tswa_captions.append(
+                                MathText(r'\nu') + ' vs. ' + MathText(fr'A_{plane} (> 0)'))
+                            tswa_caption_keys.append(f'nu_vs_A{plane}{sign}')
+                        tswa_captions.append(
+                            'Tune footprint vs. ' + MathText(fr'{plane}_0'))
+                        tswa_caption_keys.append(f'tunefootprint_vs_{plane}0{sign}')
+                        if plot_fft:
+                            tswa_captions.append(
+                                'FFT ' + MathText(r'\nu_x') + ' vs. ' + MathText(fr'{plane}_0'))
+                            tswa_caption_keys.append(f'fft_nux_vs_{plane}0{sign}')
+                            tswa_captions.append(
+                                'FFT ' + MathText(r'\nu_y') + ' vs. ' + MathText(fr'{plane}_0'))
+                            tswa_caption_keys.append(f'fft_nuy_vs_{plane}0{sign}')
+                    else:
+                        if plot_xy0:
+                            tswa_captions.append(
+                                MathText(r'\nu') + ' vs. ' + MathText(fr'-{plane}_0'))
+                            tswa_caption_keys.append(f'nu_vs_{plane}0{sign}')
+                        if plot_Axy:
+                            tswa_captions.append(
+                                MathText(r'\nu') + ' vs. ' + MathText(fr'A_{plane} (< 0)'))
+                            tswa_caption_keys.append(f'nu_vs_A{plane}{sign}')
+                        tswa_captions.append(
+                            'Tune footprint vs. ' + MathText(fr'-{plane}_0'))
+                        tswa_caption_keys.append(f'tunefootprint_vs_{plane}0{sign}')
+                        if plot_fft:
+                            tswa_captions.append(
+                                'FFT ' + MathText(r'\nu_x') + ' vs. ' + MathText(fr'-{plane}_0'))
+                            tswa_caption_keys.append(f'fft_nux_vs_{plane}0{sign}')
+                            tswa_captions.append(
+                                'FFT ' + MathText(r'\nu_y') + ' vs. ' + MathText(fr'-{plane}_0'))
+                            tswa_caption_keys.append(f'fft_nuy_vs_{plane}0{sign}')
+
+        else:
+            for plane in ['x', 'y']:
+                pe.nonlin.plot_tswa_both_sides(
+                    nonlin_data_filepaths[f'tswa_{plane}plus'],
+                    nonlin_data_filepaths[f'tswa_{plane}minus'],
+                    title='',
+                    #fit_xmin=-0.5e-3, fit_xmax=+0.5e-3,
+                    #fit_ymin=-0.25e-3, fit_ymax=+0.25e-3,
+                    **_plot_kwargs
+                )
+
+                if _plot_kwargs['plot_xy0']:
+                    tswa_captions.append(
+                        MathText(r'\nu') + ' vs. ' + MathText(fr'{plane}_0'))
+                    tswa_caption_keys.append(f'nu_vs_{plane}0')
+                if _plot_kwargs['plot_Axy']:
+                    tswa_captions.append(
+                        MathText(r'\nu') + ' vs. ' + MathText(fr'A_{plane}'))
+                    tswa_caption_keys.append(f'nu_vs_A{plane}')
+                tswa_captions.append(
+                    'Tune footprint vs. ' + MathText(fr'{plane}_0'))
+                tswa_caption_keys.append(f'tunefootprint_vs_{plane}0')
+                if _plot_kwargs['plot_fft']:
+                    tswa_captions.append(
+                        'FFT ' + MathText(r'\nu_x') + ' vs. ' + MathText(fr'{plane}_0'))
+                    tswa_caption_keys.append(f'fft_nux_vs_{plane}0')
+                    tswa_captions.append(
+                        'FFT ' + MathText(r'\nu_y') + ' vs. ' + MathText(fr'{plane}_0'))
+                    tswa_caption_keys.append(f'fft_nuy_vs_{plane}0')
+
+        pp = PdfPages(f'{pdf_file_prefix}.{calc_type}.pdf')
+        for fignum in [fignum for fignum in plt.get_fignums()
+                       if fignum not in existing_fignums]:
+            pp.savefig(figure=fignum)
+            plt.close(fignum)
+        pp.close()
+
 
     calc_type = 'nonlin_chrom'
     if calc_type in nonlin_data_filepaths:
+        if False:
+            #plot_fft = False
+            plot_fft = True
+
+            _plot_kwargs = dict(plot_fft=plot_fft, max_chrom_order=4,
+                                fit_deltalim=[-2e-2, +2e-2])
+        else:
+            _plot_kwargs = ncf.get(f'{calc_type}_plot_opts', {})
+
         pe.nonlin.plot_chrom(
-            nonlin_data_filepaths[calc_type], max_chrom_order=3, title='',)
+            nonlin_data_filepaths[calc_type], title='',
+            **_plot_kwargs)
             #deltalim=chrom_deltalim,)
             #nuxlim=[0, 0.3], nuylim=[0.1, 0.3])
 
-        fignums[calc_type] = [fignum for fignum in plt.get_fignums()
-                              if fignum not in existing_fignums]
-        existing_fignums.extend(fignums[calc_type])
+        pp = PdfPages(f'{pdf_file_prefix}.{calc_type}.pdf')
+        for fignum in [fignum for fignum in plt.get_fignums()
+                       if fignum not in existing_fignums]:
+            pp.savefig(figure=fignum)
+            plt.close(fignum)
+        pp.close()
 
-    return fignums
+    tswa_page_caption_list = []
+    for k in sel_tswa_caption_keys:
+        i = tswa_caption_keys.index(k)
+        page = i + 1
+        tswa_page_caption_list.append((page, tswa_captions[i]))
+
+    #return fignums, tswa_page_caption_list
+    return tswa_page_caption_list
+
 
 MT = MathText
 NT = NormalText
@@ -1544,7 +1723,7 @@ def create_beamline_elements_list_subsection(doc, flat_elem_s_name_type_list):
             for line in folded_list:
                 table.add_row([_s.strip().replace('#', '') for _s in line.split(':')])
 
-def create_lattice_prop_section(doc, lin_data, pdf_file_prefix):
+def create_lattice_prop_section(doc, lin_data, pdf_file_prefix, versions):
     """"""
 
     with doc.create(plx.Section('Lattice Properties')):
@@ -1745,6 +1924,13 @@ def create_lattice_prop_section(doc, lin_data, pdf_file_prefix):
                 val_strs[k] = '{:d}'.format(lin_data[k])
                 labels[k] = '# of Super-periods'
 
+            elif k == 'E_GeV':
+                units[k] = ' [GeV]'
+                val_strs[k] = f'{lin_data[k]:.0f}'
+                labels[k] = f'Beam Energy'
+
+                val_strs[k] = MathText(val_strs[k])
+
             else:
                 raise RuntimeError(f'Unhandled key: {k}')
 
@@ -1771,7 +1957,12 @@ def create_lattice_prop_section(doc, lin_data, pdf_file_prefix):
 
     twiss_fig_pdf_filepath = meta_twiss['pdf_filepath']
     if os.path.exists(twiss_fig_pdf_filepath):
-        doc.append('Placeholder.')
+        doc.append('Description of Twiss and other lattice properties goes here.')
+        ver_sentence = (
+            f'ELEGANT version {versions["ELEGANT"]} was used '
+            f'to compute the lattice properties.')
+        doc.append(plx.Command('par'))
+        doc.append(ver_sentence)
         #doc.append(plx.Command('vspace', plx.NoEscape('-10pt')))
         doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
         with doc.create(plx.Figure(position='h!')) as fig:
@@ -1803,6 +1994,11 @@ def create_twsa_section():
 
 def create_nonlin_chrom_section():
     """"""
+
+def prep_multiline_paragraph_str(paragraph):
+    """"""
+
+    return (' '.join([line.strip() for line in paragraph.split('\n')])).strip()
 
 if __name__ == '__main__':
 
@@ -1883,6 +2079,7 @@ if __name__ == '__main__':
                 length_elem_names={'L@Short Straight': ['OLONG1', 'OS2B', 'OLONG2'],
                                    'L@Long Straight': ['OLONG2', 'OS2B', 'OLONG1']},
             )
+            lin_versions = d['versions']
             lin_fignums = d['fignums']
             lin_data = d['sel_data']
             abs_input_LTE_filepath = os.path.abspath(input_LTE_filepath)
@@ -1910,10 +2107,11 @@ if __name__ == '__main__':
 
             with open(lin_summary_pkl_filepath, 'wb') as f:
                 pickle.dump([abs_input_LTE_filepath, LTE_contents,
-                             lin_data, meta_twiss], f)
+                             lin_versions, lin_data, meta_twiss], f)
         else:
             with open(lin_summary_pkl_filepath, 'rb') as f:
-                (abs_input_LTE_filepath, LTE_contents, lin_data, meta_twiss
+                (abs_input_LTE_filepath, LTE_contents,
+                 lin_versions, lin_data, meta_twiss
                  ) = pickle.load(f)
 
     else:
@@ -2008,6 +2206,7 @@ if __name__ == '__main__':
             d = summarize_lin(
                 input_LTE_filepath, zeroSexts_LTE_filepath=zeroSexts_LTE_filepath,
                 **_kwargs)
+            lin_versions = d['versions']
             lin_fignums = d['fignums']
             lin_data = d['sel_data']
             abs_input_LTE_filepath = os.path.abspath(input_LTE_filepath)
@@ -2025,10 +2224,11 @@ if __name__ == '__main__':
 
             with open(lin_summary_pkl_filepath, 'wb') as f:
                 pickle.dump([abs_input_LTE_filepath, LTE_contents,
-                             lin_data, meta_twiss], f)
+                             lin_versions, lin_data, meta_twiss], f)
         else:
             with open(lin_summary_pkl_filepath, 'rb') as f:
-                (abs_input_LTE_filepath, LTE_contents, lin_data, meta_twiss
+                (abs_input_LTE_filepath, LTE_contents,
+                 lin_versions, lin_data, meta_twiss
                  ) = pickle.load(f)
 
             if Path(input_LTE_filepath).read_text() != LTE_contents:
@@ -2077,25 +2277,29 @@ if __name__ == '__main__':
                 calc_nonlin_props(input_LTE_filepath, conf['E_MeV'], ncf)
 
             if do_plot and any(do_plot.values()):
-                fignums = plot_nonlin_props(input_LTE_filepath, ncf)
+                #(fignums, tswa_page_caption_list
+                 #) = plot_nonlin_props(input_LTE_filepath, ncf, pdf_file_prefix)
 
-                for k, fignum_list in fignums.items():
-                    pp = PdfPages(f'{pdf_file_prefix}.{k}.pdf')
-                    for fignum in fignum_list:
-                        pp.savefig(figure=fignum)
-                    pp.close()
+                #for k, fignum_list in fignums.items():
+                    #pp = PdfPages(f'{pdf_file_prefix}.{k}.pdf')
+                    #for fignum in fignum_list:
+                        #pp.savefig(figure=fignum)
+                    #pp.close()
+
+                tswa_page_caption_list = plot_nonlin_props(
+                    input_LTE_filepath, ncf, pdf_file_prefix)
 
                 abs_input_LTE_filepath = os.path.abspath(input_LTE_filepath)
                 LTE_contents = Path(input_LTE_filepath).read_text()
 
                 with open(nonlin_summary_pkl_filepath, 'wb') as f:
                     pickle.dump([abs_input_LTE_filepath, LTE_contents, conf,
-                                 pdf_file_prefix], f)
+                                 pdf_file_prefix, tswa_page_caption_list], f)
 
             else:
                 with open(nonlin_summary_pkl_filepath, 'rb') as f:
                     (abs_input_LTE_filepath, LTE_contents, saved_conf,
-                     pdf_file_prefix,) = pickle.load(f)
+                     pdf_file_prefix, tswa_page_caption_list) = pickle.load(f)
 
                 if Path(input_LTE_filepath).read_text() != LTE_contents:
                     raise RuntimeError(
@@ -2105,10 +2309,12 @@ if __name__ == '__main__':
                          'file, or re-calculate to create an updated data file.'))
 
 
-    geometry_options = {"vmargin": "1cm", "hmargin": "1cm"}
+    geometry_options = {"vmargin": "1cm", "hmargin": "1.5cm"}
     doc = plx.Document(f'{rootname}_report', geometry_options=geometry_options,
                        documentclass='article')
     doc.preamble.append(plx.Command('usepackage', 'nopageno')) # Suppress page numbering for entire doc
+    doc.preamble.append(plx.Package('indentfirst')) # This fixes the problem of the first paragraph not indenting
+    doc.preamble.append(plx.Package('seqsplit')) # To split a very long word into multiple lines w/o adding hyphens, like a long file name.
 
     doc.preamble.append(plx.Command(
         'title', 'ELEGANT Lattice Characterization Report'))
@@ -2138,19 +2344,26 @@ if __name__ == '__main__':
 
     #fill_document(doc)
 
-    version_sentence = (
-        f'The software versions for ELEGANT and PyElegant were '
-        f'{pe.__elegant_version__} and {pe.__version__}, respectively.')
-
     with doc.create(plx.Section('Lattice Description')):
-        paragraph = 'Description of the lattice being characterized goes here.'
+        mod_LTE_filename = os.path.basename(input_LTE_filepath).replace("_", r"\_")
+        paragraph = f'''
+        The lattice file being analyzed here is \seqsplit{{"{mod_LTE_filename}"}}.
+        This lattice was based on the 36-pm scaled version of a Canadian Light
+        Source upgrade lattice candidate (scaling done by G. Wang). It was
+        further optimized to 23 picometers. This lattice is still a 30-cell
+        periodic lattice, which means the ID source points do not match with
+        the current NSLS-II layout.
+        '''
+        doc.append(plx.NoEscape(prep_multiline_paragraph_str(paragraph)))
         if conf is None:
             print_versions = True
         else:
             print_versions = conf.get('print_versions', True)
         if print_versions:
-            paragraph += f' {version_sentence}'
-        doc.append(paragraph)
+            doc.append(plx.Command('par'))
+            version_sentence = (
+                f'This report was generated using PyELEGANT version {pe.__version__["PyELEGANT"]}.')
+            doc.append(version_sentence)
 
     with doc.create(plx.Section('Lattice Elements')):
         create_bend_elements_subsection(doc, lin_data['elem_defs'])
@@ -2162,7 +2375,10 @@ if __name__ == '__main__':
 
     #generate_pdf_w_reruns(doc, clean_tex=False, silent=False)
 
-    create_lattice_prop_section(doc, lin_data, meta_twiss)
+    create_lattice_prop_section(doc, lin_data, meta_twiss, lin_versions)
+
+    #doc.append(plx.NewPage())
+    doc.append(plx.Command('clearpage'))
 
     #doc.generate_pdf(clean_tex=False, silent=False)
     #generate_pdf_w_reruns(doc, clean_tex=False, silent=False)
@@ -2412,6 +2628,8 @@ if __name__ == '__main__':
     else:
         ncf = conf['nonlin']
 
+        LTE_contents = Path(input_LTE_filepath).read_text()
+
         nonlin_data_filepaths = get_nonlin_data_filepaths(input_LTE_filepath, ncf)
         included_types = [k for k, _included in ncf.get('include', {}).items()
                           if _included]
@@ -2423,10 +2641,83 @@ if __name__ == '__main__':
             with doc.create(plx.Section('Frequency Map')):
                 if os.path.exists(sub_pdfs['fmap_xy']) and \
                    os.path.exists(sub_pdfs['fmap_px']):
-                    #d_xy = nonlin_data_filepaths['fmap_xy']
-                    #d_px = nonlin_data_filepaths['fmap_px']
-                    # TODO
-                    doc.append('Placeholder.')
+                    d_xy = pe.util.load_pgz_file(nonlin_data_filepaths['fmap_xy'])
+                    d_px = pe.util.load_pgz_file(nonlin_data_filepaths['fmap_px'])
+
+                    assert os.path.basename(d_xy['input']['LTE_filepath']) \
+                           == input_LTE_filepath
+                    assert os.path.basename(d_px['input']['LTE_filepath']) \
+                           == input_LTE_filepath
+                    assert d_xy['input']['lattice_file_contents'] == LTE_contents
+                    assert d_px['input']['lattice_file_contents'] == LTE_contents
+
+                    n_turns = d_xy['input']['n_turns']
+                    nx, ny = d_xy['input']['nx'], d_xy['input']['ny']
+                    doc.append((
+                        f'The on-momentum frequency map was generated by '
+                        f'tracking particles for {n_turns:d} turns at each point '
+                        f'in the grid of '))
+                    doc.append(MathText((
+                        '{nx:d}\, ({xmin_mm:+.3f} \le x_0 [\mathrm{{mm}}] '
+                        '\le {xmax_mm:+.3f}) '
+                        r'\times '
+                        '{ny:d}\, ({ymin_mm:+.3f} \le y_0 [\mathrm{{mm}}] '
+                        '\le {ymax_mm:+.3f})').format(
+                            nx=nx, ny=ny,
+                            xmin_mm=d_xy['input']['xmin'] * 1e3,
+                            xmax_mm=d_xy['input']['xmax'] * 1e3,
+                            ymin_mm=d_xy['input']['ymin'] * 1e3,
+                            ymax_mm=d_xy['input']['ymax'] * 1e3,
+                        )))
+                    doc.append(plx.NoEscape('\ points'))
+                    if d_xy['input']['delta_offset'] != 0.0:
+                        doc.append(
+                            ', with a constant momentum offset of {:.2g}%.'.format(
+                            d_xy['input']['delta_offset'] * 1e2))
+                    else:
+                        doc.append('.')
+
+                    doc.append(plx.NoEscape('\ '))
+
+                    n_turns = d_px['input']['n_turns']
+                    nx, ndelta = d_px['input']['nx'], d_px['input']['ndelta']
+                    doc.append((
+                        f'The off-momentum frequency map was generated by '
+                        f'tracking particles for {n_turns:d} turns at each point '
+                        f'in the grid of '))
+                    doc.append(MathText((
+                        '{ndelta:d}\, ({delta_min:+.3g} \le \delta [\%] '
+                        '\le {delta_max:+.3g}) '
+                        r'\times '
+                        '{nx:d}\, ({xmin_mm:+.3f} \le x_0 [\mathrm{{mm}}] '
+                        '\le {xmax_mm:+.3f})').format(
+                            nx=nx, ndelta=ndelta,
+                            xmin_mm=d_px['input']['xmin'] * 1e3,
+                            xmax_mm=d_px['input']['xmax'] * 1e3,
+                            delta_min=d_px['input']['delta_min'] * 1e2,
+                            delta_max=d_px['input']['delta_max'] * 1e2,
+                        )))
+                    doc.append(plx.NoEscape('\ points'))
+                    if d_px['input']['y_offset'] != 0.0:
+                        doc.append(
+                            ', with a constant initial vertical offset of {:.3g} mm.'.format(
+                            d_px['input']['y_offset'] * 1e3))
+                    else:
+                        doc.append('.')
+
+                    if d_xy['_version_ELEGANT'] == d_px['_version_ELEGANT']:
+                        ver_sentence = (
+                            f'ELEGANT version {d_xy["_version_ELEGANT"]} was used '
+                            f'to compute the frequency map data.')
+                    else:
+                        ver_sentence = (
+                            f'ELEGANT version {d_xy["_version_ELEGANT"]} was used '
+                            f'to compute the on-momentum frequency map data, '
+                            f'while ELEGANT version {d_px["_version_ELEGANT"]} '
+                            f'was used for the off-momentum frequency map data.')
+
+                    doc.append(plx.Command('par'))
+                    doc.append(ver_sentence)
                     #doc.append(f'The number of turns tracked was {n_turns}.')
                     doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
                     with doc.create(plx.Figure(position='h!')) as fig:
@@ -2450,9 +2741,16 @@ if __name__ == '__main__':
                         ('fmap_xy', 'On Momentum', 'On-momentum frequency map.'),
                         ('fmap_px', 'Off Momentum', 'Off-momentum frequency map.')]:
 
+                        d = pe.util.load_pgz_file(nonlin_data_filepaths[k])
+                        ver_sentence = (
+                            f'ELEGANT version {d["_version_ELEGANT"]} was used '
+                            f'to compute the frequency map data.')
+
                         if os.path.exists(sub_pdfs[k]):
                             with doc.create(plx.Subsection(subsec_title)):
-                                doc.append('Placeholder.')
+                                doc.append('Description for frequency maps goes here.')
+                                doc.append(plx.Command('par'))
+                                doc.append(ver_sentence)
                                 #doc.append(f'The number of turns tracked was {n_turns}.')
 
                                 with doc.create(plx.Figure(position='h!')) as fig:
@@ -2467,14 +2765,91 @@ if __name__ == '__main__':
 
         if ('cmap_xy' in included_types) or ('cmap_px' in included_types):
             if new_page_required:
-                doc.append(plx.NewPage())
+                #doc.append(plx.NewPage())
+                doc.append(plx.Command('clearpage'))
                 new_page_required = False
 
             with doc.create(plx.Section('Chaos Map')):
 
                 if os.path.exists(sub_pdfs['cmap_xy']) and \
                    os.path.exists(sub_pdfs['cmap_px']):
-                    doc.append('Placeholder.')
+                    d_xy = pe.util.load_pgz_file(nonlin_data_filepaths['cmap_xy'])
+                    d_px = pe.util.load_pgz_file(nonlin_data_filepaths['cmap_px'])
+
+                    assert os.path.basename(d_xy['input']['LTE_filepath']) \
+                           == input_LTE_filepath
+                    assert os.path.basename(d_px['input']['LTE_filepath']) \
+                           == input_LTE_filepath
+                    assert d_xy['input']['lattice_file_contents'] == LTE_contents
+                    assert d_px['input']['lattice_file_contents'] == LTE_contents
+
+                    n_turns = d_xy['input']['n_turns']
+                    nx, ny = d_xy['input']['nx'], d_xy['input']['ny']
+                    doc.append((
+                        f'The on-momentum chaos map was generated by tracking '
+                        f'particles for {n_turns:d} turns at each point in the '
+                        f'grid of '))
+                    doc.append(MathText((
+                        '{nx:d}\, ({xmin_mm:+.3f} \le x_0 [\mathrm{{mm}}] '
+                        '\le {xmax_mm:+.3f}) '
+                        r'\times '
+                        '{ny:d}\, ({ymin_mm:+.3f} \le y_0 [\mathrm{{mm}}] '
+                        '\le {ymax_mm:+.3f})').format(
+                            nx=nx, ny=ny,
+                            xmin_mm=d_xy['input']['xmin'] * 1e3,
+                            xmax_mm=d_xy['input']['xmax'] * 1e3,
+                            ymin_mm=d_xy['input']['ymin'] * 1e3,
+                            ymax_mm=d_xy['input']['ymax'] * 1e3,
+                        )))
+                    doc.append(plx.NoEscape('\ points'))
+                    if d_xy['input']['delta_offset'] != 0.0:
+                        doc.append(
+                            ', with a constant momentum offset of {:.2g}%.'.format(
+                            d_xy['input']['delta_offset'] * 1e2))
+                    else:
+                        doc.append('.')
+
+                    doc.append(plx.NoEscape('\ '))
+
+                    n_turns = d_px['input']['n_turns']
+                    nx, ndelta = d_px['input']['nx'], d_px['input']['ndelta']
+                    doc.append((
+                        f'The off-momentum chaos map was generated by tracking '
+                        f'particles for {n_turns:d} turns at each point in the '
+                        f'grid of '))
+                    doc.append(MathText((
+                        '{ndelta:d}\, ({delta_min:+.3g} \le \delta [\%] '
+                        '\le {delta_max:+.3g}) '
+                        r'\times '
+                        '{nx:d}\, ({xmin_mm:+.3f} \le x_0 [\mathrm{{mm}}] '
+                        '\le {xmax_mm:+.3f})').format(
+                            nx=nx, ndelta=ndelta,
+                            xmin_mm=d_px['input']['xmin'] * 1e3,
+                            xmax_mm=d_px['input']['xmax'] * 1e3,
+                            delta_min=d_px['input']['delta_min'] * 1e2,
+                            delta_max=d_px['input']['delta_max'] * 1e2,
+                        )))
+                    doc.append(plx.NoEscape('\ points'))
+                    if d_px['input']['y_offset'] != 0.0:
+                        doc.append(
+                            ', with a constant initial vertical offset of {:.3g} mm.'.format(
+                            d_px['input']['y_offset'] * 1e3))
+                    else:
+                        doc.append('.')
+
+                    if d_xy['_version_ELEGANT'] == d_px['_version_ELEGANT']:
+                        ver_sentence = (
+                            f'ELEGANT version {d_xy["_version_ELEGANT"]} was used '
+                            f'to compute the chaos map data.')
+                    else:
+                        ver_sentence = (
+                            f'ELEGANT version {d_xy["_version_ELEGANT"]} was used '
+                            f'to compute the on-momentum chaos map data, '
+                            f'while ELEGANT version {d_px["_version_ELEGANT"]} '
+                            f'was used for the off-momentum chaos map data.')
+
+                    doc.append(plx.Command('par'))
+                    doc.append(ver_sentence)
                     #doc.append(f'The number of turns tracked was {n_turns}.')
                     #doc.append(plx.Command('vspace', plx.NoEscape('-10pt')))
                     doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
@@ -2500,9 +2875,16 @@ if __name__ == '__main__':
                         ('cmap_xy', 'On Momentum', 'On-momentum chaos map.'),
                         ('cmap_px', 'Off Momentum', 'Off-momentum chaos map.')]:
 
+                        d = pe.util.load_pgz_file(nonlin_data_filepaths[k])
+                        ver_sentence = (
+                            f'ELEGANT version {d["_version_ELEGANT"]} was used '
+                            f'to compute the chaos map data.')
+
                         if os.path.exists(sub_pdfs[k]):
                             with doc.create(plx.Subsection(subsec_title)):
-                                doc.append('Placeholder.')
+                                doc.append('Description for chaos maps goes here.')
+                                doc.append(plx.Command('par'))
+                                doc.append(ver_sentence)
                                 #doc.append(f'The number of turns tracked was {n_turns}.')
                                 with doc.create(plx.Figure(position='h!')) as fig:
                                     #doc.append(plx.Command('vspace', plx.NoEscape('-10pt')))
@@ -2516,54 +2898,210 @@ if __name__ == '__main__':
         if 'tswa' in included_types:
 
             if new_page_required:
-                doc.append(plx.NewPage())
+                #doc.append(plx.NewPage())
+                doc.append(plx.Command('clearpage'))
                 new_page_required = False
 
             with doc.create(plx.Section('Tune Shift with Amplitude')):
-                doc.append(f'Placeholder.')
+                d = {}
+                versions, n_turns_list = [], []
+                abs_xmax_list, nx_list, y0_offset_list = [], [], []
+                abs_ymax_list, ny_list, x0_offset_list = [], [], []
+                for plane in ['x', 'y']:
+                    for sign in ['plus', 'minus']:
+                        v = d[f'tswa_{plane}{sign}'] = pe.util.load_pgz_file(
+                            nonlin_data_filepaths[f'tswa_{plane}{sign}'])
+
+                        versions.append(v['_version_ELEGANT'])
+
+                        assert os.path.basename(v['input']['LTE_filepath']) \
+                               == os.path.basename(input_LTE_filepath)
+                        assert v['input']['lattice_file_contents'] == LTE_contents
+
+                        n_turns_list.append(v['input']['n_turns'])
+
+                        vv = v['input']['plane_specific_input']
+                        if plane == 'x':
+                            abs_xmax_list.append(vv['abs_xmax'])
+                            nx_list.append(vv['nx'])
+                            y0_offset_list.append(vv['y0_offset'])
+                        else:
+                            abs_ymax_list.append(vv['abs_ymax'])
+                            ny_list.append(vv['ny'])
+                            x0_offset_list.append(vv['x0_offset'])
+
+                assert len(set(versions)) == 1
+                assert len(set(n_turns_list)) == 1
+                assert len(set(abs_xmax_list)) == len(set(abs_ymax_list)) == 1
+                assert len(set(nx_list)) == len(set(ny_list)) == 1
+                assert len(set(y0_offset_list)) == len(set(x0_offset_list)) == 1
+
+                n_turns = n_turns_list[0]
+                abs_xmax, abs_ymax = abs_xmax_list[0], abs_ymax_list[0]
+                nx, ny = nx_list[0], ny_list[0]
+                y0_offset, x0_offset = y0_offset_list[0], x0_offset_list[0]
+
+                ver_sentence = (
+                    f'ELEGANT version {versions[0]} was used to compute the '
+                    f'tune shift with amplitude.')
+
+                doc.append((
+                    f'The plots for tune shift with horizontal amplitude were '
+                    f'generated by tracking particles for {n_turns:d} turns at '
+                    f'each point in the array of '))
+                doc.append(MathText((
+                    '{nx:d}\, ({xmin_mm:+.3f} \le x_0 [\mathrm{{mm}}] '
+                    '\le {xmax_mm:+.3f}) ').format(
+                        nx=nx,
+                        xmin_mm=abs_xmax * 1e3 * (-1),
+                        xmax_mm=abs_xmax * 1e3,
+                    )))
+                doc.append(plx.NoEscape('\ points'))
+                if y0_offset != 0.0:
+                    doc.append(
+                        ', with a constant initial vertical offset of {:.3g} mm.'.format(
+                        y0_offset * 1e3))
+                else:
+                    doc.append('.')
+
+                #doc.append(plx.NoEscape('\ '))
+                doc.append(plx.Command('par'))
+
+                doc.append((
+                    f'The plots for tune shift with vertical amplitude were '
+                    f'generated by tracking particles for {n_turns:d} turns at '
+                    f'each point in the array of '))
+                doc.append(MathText((
+                    '{ny:d}\, ({ymin_mm:+.3f} \le y_0 [\mathrm{{mm}}] '
+                    '\le {ymax_mm:+.3f}) ').format(
+                        ny=ny,
+                        ymin_mm=abs_ymax * 1e3 * (-1),
+                        ymax_mm=abs_ymax * 1e3,
+                    )))
+                doc.append(plx.NoEscape('\ points'))
+                if x0_offset != 0.0:
+                    doc.append(
+                        ', with a constant initial horizontal offset of {:.3g} mm.'.format(
+                        x0_offset * 1e3))
+                else:
+                    doc.append('.')
+
+                doc.append(plx.Command('par'))
+                doc.append(ver_sentence)
                 #doc.append(plx.Command('vspace', plx.NoEscape('-10pt')))
                 doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
 
-                for plane in ('x', 'y'):
+                if False:
+                    for plane in ('x', 'y'):
 
-                    with doc.create(plx.Figure(position='h!')) as fig:
+                        with doc.create(plx.Figure(position='h!')) as fig:
 
-                        doc.append(plx.NoEscape(r'\centering'))
+                            doc.append(plx.NoEscape(r'\centering'))
 
-                        for iFig, (page, caption) in enumerate([
-                            (1, MT(r'\nu') + ' vs. ' + MT(fr'A_{plane} (> 0)')),
-                            (3, MT(r'\nu') + ' vs. ' + MT(fr'A_{plane} (< 0)')),
-                            (2, 'Tune footprint vs. ' + MT(fr'A_{plane} (> 0)')),
-                            (4, 'Tune footprint vs. ' + MT(fr'A_{plane} (< 0)')),
-                            ]):
-                            with doc.create(SubFigureForMultiPagePDF(
-                                position='b', width=plx.utils.NoEscape(r'0.5\linewidth'))) as subfig:
-                                subfig.add_image(
-                                    sub_pdfs['tswa'],
-                                    page=(page if plane == 'x' else page + 4),
-                                    width=plx.utils.NoEscape(r'\linewidth'))
-                                #doc.append(plx.Command('vspace', plx.NoEscape('-10pt')))
-                                doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
-                                subfig.add_caption(caption.dumps_for_caption())
+                            page_caption_list = [
+                                (1, MT(r'\nu') + ' vs. ' + MT(fr'A_{plane} (> 0)')),
+                                (3, MT(r'\nu') + ' vs. ' + MT(fr'A_{plane} (< 0)')),
+                                (2, 'Tune footprint vs. ' + MT(fr'A_{plane} (> 0)')),
+                                (4, 'Tune footprint vs. ' + MT(fr'A_{plane} (< 0)')),
+                            ]
 
-                            if iFig in (1,):
-                                doc.append(plx.NewLine())
+                            for iFig, (page, caption) in enumerate(page_caption_list):
+                                with doc.create(SubFigureForMultiPagePDF(
+                                    position='b', width=plx.utils.NoEscape(r'0.5\linewidth'))) as subfig:
+                                    subfig.add_image(
+                                        sub_pdfs['tswa'],
+                                        page=(page if plane == 'x' else page + 4),
+                                        width=plx.utils.NoEscape(r'\linewidth'))
+                                    #doc.append(plx.Command('vspace', plx.NoEscape('-10pt')))
+                                    doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                                    subfig.add_caption(caption.dumps_for_caption())
 
-                        #doc.append(plx.Command('vspace', plx.NoEscape('-5pt')))
-                        doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
-                        fig.add_caption('Tune-shift with {} amplitude.'.format(
-                            'horizontal' if plane == 'x' else 'vertical'))
+                                if iFig in (1,):
+                                    doc.append(plx.NewLine())
 
-                    doc.append(plx.NewPage())
+                            #doc.append(plx.Command('vspace', plx.NoEscape('-5pt')))
+                            doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                            fig.add_caption('Tune-shift with {} amplitude.'.format(
+                                'horizontal' if plane == 'x' else 'vertical'))
+
+                    #doc.append(plx.NewPage())
+                    doc.append(plx.Command('clearpage'))
+                else:
+                    for plane, page_caption_list in [
+                        ('x', tswa_page_caption_list[:2]),
+                        ('y', tswa_page_caption_list[2:])]:
+
+                        with doc.create(plx.Figure(position='h!')) as fig:
+
+                            doc.append(plx.NoEscape(r'\centering'))
+
+                            for iFig, (page, caption) in enumerate(page_caption_list):
+                                with doc.create(SubFigureForMultiPagePDF(
+                                    position='b', width=plx.utils.NoEscape(r'0.5\linewidth'))) as subfig:
+                                    subfig.add_image(
+                                        sub_pdfs['tswa'], page=page,
+                                        width=plx.utils.NoEscape(r'\linewidth'))
+                                    doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                                    subfig.add_caption(caption.dumps_for_caption())
+
+                                if iFig in (1,):
+                                    doc.append(plx.NewLine())
+
+                            doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                            fig.add_caption('Tune-shift with {} amplitude.'.format(
+                                'horizontal' if plane == 'x' else 'vertical'))
+
+                    #doc.append(plx.NewPage())
+                    doc.append(plx.Command('clearpage'))
+
+
+
 
         if 'nonlin_chrom' in included_types:
 
             if new_page_required:
-                doc.append(plx.NewPage())
+                #doc.append(plx.NewPage())
+                doc.append(plx.Command('clearpage'))
                 new_page_required = False
 
             with doc.create(plx.Section('Nonlinear Chromaticity')):
-                doc.append('Placeholder.')
+                d = pe.util.load_pgz_file(nonlin_data_filepaths['nonlin_chrom'])
+                ver_sentence = (
+                    f'ELEGANT version {d["_version_ELEGANT"]} was used '
+                    f'to compute the nonlinear chromaticity data.')
+
+                assert os.path.basename(d['input']['LTE_filepath']) \
+                       == os.path.basename(input_LTE_filepath)
+                assert d['input']['lattice_file_contents'] == LTE_contents
+
+                n_turns = d['input']['n_turns']
+                ndelta = d['input']['ndelta']
+                delta_min = d['input']['delta_min']
+                delta_max = d['input']['delta_max']
+                x0_offset = d['input']['x0_offset']
+                y0_offset = d['input']['y0_offset']
+
+                doc.append((
+                    f'The plots for nonlinear chromaticity were generated by '
+                    f'tracking particles for {n_turns:d} turns at each point in '
+                    f'the array of '))
+                doc.append(MathText((
+                    '{ndelta:d}\, ({delta_min:+.3g} \le \delta [\%] '
+                    '\le {delta_max:+.3g}) ').format(
+                        ndelta=ndelta,
+                        delta_min=delta_min * 1e2, delta_max=delta_max * 1e2,
+                    )))
+                doc.append(plx.NoEscape('\ points'))
+                if (x0_offset != 0.0) or (y0_offset != 0.0):
+                    doc.append(
+                        (', with a constant initial horizontal and vertical '
+                         'offset of {:.3g} and {:.3g} mm, respectively.').format(
+                        x0_offset * 1e3, y0_offset * 1e3))
+                else:
+                    doc.append('.')
+
+                doc.append(plx.Command('par'))
+                doc.append(ver_sentence)
                 #doc.append(plx.Command('vspace', plx.NoEscape('-10pt')))
                 doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
                 with doc.create(plx.Figure(position='h!')) as fig:

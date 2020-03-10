@@ -14,6 +14,7 @@ input_LTE:
     filepath: 'CLSmod23pm_20200123T160920_moga_prod_v1_002708.lte'
     zeroSexts_filepath: 'CLSmod23pm_20200123T160920_moga_prod_v1_002708_ZeroSexts.lte'
 lattice_prop:
+    #recalc: True
     recalc: False
     #
     use_beamline_cell: 'CELL'
@@ -67,7 +68,7 @@ nonlin:
         fmap_px: False # Off-Momentum Frequency Map
         cmap_xy: False # On-Momentum Chaos Map
         cmap_px: False # Off-Momentum Chaos Map
-        tswa: True # Tune Shift with Amplitude
+        tswa: False # Tune Shift with Amplitude
         nonlin_chrom: False # Nonlinear Chromaticity
     #
     # Common options:
@@ -79,7 +80,8 @@ nonlin:
     common_remote_opts:
         partition: 'short'
         #ntasks: 200
-        ntasks: 50
+        #ntasks: 50
+        ntasks: 80
         # nodelist: ['apcpu-004']
         # time: '2:00:00'
         mail_type_end: False
@@ -135,32 +137,32 @@ nonlin:
     #
     # Options specific only for on-momentum frequency map calculation:
     fmap_xy_calc_opts:
-        grid_name: 'xyTest'
-        #grid_name: 'xy1'
+        #grid_name: 'xyTest'
+        grid_name: 'xy1'
         n_turns: 1024
         # remote_opts:
         #     ntasks: 200
     # Options specific only for off-momentum frequency map calculation
     fmap_px_calc_opts:
-        grid_name: 'pxTest'
-        #grid_name: 'px1'
+        #grid_name: 'pxTest'
+        grid_name: 'px1'
         n_turns: 1024
     # Options specific only for on-momentum chaos map calculation
     cmap_xy_calc_opts:
-        grid_name: 'xyTest'
-        #grid_name: 'xy1'
+        #grid_name: 'xyTest'
+        grid_name: 'xy1'
         n_turns: 128
     # Options specific only for off-momentum chaos map calculation
     cmap_px_calc_opts:
-        grid_name: 'pxTest'
-        #grid_name: 'px1'
+        #grid_name: 'pxTest'
+        grid_name: 'px1'
         n_turns: 128
     #
     # List of 1-D grid specs for tune-shift-with-amplitude calculation:
     tswa_grids:
         xy1:
             abs_xmax: 1e-3
-            nx: 100
+            nx: 50
             abs_ymax: 0.5e-3
             ny: 50
             # Optional (below)
@@ -179,7 +181,7 @@ nonlin:
         p1:
             delta_min: -4e-2
             delta_max: +3e-2
-            ndelta: 50
+            ndelta: 100
             # Optional (below)
             x_offset: 1e-6
             y_offset: 1e-6
@@ -191,3 +193,34 @@ nonlin:
         remote_opts:
             partition: 'short'
             time: '7:00'
+    #
+    cmap_xy_plot_opts:
+        cmin: -24
+        cmax: -10
+    cmap_px_plot_opts:
+        cmin: -24
+        cmax: -10
+    tswa_plot_opts:
+        plot_plus_minus_combined: True # (default: True)
+        plot_xy0: True # (default: True)
+        plot_Axy: False # (default: False) These plots will NOT be included into
+                        # the main report, but will be saved to the "tswa" PDF file
+                        # if set to True.
+        use_time_domain_amplitude: True # Only relevant when "plot_Axy=True"
+        plot_fft: True # If True, it may take a while to save the "tswa" PDF file.
+                       # But these FFT color plots will NOT be included into
+                       # the main report. These plots are for a debugging purpose
+                       # or for deciding the number of divisions.
+        footprint_nuxlim: [0.0, 1.0]
+        footprint_nuylim: [0.0, 1.0]
+        fit_xmin: -0.5e-3
+        fit_xmax: +0.5e-3
+        fit_ymin: -0.25e-3
+        fit_ymax: +0.25e-3
+    nonlin_chrom_plot_opts:
+        plot_fft: True # If True, it may take a while to save the "nonlin_chrom"
+                       # PDF file. But these FFT color plots will NOT be included
+                       # into the main report. These plots are for a debugging
+                       # purpose or for deciding the number of divisions.
+        max_chrom_order: 4
+        fit_deltalim: [-2e-2, +2e-2]
