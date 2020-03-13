@@ -1,0 +1,303 @@
+author: 'Yoshiteru Hidaka'
+
+E_MeV: 3e3
+
+input_LTE:
+    load_param: False
+    # If "load_param" is True, you must specify "base_filepath" (%s.lte) and "param_filepath" (%s.param)
+    base_filepath:
+        "/GPFS/APC/yhidaka/git_repos/nsls2cb/20200123_opt_CLS/\
+        moga_prod_v1/lattice3_CLSScale_36pm_mod_opt2020-01-23T16-09-20_KickElems.lte"
+    param_filepath: '/GPFS/APC/yhidaka/git_repos/nsls2cb/20200123_opt_CLS/moga_prod_v1/moga-002708.param'
+    #
+    generate_zeroSexts: False
+    #
+    filepath: 'CLSmod23pm_20200123T160920_moga_prod_v1_002708.lte'
+    zeroSexts_filepath: 'CLSmod23pm_20200123T160920_moga_prod_v1_002708_ZeroSexts.lte'
+
+lattice_props:
+    recalc: True
+    replot: False
+    #
+    use_beamline_cell: &use_beamline_cell 'CELL'
+    use_beamline_ring: &use_beamline_ring 'RING'
+    #
+    twiss_calc_opts:
+        one_period:
+            use_beamline: *use_beamline_cell
+            element_divisions: 10
+        ring_natural: # K2 values of all sextupoles set to zero
+            use_beamline: *use_beamline_ring
+        ring:
+            use_beamline: *use_beamline_ring
+    twiss_plot_opts:
+        one_period:
+        - {print_scalars: [], right_margin_adj: 0.85,}
+        - &zoom_in
+          {print_scalars: [], slim: [0, 9], right_margin_adj: 0.85,
+           disp_elem_names: {bends: True, quads: True, sexts: True,
+                             font_size: 8, extra_dy_frac: 0.05},
+          }
+        - <<: *zoom_in
+          slim: [4, 16]
+        - <<: *zoom_in
+          slim: [14, 23]
+        ring_natural: []
+        ring: []
+    twiss_plot_captions:
+        one_period:
+        - 'Twiss functions for 2 cells (1 super-period).'
+        - 'Twiss functions $(0 \le s \le 9)$.'
+        - 'Twiss functions $(4 \le s \le 16)$.'
+        - 'Twiss functions $(14 \le s \le 23)$.'
+        ring_natural: []
+        ring: []
+    #
+    extra_props:
+        beta:
+            LS:
+                label: '$(\beta_x, \beta_y)$ at LS Center'
+                name: 'M_LS'
+                occur: 0
+            SS:
+                label: '$(\beta_x, \beta_y)$ at SS Center'
+                name: 'M_SS'
+                occur: 0
+        #
+        #phase_adv:
+        #    'LS & SS':
+        #        label: 'Phase Advance btw. LS \& SS $(\Delta\nu_x, \Delta\nu_y)$'
+        #        elem1: {'name': 'M_LS', 'occur': 0}
+        #        elem2: {'name': 'M_SS', 'occur': 0}
+        floor_comparison:
+            ref_flr_filepath: /GPFS/APC/yhidaka/git_repos/nsls2cb/nsls2.flr
+            SS:
+                label: 'Source Point Diff. at SS $(\Delta x, \Delta z)$'
+                ref_elem: {'name': 'MID', 'occur': 0}
+                cur_elem: {'name': 'M_SS', 'occur': 0}
+            LS:
+                label: 'Source Point Diff. at LS $(\Delta x, \Delta z)$'
+                ref_elem: {'name': 'MID', 'occur': 1}
+                cur_elem: {'name': 'M_LS', 'occur': 1} # Must pick the 2nd index
+        length:
+            L_SS:
+                label: 'Length of Short Straight'
+                name_list: ['OLONG1', 'OS2B', 'OLONG2']
+            L_LS:
+                label: 'Length of Long Straight'
+                name_list: ['OLONG2', 'OS2B', 'OLONG1']
+    #
+    table_order: # You can specify the order of the computed lattice property
+    # values in the table within the generated report.
+    - 'E_GeV' # Beam energy
+    - 'eps_x' # Natural horizontal emittance
+    - 'J' # Damping partitions
+    - 'nu' # Ring tunes
+    - 'ksi_nat' # Natural chromaticities
+    - 'ksi_cor' # Corrected chromaticities
+    - 'alphac' # Momentum compaction
+    - 'U0' # Energy loss per turn
+    - 'sigma_delta' # Energy spread
+    - ['beta', 'LS']
+    - ['beta', 'SS']
+    - 'max_beta' # Max beta functions
+    - 'min_beta' # Min beta functions
+    - 'max_min_etax' # Max & Min etax
+    #- ['phase_adv', 'LS & SS']
+    - ['length', 'L_LS']
+    - ['length', 'L_SS']
+    - 'circumf' # Circumference
+    - 'circumf_change_%' # Circumference change [%] from NSLS-II
+    - 'n_periods_in_ring' # Number of super-periods for a full ring
+    - ['floor_comparison', 'LS']
+    - ['floor_comparison', 'SS']
+
+nonlin:
+    include:
+        fmap_xy: True # On-Momentum Frequency Map
+        fmap_px: True # Off-Momentum Frequency Map
+        cmap_xy: True # On-Momentum Chaos Map
+        cmap_px: True # Off-Momentum Chaos Map
+        tswa: True # Tune Shift with Amplitude
+        nonlin_chrom: True # Nonlinear Chromaticity
+    recalc: # Will re-calculate potentially time-consuming data
+        fmap_xy: False # On-Momentum Frequency Map
+        fmap_px: False # Off-Momentum Frequency Map
+        cmap_xy: False # On-Momentum Chaos Map
+        cmap_px: False # Off-Momentum Chaos Map
+        tswa: False # Tune Shift with Amplitude
+        nonlin_chrom: False # Nonlinear Chromaticity
+    replot: # Will re-plot and save plotss as PDF files
+        fmap_xy: False # On-Momentum Frequency Map
+        fmap_px: False # Off-Momentum Frequency Map
+        cmap_xy: False # On-Momentum Chaos Map
+        cmap_px: False # Off-Momentum Chaos Map
+        tswa: False # Tune Shift with Amplitude
+        nonlin_chrom: False # Nonlinear Chromaticity
+    #
+    # Common options:
+    use_beamline: *use_beamline_ring
+    N_KICKS: {KQUAD: 40, KSEXT: 8, CSBEND: 12}
+    #
+    # Common parallel options (can be overwritten in the options block
+    # for each specific calculation type):
+    common_remote_opts:
+        partition: 'short'
+        #ntasks: 200
+        #ntasks: 50
+        ntasks: 80
+        # nodelist: ['apcpu-004']
+        # time: '2:00:00'
+        mail_type_end: False
+        mail_user: &email_address 'your_username@bnl.gov'
+    #
+    # List of 2-D grid specs for fmap & cmap calculations:
+    xy_grids:
+        xyTest:
+            xmin: -8e-3
+            xmax: +8e-3
+            ymin: 0.0
+            ymax: +2e-3
+            nx: 21
+            ny: 21
+            # Optional (below)
+            x_offset: 1e-6
+            y_offset: 1e-6
+            delta_offset: 0.0
+        xy1:
+            xmin: -8e-3
+            xmax: +8e-3
+            ymin: 0.0
+            ymax: +2e-3
+            nx: 201
+            ny: 201
+            # Optional (below)
+            x_offset: 1e-6
+            y_offset: 1e-6
+            delta_offset: 0.0
+    px_grids:
+        pxTest:
+            delta_min: -0.05
+            delta_max: +0.05
+            xmin: -8e-3
+            xmax: +8e-3
+            ndelta: 21
+            nx: 21
+            # Optional (below)
+            x_offset: 1e-6
+            y_offset: 1e-6
+            delta_offset: 0.0
+        px1:
+            delta_min: -0.05
+            delta_max: +0.05
+            xmin: -8e-3
+            xmax: +8e-3
+            ndelta: 201
+            nx: 201
+            # Optional (below)
+            x_offset: 1e-6
+            y_offset: 1e-6
+            delta_offset: 0.0
+    #
+    # Options specific only for on-momentum frequency map calculation:
+    fmap_xy_calc_opts:
+        #grid_name: 'xyTest'
+        grid_name: 'xy1'
+        n_turns: 1024
+        # remote_opts:
+        #     ntasks: 200
+    # Options specific only for off-momentum frequency map calculation
+    fmap_px_calc_opts:
+        #grid_name: 'pxTest'
+        grid_name: 'px1'
+        n_turns: 1024
+    # Options specific only for on-momentum chaos map calculation
+    cmap_xy_calc_opts:
+        #grid_name: 'xyTest'
+        grid_name: 'xy1'
+        n_turns: 128
+    # Options specific only for off-momentum chaos map calculation
+    cmap_px_calc_opts:
+        #grid_name: 'pxTest'
+        grid_name: 'px1'
+        n_turns: 128
+    #
+    # List of 1-D grid specs for tune-shift-with-amplitude calculation:
+    tswa_grids:
+        xy1:
+            abs_xmax: 1e-3
+            nx: 50
+            abs_ymax: 0.5e-3
+            ny: 50
+            # Optional (below)
+            x_offset: 1e-6
+            y_offset: 1e-6
+    # Options specific only for tune-shift-with-amplitude calculation
+    tswa_calc_opts:
+        grid_name: 'xy1'
+        n_turns: 1024
+        remote_opts:
+            partition: 'short'
+            time: '7:00'
+    #
+    # List of 1-D grid specs for nonlinear chromaticity calculation:
+    nonlin_chrom_grids:
+        p1:
+            delta_min: -4e-2
+            delta_max: +3e-2
+            ndelta: 100
+            # Optional (below)
+            x_offset: 1e-6
+            y_offset: 1e-6
+            delta_offset: 0.0
+    # Options specific only for nonlinear chromaticity calculation
+    nonlin_chrom_calc_opts:
+        grid_name: 'p1'
+        n_turns: 1024
+        remote_opts:
+            partition: 'short'
+            time: '7:00'
+    #
+    cmap_xy_plot_opts:
+        cmin: -24
+        cmax: -10
+    cmap_px_plot_opts:
+        cmin: -24
+        cmax: -10
+    tswa_plot_opts:
+        plot_plus_minus_combined: True # (default: True)
+        plot_xy0: True # (default: True)
+        plot_Axy: False # (default: False) These plots will NOT be included into
+                        # the main report, but will be saved to the "tswa" PDF file
+                        # if set to True.
+        use_time_domain_amplitude: True # Only relevant when "plot_Axy=True"
+        plot_fft: True # If True, it may take a while to save the "tswa" PDF file.
+                       # But these FFT color plots will NOT be included into
+                       # the main report. These plots are for a debugging purpose
+                       # or for deciding the number of divisions.
+        footprint_nuxlim: [0.0, 1.0]
+        footprint_nuylim: [0.0, 1.0]
+        fit_xmin: -0.5e-3
+        fit_xmax: +0.5e-3
+        fit_ymin: -0.25e-3
+        fit_ymax: +0.25e-3
+    nonlin_chrom_plot_opts:
+        plot_fft: True # If True, it may take a while to save the "nonlin_chrom"
+                       # PDF file. But these FFT color plots will NOT be included
+                       # into the main report. These plots are for a debugging
+                       # purpose or for deciding the number of divisions.
+        max_chrom_order: 4
+        fit_deltalim: [-2e-2, +2e-2]
+
+report_paragraphs:
+    lattice_description:
+        - >
+          This lattice was based on the 36-pm scaled version of a Canadian Light
+          Source upgrade lattice candidate (scaling done by G. Wang). It was
+          further optimized to 23 picometers. This lattice is still a 30-cell
+          periodic lattice, which means the ID source points do not match with
+          the current NSLS-II layout.
+    lattice_properties:
+        - >
+          The acronyms "LS" and "SS" in the table stand for "Long Straight" and
+          "Short Straight," respectively.
