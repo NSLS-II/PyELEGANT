@@ -33,8 +33,9 @@ SLURM_EXCL_NODES = None
     #f'cpu-{n:03d}' for n in list(range(2, 5+1)) +
     #list(range(7, 15+1))] # exclude both apcpu & NFS nodes, i.e., including only GPFS nodes
 
-MODULE_LOAD_CMD_STR = 'elegant-latest'
+#MODULE_LOAD_CMD_STR = 'elegant-latest'
 #MODULE_LOAD_CMD_STR = 'elegant-latest elegant/2019.2.1'
+MODULE_LOAD_CMD_STR = 'elegant/2020.1.1-1'
 
 _p = Popen(shlex.split('which elegant'), stdout=PIPE, stderr=PIPE, encoding='utf-8')
 _out, _err = _p.communicate()
@@ -56,20 +57,19 @@ if _out.strip() == '':
             else:
                 raise RuntimeError('# Loading module "elegant" failed.')
 
-try:
-    ver_prefix = 'This is elegant'
-    p = Popen(shlex.split('elegant'), stdout=PIPE, stderr=PIPE, encoding='utf-8')
-    out, err = p.communicate()
-    for line in out.split(','):
-        if ver_prefix in line:
-            __elegant_version__ = line[line.index(ver_prefix)+len(ver_prefix):].strip()
-            break
+p = Popen(shlex.split('which elegant'), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+out, err = p.communicate()
+if out.strip():
+    path_tokens = out.split('/')
+    if 'elegant' in path_tokens:
+        __elegant_version__ = path_tokens[path_tokens.index('elegant')+1]
     else:
         __elegant_version__ = 'unknown'
-    del ver_prefix, p, out, err, line
-except FileNotFoundError:
+    del path_tokens
+else:
     print('\n*** WARNING: ELEGANT not available.')
     __elegant_version__ = None
+del p, out, err
 
 # CRITICAL: The line "#!/bin/bash" must come on the first line, not the second or later.
 __sbatch_sh_example = '''#!/bin/bash
