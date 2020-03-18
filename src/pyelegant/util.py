@@ -603,3 +603,8 @@ def run_cmd_w_realtime_print(cmd_list, return_stdout=False, return_stderr=False)
         output = None
 
     return output
+
+def deepcopy_dict(d):
+    """"""
+
+    return pickle.loads(pickle.dumps(d))
