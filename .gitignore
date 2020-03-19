@@ -15,3 +15,9 @@ version.json
 
 demo/*.hdf5
 demo/*.pgz
+
+report_templates/*.pgz
+report_templates/*.pkl
+report_templates/*.tex
+report_templates/*.pdf
+report_templates/*_ZeroSexts.lte
