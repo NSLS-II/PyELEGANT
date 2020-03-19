@@ -336,6 +336,9 @@ def _calc_matrix_elem_linear_natural_chrom(twi_arrays, parameters_arrays):
             )
         output['nat_ksi_y'].append(dksi)
 
+    for k in ['nat_ksi_x', 'nat_ksi_y']:
+        output[k] = np.array(output[k])
+
     return output
 
 def get_visible_inds(all_s_array, slim, s_margin_m=0.1):
