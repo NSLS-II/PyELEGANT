@@ -33,9 +33,9 @@ SLURM_EXCL_NODES = None
     #f'cpu-{n:03d}' for n in list(range(2, 5+1)) +
     #list(range(7, 15+1))] # exclude both apcpu & NFS nodes, i.e., including only GPFS nodes
 
-#MODULE_LOAD_CMD_STR = 'elegant-latest'
+MODULE_LOAD_CMD_STR = 'elegant-latest'
 #MODULE_LOAD_CMD_STR = 'elegant-latest elegant/2019.2.1'
-MODULE_LOAD_CMD_STR = 'elegant/2020.1.1-1'
+#MODULE_LOAD_CMD_STR = 'elegant/2020.1.1-1'
 
 _p = Popen(shlex.split('which elegant'), stdout=PIPE, stderr=PIPE, encoding='utf-8')
 _out, _err = _p.communicate()
@@ -1020,7 +1020,7 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
         partition=remote_opts.get('partition', 'normal'),
         ntasks=remote_opts.get('ntasks', 50), x11=remote_opts.get('x11', False),
         spread_job=remote_opts.get('spread_job', False),
-        timelimit_str=remote_opts.get('timelimit_str', None))
+        timelimit_str=remote_opts.get('time', None))
 
     d['output_filepath'] = output_filepath
 
