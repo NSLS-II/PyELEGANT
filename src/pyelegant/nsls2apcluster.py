@@ -33,9 +33,9 @@ SLURM_EXCL_NODES = None
     #f'cpu-{n:03d}' for n in list(range(2, 5+1)) +
     #list(range(7, 15+1))] # exclude both apcpu & NFS nodes, i.e., including only GPFS nodes
 
-MODULE_LOAD_CMD_STR = 'elegant-latest'
-#MODULE_LOAD_CMD_STR = 'elegant-latest elegant/2019.2.1'
-#MODULE_LOAD_CMD_STR = 'elegant/2020.1.1-1'
+#MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant-latest', ''
+#MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant-latest elegant/2019.2.1', ''
+MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant/2020.1.1-1', '--mpi=pmi2'
 
 _p = Popen(shlex.split('which elegant'), stdout=PIPE, stderr=PIPE, encoding='utf-8')
 _out, _err = _p.communicate()
@@ -1167,7 +1167,7 @@ def gen_mpi_submit_script(
 {spread_job}
 
 {x11}
-srun python -m mpi4py.futures {main_script_path} _mpi_starmap {input_filepath}
+srun {mpi_compiler_opt} python -m mpi4py.futures {main_script_path} _mpi_starmap {input_filepath}
     '''
 
     abs_timelimit = SLURM_ABS_TIME_LIMIT[partition]
@@ -1185,6 +1185,7 @@ srun python -m mpi4py.futures {main_script_path} _mpi_starmap {input_filepath}
         slurm_timelimit_str = '#SBATCH --time={}'.format(timelimit_str)
 
     contents = contents_template.format(
+        mpi_compiler_opt=MPI_COMPILER_OPT_STR,
         main_script_path=__file__[:-3]+'_mpi_script.py', input_filepath=input_filepath,
         job_name=job_name, partition=partition, ntasks=ntasks,
         slurm_timelimit_str=slurm_timelimit_str,
