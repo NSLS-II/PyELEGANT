@@ -1804,7 +1804,8 @@ def plot_nonlin_props(rootname, nonlin_config):
             pp.savefig(figure=fignum)
             plt.close(fignum)
         pp.close()
-
+    else:
+        sel_tswa_caption_keys = []
 
     calc_type = 'nonlin_chrom'
     if calc_type in nonlin_data_filepaths:

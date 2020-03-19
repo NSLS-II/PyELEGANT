@@ -271,7 +271,7 @@ nonlin:
                         # the main report, but will be saved to the "tswa" PDF file
                         # if set to True.
         use_time_domain_amplitude: True # Only relevant when "plot_Axy=True"
-        plot_fft: True # If True, it may take a while to save the "tswa" PDF file.
+        plot_fft: False # If True, it may take a while to save the "tswa" PDF file.
                        # But these FFT color plots will NOT be included into
                        # the main report. These plots may be useful for debugging
                        # or for deciding the number of divisions for x0/y0 arrays.
