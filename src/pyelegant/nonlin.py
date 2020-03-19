@@ -1666,6 +1666,8 @@ def calc_chrom_track(
                 #output='chrom.%J.out', error='chrom.%J.err',
                 #partition='short', ntasks=50)
 
+        remote_opts['ntasks'] = min([len(delta_array), remote_opts['ntasks']])
+
         delta_sub_array_list, reverse_mapping = util.chunk_list(
             delta_array, remote_opts['ntasks'])
 
@@ -2637,6 +2639,8 @@ def _calc_tswa(
                 #partition='short', ntasks=50)
 
         xy0_array = np.vstack((x0_array, y0_array)).T
+
+        remote_opts['ntasks'] = min([len(xy0_array), remote_opts['ntasks']])
 
         xy0_sub_array_list, reverse_mapping = util.chunk_list(
             xy0_array, remote_opts['ntasks'])
