@@ -16,7 +16,7 @@ input_LTE:
     zeroSexts_filepath: 'CLSmod23pm_20200123T160920_moga_prod_v1_002708_ZeroSexts.lte'
 
 lattice_props:
-    recalc: True
+    recalc: False
     replot: False
     #
     use_beamline_cell: &use_beamline_cell 'CELL'
@@ -273,8 +273,8 @@ nonlin:
         use_time_domain_amplitude: True # Only relevant when "plot_Axy=True"
         plot_fft: True # If True, it may take a while to save the "tswa" PDF file.
                        # But these FFT color plots will NOT be included into
-                       # the main report. These plots are for a debugging purpose
-                       # or for deciding the number of divisions.
+                       # the main report. These plots may be useful for debugging
+                       # or for deciding the number of divisions for x0/y0 arrays.
         footprint_nuxlim: [0.0, 1.0]
         footprint_nuylim: [0.0, 1.0]
         fit_xmin: -0.5e-3
