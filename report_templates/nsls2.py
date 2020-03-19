@@ -1931,7 +1931,7 @@ if __name__ == '__main__':
                         do_plot[k] = True
 
         if do_calc and any(do_calc.values()):
-            calc_nonlin_props(input_LTE_filepath, conf['E_MeV'], ncf)
+            calc_nonlin_props(input_LTE_filepath, rootname, conf['E_MeV'], ncf)
 
         if do_plot and any(do_plot.values()):
 
