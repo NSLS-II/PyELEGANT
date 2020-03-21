@@ -19,30 +19,28 @@ plx = pe.latex
 def gen_LTE_from_base_LTE_and_param_file(conf, input_LTE_filepath):
     """"""
 
-    assert conf['input_LTE']['base_filepath'].endswith('.lte')
-    base_LTE_filepath = conf['input_LTE']['base_filepath']
+    assert conf['input_LTE']['base_LTE_filepath'].endswith('.lte')
+    base_LTE_filepath = conf['input_LTE']['base_LTE_filepath']
 
     load_parameters = dict(filename=conf['input_LTE']['param_filepath'])
 
     pe.eleutil.save_lattice_after_load_parameters(
         base_LTE_filepath, input_LTE_filepath, load_parameters)
 
-def gen_zeroSexts_LTE(conf, input_LTE_filepath, report_folderpath):
+def gen_zeroSexts_LTE(input_LTE_filepath, report_folderpath, regenerate):
     """
     Turn off all sextupoles' K2 values to zero and save a new LTE file.
     """
 
-    if 'zeroSexts_filepath' in conf['input_LTE']:
-        zeroSexts_LTE_filepath = conf['input_LTE']['zeroSexts_filepath']
-    else:
-        input_LTE_filename = os.path.basename(input_LTE_filepath)
-        zeroSexts_LTE_filepath = os.path.join(
-            report_folderpath,
-            input_LTE_filename.replace('.lte', '_ZeroSexts.lte'))
+    input_LTE_filename = os.path.basename(input_LTE_filepath)
+    zeroSexts_LTE_filepath = os.path.join(
+        report_folderpath,
+        input_LTE_filename.replace('.lte', '_ZeroSexts.lte'))
 
-    alter_elements = dict(name='*', type='KSEXT', item='K2', value = 0.0)
-    pe.eleutil.save_lattice_after_alter_elements(
-        input_LTE_filepath, zeroSexts_LTE_filepath, alter_elements)
+    if (not os.path.exists(zeroSexts_LTE_filepath)) or regenerate:
+        alter_elements = dict(name='*', type='KSEXT', item='K2', value = 0.0)
+        pe.eleutil.save_lattice_after_alter_elements(
+            input_LTE_filepath, zeroSexts_LTE_filepath, alter_elements)
 
     return zeroSexts_LTE_filepath
 
@@ -52,7 +50,14 @@ def calc_lin_props(
     """"""
 
     conf = lattice_props_conf
-    conf_twi = conf['twiss_calc_opts']
+
+    default_twiss_calc_opts = dict(
+        one_period={'use_beamline': conf['use_beamline_cell'],
+                    'element_divisions': 10},
+        ring_natural={'use_beamline': conf['use_beamline_ring']},
+        ring={'use_beamline': conf['use_beamline_ring']},
+    )
+    conf_twi = conf.get('twiss_calc_opts', default_twiss_calc_opts)
 
     sel_data = {'E_GeV': E_MeV / 1e3}
     interm_array_data = {} # holds data that will be only used to derive some other quantities
@@ -532,8 +537,7 @@ def create_beamline_elements_list_subsection(doc, flat_elem_s_name_type_list):
                 table.add_row([_s.strip().replace('#', '') for _s in line.split(':')])
 
 def add_nonlin_sections(
-    doc, conf, rootname, report_folderpath, input_LTE_filepath,
-    tswa_plot_captions=None):
+    doc, conf, rootname, report_folderpath, input_LTE_filepath):
     """"""
 
     ncf = conf['nonlin']
@@ -544,7 +548,8 @@ def add_nonlin_sections(
         rootname, report_folderpath, ncf)
     included_types = [k for k, _included in ncf.get('include', {}).items()
                       if _included]
-    plots_pdf_paths = {k: f'{rootname}.{k}.pdf' for k in included_types}
+    plots_pdf_paths = {k: os.path.join(report_folderpath, f'{rootname}.{k}.pdf')
+                       for k in included_types}
 
     new_page_required = False
 
@@ -567,6 +572,10 @@ def add_nonlin_sections(
 
         if new_page_required:
             doc.append(plx.ClearPage())
+
+        with open(os.path.join(report_folderpath,
+                               f'{rootname}.tswa.plot_suppl.pkl'), 'rb') as f:
+            tswa_plot_captions = pickle.load(f)
 
         add_tswa_section(doc, plots_pdf_paths, nonlin_data_filepaths,
                          input_LTE_filepath, LTE_contents, tswa_plot_captions)
@@ -673,7 +682,8 @@ def add_fmap_section(
                         position='b', width=plx.utils.NoEscape(r'0.5\linewidth'))
                                     ) as subfig:
                         subfig.add_image(
-                            plots_pdf_paths[k], width=plx.utils.NoEscape(r'\linewidth'))
+                            os.path.basename(plots_pdf_paths[k]),
+                            width=plx.utils.NoEscape(r'\linewidth'))
                         doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
                         subfig.add_caption(caption)
                 doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
@@ -698,7 +708,7 @@ def add_fmap_section(
                         with doc.create(plx.Figure(position='h!t')) as fig:
                             doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
 
-                            fig.add_image(plots_pdf_paths[k],
+                            fig.add_image(os.path.basename(plots_pdf_paths[k]),
                                           width=plx.utils.NoEscape(r'0.6\linewidth'))
                             fig.add_caption(caption)
 
@@ -794,7 +804,8 @@ def add_cmap_section(
                         position='b', width=plx.utils.NoEscape(r'0.5\linewidth'))
                                     ) as subfig:
                         subfig.add_image(
-                            plots_pdf_paths[k], width=plx.utils.NoEscape(r'\linewidth'))
+                            os.path.basename(plots_pdf_paths[k]),
+                            width=plx.utils.NoEscape(r'\linewidth'))
                         doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
                         subfig.add_caption(caption)
                 doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
@@ -817,7 +828,7 @@ def add_cmap_section(
                         doc.append(ver_sentence)
                         with doc.create(plx.Figure(position='h!t')) as fig:
                             doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
-                            fig.add_image(plots_pdf_paths[k],
+                            fig.add_image(os.path.basename(plots_pdf_paths[k]),
                                           width=plx.utils.NoEscape(r'0.6\linewidth'))
                             fig.add_caption(caption)
 
@@ -926,7 +937,7 @@ def add_tswa_section(
                         position='b', width=plx.utils.NoEscape(r'0.5\linewidth'))
                                     ) as subfig:
                         subfig.add_image(
-                            plots_pdf_paths['tswa'], page=page,
+                            os.path.basename(plots_pdf_paths['tswa']), page=page,
                             width=plx.utils.NoEscape(r'\linewidth'))
                         doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
                         subfig.add_caption(caption.dumps_for_caption())
@@ -997,7 +1008,7 @@ def add_nonlin_chrom_section(
                     position='b', width=plx.utils.NoEscape(r'0.5\linewidth'))
                                 ) as subfig:
                     subfig.add_image(
-                        plots_pdf_paths['nonlin_chrom'], page=iPage+1,
+                        os.path.basename(plots_pdf_paths['nonlin_chrom']), page=iPage+1,
                         width=plx.utils.NoEscape(r'\linewidth'))
                     doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
                     subfig.add_caption(caption)
@@ -1005,7 +1016,7 @@ def add_nonlin_chrom_section(
             fig.add_caption('Nonlinear chromaticity.')
 
 def build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data,
-                 twiss_plot_captions, tswa_plot_captions):
+                 twiss_plot_captions):
     """"""
 
     doc = create_header(conf, report_folderpath)
@@ -1020,8 +1031,7 @@ def build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data
     doc.append(plx.ClearPage())
 
     add_nonlin_sections(
-        doc, conf, rootname, report_folderpath, input_LTE_filepath,
-        tswa_plot_captions)
+        doc, conf, rootname, report_folderpath, input_LTE_filepath)
 
     plx.generate_pdf_w_reruns(doc, clean_tex=False, silent=False)
 
@@ -1336,7 +1346,7 @@ def get_nonlin_data_filepaths(rootname, report_folderpath, nonlin_config):
     return nonlin_data_filepaths
 
 def calc_nonlin_props(LTE_filepath, rootname, report_folderpath, E_MeV,
-                      nonlin_config):
+                      nonlin_config, do_calc):
     """"""
 
     ncf = nonlin_config
@@ -1350,7 +1360,7 @@ def calc_nonlin_props(LTE_filepath, rootname, report_folderpath, E_MeV,
 
     calc_type = 'fmap_xy'
     if (calc_type in nonlin_data_filepaths) and \
-       (ncf['recalc'][calc_type] or
+       (do_calc[calc_type] or
         (not os.path.exists(nonlin_data_filepaths[calc_type]))):
 
         calc_fmap_xy(LTE_filepath, E_MeV, ncf, use_beamline, N_KICKS,
@@ -1358,7 +1368,7 @@ def calc_nonlin_props(LTE_filepath, rootname, report_folderpath, E_MeV,
 
     calc_type = 'fmap_px'
     if (calc_type in nonlin_data_filepaths) and \
-       (ncf['recalc'][calc_type] or
+       (do_calc[calc_type] or
         (not os.path.exists(nonlin_data_filepaths[calc_type]))):
 
         calc_fmap_px(LTE_filepath, E_MeV, ncf, use_beamline, N_KICKS,
@@ -1366,7 +1376,7 @@ def calc_nonlin_props(LTE_filepath, rootname, report_folderpath, E_MeV,
 
     calc_type = 'cmap_xy'
     if (calc_type in nonlin_data_filepaths) and \
-       (ncf['recalc'][calc_type] or
+       (do_calc[calc_type] or
         (not os.path.exists(nonlin_data_filepaths[calc_type]))):
 
         calc_cmap_xy(LTE_filepath, E_MeV, ncf, use_beamline, N_KICKS,
@@ -1374,14 +1384,14 @@ def calc_nonlin_props(LTE_filepath, rootname, report_folderpath, E_MeV,
 
     calc_type = 'cmap_px'
     if (calc_type in nonlin_data_filepaths) and \
-       (ncf['recalc'][calc_type] or
+       (do_calc[calc_type] or
         (not os.path.exists(nonlin_data_filepaths[calc_type]))):
 
         calc_cmap_px(LTE_filepath, E_MeV, ncf, use_beamline, N_KICKS,
                      nonlin_data_filepaths, common_remote_opts)
 
     if ('tswa_xplus' in nonlin_data_filepaths) and \
-       (ncf['recalc']['tswa'] or
+       (do_calc['tswa'] or
         (not os.path.exists(nonlin_data_filepaths['tswa_xplus'])) or
         (not os.path.exists(nonlin_data_filepaths['tswa_xminus'])) or
         (not os.path.exists(nonlin_data_filepaths['tswa_yplus'])) or
@@ -1393,7 +1403,7 @@ def calc_nonlin_props(LTE_filepath, rootname, report_folderpath, E_MeV,
 
     calc_type = 'nonlin_chrom'
     if (calc_type in nonlin_data_filepaths) and \
-       (ncf['recalc'][calc_type] or
+       (do_calc[calc_type] or
         (not os.path.exists(nonlin_data_filepaths[calc_type]))):
 
         calc_nonlin_chrom(LTE_filepath, E_MeV, nonlin_config, use_beamline, N_KICKS,
@@ -1641,7 +1651,7 @@ def _save_nonlin_plots_to_pdf(
 
     pp.close()
 
-def plot_nonlin_props(rootname, report_folderpath, nonlin_config):
+def plot_nonlin_props(rootname, report_folderpath, nonlin_config, do_plot):
     """"""
 
     ncf = nonlin_config
@@ -1652,7 +1662,7 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config):
     existing_fignums = plt.get_fignums()
 
     calc_type = 'fmap_xy'
-    if calc_type in nonlin_data_filepaths:
+    if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
         pe.nonlin.plot_fma_xy(
             nonlin_data_filepaths[calc_type], title='',
             is_diffusion=True, scatter=False)
@@ -1662,7 +1672,7 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config):
 
 
     calc_type = 'fmap_px'
-    if calc_type in nonlin_data_filepaths:
+    if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
         pe.nonlin.plot_fma_px(
             nonlin_data_filepaths[calc_type], title='',
             is_diffusion=True, scatter=False)
@@ -1671,7 +1681,7 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config):
             rootname, report_folderpath, calc_type, existing_fignums)
 
     calc_type = 'cmap_xy'
-    if calc_type in nonlin_data_filepaths:
+    if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
         _plot_kwargs = ncf.get(f'{calc_type}_plot_opts', {})
         pe.nonlin.plot_cmap_xy(
             nonlin_data_filepaths[calc_type], title='', is_log10=True,
@@ -1681,7 +1691,7 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config):
             rootname, report_folderpath, calc_type, existing_fignums)
 
     calc_type = 'cmap_px'
-    if calc_type in nonlin_data_filepaths:
+    if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
         _plot_kwargs = ncf.get(f'{calc_type}_plot_opts', {})
         pe.nonlin.plot_cmap_px(
             nonlin_data_filepaths[calc_type], title='',
@@ -1691,7 +1701,7 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config):
             rootname, report_folderpath, calc_type, existing_fignums)
 
     calc_type = 'tswa'
-    if f'tswa_xplus' in nonlin_data_filepaths:
+    if (f'tswa_xplus' in nonlin_data_filepaths) and do_plot[calc_type]:
         _plot_kwargs = ncf.get(f'{calc_type}_plot_opts', {})
 
         plot_plus_minus_combined = _plot_kwargs.pop(
@@ -1711,6 +1721,15 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config):
         #   FFT color plots will NOT be included into the main report. These
         #   plots may be useful for debugging or for deciding the number of
         #   divisions for x0/y0 arrays.
+
+        _plot_kwargs['footprint_nuxlim'] = _plot_kwargs.get(
+            'footprint_nuxlim', [0.0, 1.0])
+        _plot_kwargs['footprint_nuylim'] = _plot_kwargs.get(
+            'footprint_nuylim', [0.0, 1.0])
+        _plot_kwargs['fit_xmin'] = _plot_kwargs.get('fit_xmin', -0.5e-3)
+        _plot_kwargs['fit_xmax'] = _plot_kwargs.get('fit_xmax', +0.5e-3)
+        _plot_kwargs['fit_ymin'] = _plot_kwargs.get('fit_ymin', -0.25e-3)
+        _plot_kwargs['fit_ymax'] = _plot_kwargs.get('fit_ymax', +0.25e-3)
 
         if plot_plus_minus_combined:
             sel_tswa_caption_keys = [
@@ -1817,12 +1836,28 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config):
         _save_nonlin_plots_to_pdf(
             rootname, report_folderpath, calc_type, existing_fignums)
 
-    else:
-        sel_tswa_caption_keys = []
+        tswa_page_caption_list = []
+        for k in sel_tswa_caption_keys:
+            i = tswa_caption_keys.index(k)
+            page = i + 1
+            tswa_page_caption_list.append((page, tswa_captions[i]))
+
+        with open(os.path.join(report_folderpath,
+                               f'{rootname}.tswa.plot_suppl.pkl'), 'wb') as f:
+            pickle.dump(tswa_page_caption_list, f)
 
     calc_type = 'nonlin_chrom'
-    if calc_type in nonlin_data_filepaths:
+    if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
         _plot_kwargs = ncf.get(f'{calc_type}_plot_opts', {})
+
+        _plot_kwargs['plot_fft'] = _plot_kwargs.get('plot_fft', False)
+        # ^ If True, it may take a while to save the "nonlin_chrom" PDF file.
+        # ^ But these FFT color plots will NOT be included into
+        # ^ the main report. These plots may be useful for debugging
+        # ^ or for deciding the number of divisions for delta arrays.
+        _plot_kwargs['max_chrom_order'] = _plot_kwargs.get('max_chrom_order', 4)
+        _plot_kwargs['fit_deltalim'] = _plot_kwargs.get(
+            'fit_deltalim', [-2e-2, +2e-2])
 
         pe.nonlin.plot_chrom(
             nonlin_data_filepaths[calc_type], title='', **_plot_kwargs)
@@ -1830,21 +1865,707 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config):
         _save_nonlin_plots_to_pdf(
             rootname, report_folderpath, calc_type, existing_fignums)
 
-    tswa_page_caption_list = []
-    for k in sel_tswa_caption_keys:
-        i = tswa_caption_keys.index(k)
-        page = i + 1
-        tswa_page_caption_list.append((page, tswa_captions[i]))
 
-    return tswa_page_caption_list
+def _yaml_append_map(
+    com_map, key, value, eol_comment=None, before_comment=None, before_indent=0):
+    """"""
+
+    if before_comment is not None:
+        lines = before_comment.splitlines()
+        if len(lines) >= 2:
+            before_comment = '\n'.join([_s.strip() for _s in lines])
+        com_map.yaml_set_comment_before_after_key(
+            key, before=before_comment, indent=before_indent)
+
+    com_map.insert(len(com_map), key, value, comment=eol_comment)
+
+def _yaml_set_comment_after_key(com_map, key, comment, indent):
+    """
+    # Note that an apparent bug in yaml_set_comment_before_after_key() or dump()
+    # is preventing the use of "after" keyword from properly being dumped. So,
+    # I am relying on the "before" keyword in this function, even though the
+    # code logic may seems strange.
+    """
+
+    lines = comment.splitlines()
+    if len(lines) >= 2:
+        comment = '\n'.join([_s.strip() for _s in lines])
+
+    com_map_keys = list(com_map)
+    i = com_map_keys.index(key)
+    next_key = com_map_keys[i+1]
+
+    com_map.yaml_set_comment_before_after_key(
+        next_key, before=comment, indent=indent)
+
+def get_default_config_and_comments(example=False):
+    """
+    """
+
+    production = True
+    #production = False
+
+    com_map = yaml.comments.CommentedMap
+    com_seq = yaml.comments.CommentedSeq
+    sqss = yaml.scalarstring.SingleQuotedScalarString
+
+    anchors = {}
+
+    conf = com_map()
+
+    if example:
+        _yaml_append_map(conf, 'author', '')
+
+    _yaml_append_map(conf, 'E_MeV', 3e3, eol_comment='REQUIRED')
+
+    # ##########################################################################
+
+    _yaml_append_map(conf, 'input_LTE', com_map(),
+                     eol_comment='REQUIRED', before_comment='\n')
+    d = conf['input_LTE']
+    #
+    _yaml_append_map(d, 'filepath', sqss('?.lte'), eol_comment='REQUIRED')
+    #
+    if example:
+        comment = '''
+        If "load_param" is True, you must specify "base_filepath" (%s.lte) and
+        "param_filepath" (%s.param).'''
+        _yaml_append_map(d, 'load_param', False,
+                         before_comment=comment, before_indent=2)
+        _yaml_append_map(d, 'base_LTE_filepath', '')
+        _yaml_append_map(d, 'param_filepath', '')
+
+        comment = '''
+        If "zeroSexts_filepath" is specified and not an empty string, the script
+        assumes this the path to the LTE file with all the sextupoles turned off.
+        In this case, the value of "regenerate_zeroSexts" will be ignored.
+        '''
+        _yaml_append_map(d, 'zeroSexts_filepath', '',
+                         before_comment=comment, before_indent=2)
+        comment = '''\
+        Whether "regenerate_zeroSexts" is True or False, if "zeroSexts_filepath"
+        is not specified and an already auto-generated zero-sexts LTE file does
+        not exist, the script will generate a zero-sexts version of the input
+        LTE file. If "regenerate_zeroSexts" is True, the script will regenerate
+        the zero-sexts LTE file even when it already exists.
+        '''
+        _yaml_append_map(d, 'regenerate_zeroSexts', False,
+                         before_comment=comment, before_indent=2)
+
+    # ##########################################################################
+
+    _yaml_append_map(conf, 'report_paragraphs', com_map(), before_comment='\n')
+    d = conf['report_paragraphs']
+    if example:
+        comment = '''
+        Supply paragraphs to be added into the "Lattice Description" section of the
+        report as a list of strings without newline characters.'''
+        _yaml_append_map(d, 'lattice_description', [],
+                         before_comment=comment, before_indent=2)
+
+        comment = '''
+        Supply paragraphs to be added into the "Lattice Properties" section of the
+        report as a list of strings without newline characters.'''
+        _yaml_append_map(d, 'lattice_properties', [],
+                         before_comment=comment, before_indent=2)
+
+    # ##########################################################################
+
+    _yaml_append_map(conf, 'lattice_props', com_map(), before_comment='\n')
+    d = conf['lattice_props']
+
+    if example:
+        _yaml_append_map(d, 'recalc', False, before_comment='\n')
+        _yaml_append_map(d, 'replot', False)
+
+    _yaml_append_map(d, 'use_beamline_cell', sqss('CELL'), eol_comment='REQUIRED')
+    d['use_beamline_cell'].yaml_set_anchor('use_beamline_cell')
+    anchors['use_beamline_cell'] = d['use_beamline_cell']
+    _yaml_append_map(d, 'use_beamline_ring', sqss('RING'), eol_comment='REQUIRED')
+    d['use_beamline_ring'].yaml_set_anchor('use_beamline_ring')
+    anchors['use_beamline_ring'] = d['use_beamline_ring']
+
+    #---------------------------------------------------------------------------
+
+    if example:
+        _yaml_append_map(d, 'twiss_calc_opts', com_map(), before_comment='\n')
+        d2 = d['twiss_calc_opts']
+
+        _yaml_append_map(d2, 'one_period', com_map())
+        d3 = d2['one_period']
+        _yaml_append_map(d3, 'use_beamline', anchors['use_beamline_cell'])
+        _yaml_append_map(d3, 'element_divisions', 10)
+
+        _yaml_append_map(d2, 'ring_natural', com_map(),
+                         eol_comment='K2 values of all sextupoles set to zero')
+        d3 = d2['ring_natural']
+        _yaml_append_map(d3, 'use_beamline', anchors['use_beamline_ring'])
+
+        _yaml_append_map(d2, 'ring', com_map())
+        d3 = d2['ring']
+        _yaml_append_map(d3, 'use_beamline', anchors['use_beamline_ring'])
+
+    #---------------------------------------------------------------------------
+
+    _yaml_append_map(d, 'twiss_plot_opts', com_map(), before_comment='\n',
+                     eol_comment='REQUIRED')
+    d2 = d['twiss_plot_opts']
+
+    _yaml_append_map(d2, 'one_period', com_seq())
+    d3 = d2['one_period']
+    #
+    m = com_map(print_scalars = [], right_margin_adj = 0.85)
+    m.fa.set_flow_style()
+    d3.append(m)
+    #
+    zoom_in = com_map(print_scalars = [], right_margin_adj = 0.85, slim = [0, 9],
+                      disp_elem_names = {
+                          'bends': True, 'quads': True, 'sexts': True,
+                          'font_size': 8, 'extra_dy_frac': 0.05})
+    zoom_in.fa.set_flow_style()
+    zoom_in.yaml_set_anchor('zoom_in')
+    anchors['zoom_in'] = zoom_in
+    d3.append(zoom_in)
+    #
+    for slim in ([4, 16], [14, 23]):
+        sq = com_seq(slim)
+        sq.fa.set_flow_style()
+        overwrite = com_map(slim = sq)
+        overwrite.add_yaml_merge([(0, anchors['zoom_in'])])
+        d3.append(overwrite)
+
+    if example:
+        _yaml_append_map(d2, 'ring_natural', com_seq())
+        _yaml_append_map(d2, 'ring', com_seq())
+
+    #---------------------------------------------------------------------------
+
+    _yaml_append_map(d, 'twiss_plot_captions', com_map(), before_comment='\n',
+                     eol_comment='REQUIRED')
+    d2 = d['twiss_plot_captions']
+
+    _yaml_append_map(d2, 'one_period', com_seq())
+    d3 = d2['one_period']
+    #
+    d3.append(sqss('Twiss functions for 2 cells (1 super-period).'))
+    d3.append(sqss('Twiss functions $(0 \le s \le 9)$.'))
+    d3.append(sqss('Twiss functions $(4 \le s \le 16)$.'))
+    d3.append(sqss('Twiss functions $(14 \le s \le 23)$.'))
+
+    if example:
+        _yaml_append_map(d2, 'ring_natural', com_seq())
+        _yaml_append_map(d2, 'ring', com_seq())
+
+    #---------------------------------------------------------------------------
+
+    if example:
+        _yaml_append_map(d, 'extra_props', com_map(), before_comment='\n')
+        d2 = d['extra_props']
+
+        _yaml_append_map(d2, 'beta', com_map())
+        d3 = d2['beta']
+        #
+        spec = com_map(label = sqss('$(\beta_x, \beta_y)$ at LS Center'),
+                       name = sqss('LS_marker_elem_name'), occur = 0)
+        _yaml_append_map(d3, 'LS', spec)
+        #
+        spec = com_map(label = sqss('$(\beta_x, \beta_y)$ at SS Center'),
+                       name = sqss('SS_marker_elem_name'), occur = 0)
+        _yaml_append_map(d3, 'SS', spec)
+
+        _yaml_append_map(d2, 'phase_adv', com_map())
+        d3 = d2['phase_adv']
+        #
+        elem1 = com_map(name = 'LS_marker_elem_name', occur = 0)
+        elem1.fa.set_flow_style()
+        elem2 = com_map(name = 'SS_marker_elem_name', occur = 0)
+        elem2.fa.set_flow_style()
+        spec = com_map(
+            label = sqss(r'Phase Advance btw. LS \& SS $(\Delta\nu_x, \Delta\nu_y)$'),
+            elem1 = elem1, elem2 = elem2)
+        _yaml_append_map(d3, 'LS & SS', spec)
+
+        _yaml_append_map(d2, 'floor_comparison', com_map())
+        d3 = d2['floor_comparison']
+        #
+        _yaml_append_map(d3, 'ref_flr_filepath', sqss('?.flr'),
+                         eol_comment='REQUIRED if "floor_comparison" is specified')
+        #
+        ref_elem = com_map(name = 'SS_center_marker_elem_name_in_ref_lattice', occur = 0)
+        ref_elem.fa.set_flow_style()
+        cur_elem = com_map(name = 'SS_center_marker_elem_name_in_cur_lattice', occur = 0)
+        cur_elem.fa.set_flow_style()
+        spec = com_map(
+            label = sqss('Source Point Diff. at SS $(\Delta x, \Delta z)$'),
+            ref_elem = ref_elem, cur_elem = cur_elem)
+        _yaml_append_map(d3, 'SS', spec)
+        #
+        ref_elem = com_map(name = 'LS_center_marker_elem_name_in_ref_lattice', occur = 1)
+        ref_elem.fa.set_flow_style()
+        cur_elem = com_map(name = 'LS_center_marker_elem_name_in_cur_lattice', occur = 1)
+        cur_elem.fa.set_flow_style()
+        spec = com_map(
+            label = sqss('Source Point Diff. at LS $(\Delta x, \Delta z)$'),
+            ref_elem = ref_elem, cur_elem = cur_elem)
+        _yaml_append_map(d3, 'LS', spec)
+
+        _yaml_append_map(d2, 'length', com_map())
+        d3 = d2['length']
+        #
+        name_list = com_seq(['drift_elem_name_1', 'drift_elem_name_2', 'drift_elem_name_3'])
+        name_list.fa.set_flow_style()
+        spec = com_map(
+            label = sqss('Length of Short Straight'),
+            name_list = name_list,
+        )
+        _yaml_append_map(d3, 'L_SS', spec)
+        #
+        name_list = com_seq(['drift_elem_name_1', 'drift_elem_name_2', 'drift_elem_name_3'])
+        name_list.fa.set_flow_style()
+        spec = com_map(
+            label = sqss('Length of Long Straight'),
+            name_list = name_list,
+        )
+        _yaml_append_map(d3, 'L_LS', spec)
+
+    #---------------------------------------------------------------------------
+
+    if example:
+
+        comment = '''
+        You can here specify the order of the computed lattice property values in
+        the table within the generated report.'''
+        _yaml_append_map(d, 'table_order', com_seq(), before_comment=comment,
+                         before_indent=2)
+        d2 = d['table_order']
+        #
+        for i, (prop_name_or_list, comment) in enumerate([
+            ('E_GeV', 'Beam energy'),
+            ('eps_x', 'Natural horizontal emittance'),
+            ('J', 'Damping partitions'),
+            ('nu', 'Ring tunes'),
+            ('ksi_nat', 'Natural chromaticities'),
+            ('ksi_cor', 'Corrected chromaticities'),
+            ('alphac', 'Momentum compaction'),
+            ('U0', 'Energy loss per turn'),
+            ('sigma_delta', 'Energy spread'),
+            (['beta', 'LS'], None),
+            (['beta', 'SS'], None),
+            ('max_beta', 'Max beta functions'),
+            ('min_beta', 'Min beta functions'),
+            ('max_min_etax', 'Max & Min etax'),
+            (['phase_adv', 'LS & SS'], None),
+            (['length', 'L_LS'], None),
+            (['length', 'L_SS'], None),
+            ('circumf', 'Circumference'),
+            ('circumf_change_%', 'Circumference change [%] from NSLS-II'),
+            ('n_periods_in_ring', 'Number of super-periods for a full ring'),
+            (['floor_comparison', 'LS'], None),
+            (['floor_comparison', 'SS'], None),
+        ]):
+
+            if isinstance(prop_name_or_list, str):
+                d2.append(sqss(prop_name_or_list))
+            else:
+                prop_list = com_seq([sqss(v) for v in prop_name_or_list])
+                prop_list.fa.set_flow_style()
+                d2.append(prop_list)
+
+            _kwargs = dict(column=0)
+            if comment is not None:
+                d2.yaml_add_eol_comment(comment, len(d2)-1, **_kwargs)
+
+    # ##########################################################################
+
+    _yaml_append_map(conf, 'nonlin', com_map(), before_comment='\n')
+    d = conf['nonlin']
+
+    keys = ['fmap_xy', 'fmap_px', 'cmap_xy', 'cmap_px', 'tswa', 'nonlin_chrom']
+    comments = [
+        'On-Momentum Frequency Map', 'Off-Momentum Frequency Map',
+        'On-Momentum Chaos Map', 'Off-Momentum Chaos Map',
+        'Tune Shift with Amplitude', 'Nonlinear Chromaticity',
+    ]
+    assert len(keys) == len(comments)
+
+    m = com_map()
+    for k, c in zip(keys, comments):
+        _yaml_append_map(m, k, True, eol_comment=c)
+    _yaml_append_map(d, 'include', m, eol_comment='REQUIRED')
+
+    if example:
+        m = com_map()
+        for k, c in zip(keys, comments):
+            _yaml_append_map(m, k, False, eol_comment=c)
+        _yaml_append_map(
+            d, 'recalc', m,
+            eol_comment='Will re-calculate potentially time-consuming data')
+
+        m = com_map()
+        for k, c in zip(keys, comments):
+            _yaml_append_map(m, k, False, eol_comment=c)
+        _yaml_append_map(
+            d, 'replot', m,
+            eol_comment='Will re-plot and save plotss as PDF files')
+
+    _yaml_append_map(d, 'use_beamline', anchors['use_beamline_ring'],
+                     eol_comment='REQUIRED',
+                     before_comment='\nCommon Options', before_indent=2)
+
+    N_KICKS = com_map(KQUAD=40, KSEXT=8, CSBEND=12)
+    N_KICKS.fa.set_flow_style()
+    _yaml_append_map(d, 'N_KICKS', N_KICKS, eol_comment='REQUIRED')
+
+    #---------------------------------------------------------------------------
+
+    default_max_ntasks = 80
+
+    common_remote_opts = com_map()
+    _yaml_append_map(common_remote_opts, 'ntasks', default_max_ntasks,
+                     eol_comment='REQUIRED')
+    if example:
+        _yaml_append_map(common_remote_opts, 'partition', sqss('short'))
+        _yaml_append_map(common_remote_opts, 'mail_type_end', False,
+                         eol_comment='If True, will send email at the end of job.')
+        _yaml_append_map(common_remote_opts, 'mail_user', sqss('your_username@bnl.gov'),
+                         eol_comment='REQUIRED only if "mail_type_end" is True.')
+        nodelist = com_seq(
+            ['apcpu-001', 'apcpu-002', 'apcpu-003', 'apcpu-004', 'apcpu-005'])
+        nodelist.fa.set_flow_style()
+        _yaml_append_map(
+            common_remote_opts, 'nodelist', nodelist,
+            eol_comment='list of strings for worker node names that will be used for the job')
+        _yaml_append_map(
+            common_remote_opts, 'time', sqss('2:00:00'),
+            eol_comment='Specify max job run time in SLURM time string format')
+    comment = '''
+    Common parallel options (can be overwritten in the options block
+    for each specific calculation type):
+    '''
+    _yaml_append_map(d, 'common_remote_opts', common_remote_opts,
+                     eol_comment='REQUIRED',
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    xy1 = com_map(xmin = -8e-3, xmax = +8e-3, ymin = 0.0, ymax = +2e-3,
+                  nx = 201, ny = 201)
+    if example:
+        _yaml_append_map(xy1, 'x_offset', 1e-6,
+                         before_comment='Optional (below)', before_indent=6)
+        _yaml_append_map(xy1, 'y_offset', 1e-6)
+        _yaml_append_map(xy1, 'delta_offset', 0.0)
+    xy1.yaml_set_anchor('map_xy1')
+    anchors['map_xy1'] = xy1
+    #
+    xyTest = com_map(nx = 21, ny = 21)
+    #xyTest.fa.set_flow_style()
+    xyTest.add_yaml_merge([(0, anchors['map_xy1'])])
+    #
+    xy_grids = com_map(xy1 = xy1, xyTest = xyTest)
+    #
+    comment = '''
+    List of 2-D x-y grid specs for fmap & cmap calculations:'''
+    _yaml_append_map(d, 'xy_grids', xy_grids,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    px1 = com_map(
+        delta_min = -0.05, delta_max = +0.05, xmin = -8e-3, xmax = +8e-3,
+        ndelta = 201, nx = 201)
+    if example:
+        _yaml_append_map(px1, 'x_offset', 1e-6,
+                         before_comment='Optional (below)', before_indent=6)
+        _yaml_append_map(px1, 'y_offset', 1e-6)
+        _yaml_append_map(px1, 'delta_offset', 0.0)
+    px1.yaml_set_anchor('map_px1')
+    anchors['map_px1'] = px1
+    #
+    pxTest = com_map(ndelta = 21, nx = 21)
+    #pxTest.fa.set_flow_style()
+    pxTest.add_yaml_merge([(0, anchors['map_px1'])])
+    #
+    px_grids = com_map(px1 = px1, pxTest = pxTest)
+    #
+    comment = '''
+    List of 2-D delta-x grid specs for fmap & cmap calculations:'''
+    _yaml_append_map(d, 'px_grids', px_grids,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    if production:
+        opts = com_map(grid_name = sqss('xy1'), n_turns = 1024)
+    else:
+        opts = com_map(grid_name = sqss('xyTest'), n_turns = 1024)
+    comment = '\nOptions specific only for on-momentum frequency map calculation'
+    _yaml_append_map(
+        d, 'fmap_xy_calc_opts', opts,
+        before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    if production:
+        opts = com_map(grid_name = sqss('px1'), n_turns = 1024)
+    else:
+        opts = com_map(grid_name = sqss('pxTest'), n_turns = 1024)
+    comment = '\nOptions specific only for off-momentum frequency map calculation'
+    _yaml_append_map(
+        d, 'fmap_px_calc_opts', opts,
+        before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    if production:
+        opts = com_map(grid_name = sqss('xy1'), n_turns = 128)
+    else:
+        opts = com_map(grid_name = sqss('xyTest'), n_turns = 128)
+    comment = '\nOptions specific only for on-momentum chaos map calculation'
+    _yaml_append_map(
+        d, 'cmap_xy_calc_opts', opts,
+        before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    if production:
+        opts = com_map(grid_name = sqss('px1'), n_turns = 128)
+    else:
+        opts = com_map(grid_name = sqss('pxTest'), n_turns = 128)
+    comment = '\nOptions specific only for off-momentum chaos map calculation'
+    _yaml_append_map(
+        d, 'cmap_px_calc_opts', opts,
+        before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    xy1 = com_map(abs_xmax = 1e-3, nx = 50, abs_ymax = 0.5e-3, ny = 50)
+    if example:
+        _yaml_append_map(xy1, 'x_offset', 1e-6,
+                         before_comment='Optional (below)', before_indent=6)
+        _yaml_append_map(xy1, 'y_offset', 1e-6)
+    xy1.yaml_set_anchor('tswa_xy1')
+    anchors['tswa_xy1'] = xy1
+    #
+    tswa_grids = com_map(xy1 = xy1)
+    #
+    comment = '''
+    List of 1-D grid specs for tune-shift-with-amplitude calculation:'''
+    _yaml_append_map(d, 'tswa_grids', tswa_grids,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    remote_opts = com_map(time = sqss('7:00'))
+    tswa_calc_opts = com_map(grid_name = sqss('xy1'), n_turns = 1024,
+                             remote_opts = remote_opts)
+    #
+    comment = 'Options specific only for tune-shift-with-amplitude calculation'
+    _yaml_append_map(d, 'tswa_calc_opts', tswa_calc_opts,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    p1 = com_map(delta_min = -4e-2, delta_max = +3e-2, ndelta = 100)
+    if example:
+        _yaml_append_map(p1, 'x_offset', 1e-6,
+                         before_comment='Optional (below)', before_indent=6)
+        _yaml_append_map(p1, 'y_offset', 1e-6)
+        _yaml_append_map(p1, 'delta_offset', 0.0)
+    p1.yaml_set_anchor('p1')
+    anchors['p1'] = p1
+    #
+    nonlin_chrom_grids = com_map(p1 = p1)
+    #
+    comment = '''
+    List of 1-D grid specs for nonlinear chromaticity calculation:'''
+    _yaml_append_map(d, 'nonlin_chrom_grids', nonlin_chrom_grids,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    remote_opts = com_map(time = sqss('7:00'))
+    nonlin_chrom_calc_opts = com_map(grid_name = sqss('p1'), n_turns = 1024,
+                                     remote_opts = remote_opts)
+    #
+    comment = 'Options specific only for nonlinear chromaticity calculation'
+    _yaml_append_map(d, 'nonlin_chrom_calc_opts', nonlin_chrom_calc_opts,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    if example:
+
+        comment = '''
+        ## Plot Options ##'''
+        _yaml_append_map(d, 'cmap_xy_plot_opts', com_map(cmin = -24, cmax = -10),
+                         before_comment=comment, before_indent=2)
+
+        #---------------------------------------------------------------------------
+
+        _yaml_append_map(d, 'cmap_px_plot_opts', com_map(cmin = -24, cmax = -10))
+
+        #---------------------------------------------------------------------------
+
+        nux_lim = com_seq([0.0, 1.0])
+        nux_lim.fa.set_flow_style()
+        nuy_lim = com_seq([0.0, 1.0])
+        nuy_lim.fa.set_flow_style()
+        #
+        tswa_plot_opts = com_map(
+            plot_plus_minus_combined = True, plot_xy0 = True, plot_Axy = False,
+            use_time_domain_amplitude = True, plot_fft = False,
+            footprint_nuxlim = nux_lim, footprint_nuylim = nuy_lim,
+            fit_xmin = -0.5e-3, fit_xmax = +0.5e-3,
+            fit_ymin = -0.25e-3, fit_ymax = +0.25e-3,
+        )
+        comment = '''\
+        ^ Even if True, these plots will NOT be included into the main report,
+        ^ but will be saved to the "tswa" PDF file.
+        '''
+        _yaml_set_comment_after_key(tswa_plot_opts, 'plot_Axy', comment, indent=4)
+        #
+        tswa_plot_opts.yaml_add_eol_comment(
+            'Only relevant when "plot_Axy" is True', 'use_time_domain_amplitude',
+            column=0)
+        #
+        comment = '''\
+        ^ If True, it may take a while to save the "tswa" PDF file.
+        ^ But these FFT color plots will NOT be included into
+        ^ the main report. These plots may be useful for debugging
+        ^ or for deciding the number of divisions for x0/y0 arrays.
+        '''
+        _yaml_set_comment_after_key(tswa_plot_opts, 'plot_fft', comment, indent=4)
+        #
+        _yaml_append_map(d, 'tswa_plot_opts', tswa_plot_opts)
+
+        #---------------------------------------------------------------------------
+
+        fit_deltalim = com_seq([-2e-2, +2e-2])
+        fit_deltalim.fa.set_flow_style()
+
+        nonlin_chrom_plot_opts = com_map()
+        _yaml_append_map(nonlin_chrom_plot_opts, 'plot_fft', False)
+        _yaml_append_map(nonlin_chrom_plot_opts, 'max_chrom_order', 4)
+        _yaml_append_map(nonlin_chrom_plot_opts, 'fit_deltalim', fit_deltalim)
+
+        comment = '''\
+        ^ If True, it may take a while to save the "nonlin_chrom" PDF file.
+        ^ But these FFT color plots will NOT be included into
+        ^ the main report. These plots may be useful for debugging
+        ^ or for deciding the number of divisions for delta arrays.
+        '''
+        _yaml_set_comment_after_key(nonlin_chrom_plot_opts, 'plot_fft',
+                                    comment, indent=4)
+
+        _yaml_append_map(d, 'nonlin_chrom_plot_opts', nonlin_chrom_plot_opts)
+
+    # ##########################################################################
+
+    if False:
+        dumper = yaml.YAML()
+        dumper.preserve_quotes = True
+        dumper.width = 70
+        dumper.boolean_representation = ['False', 'True']
+        dumper.dump(conf, sys.stdout)
+
+        with open('test.yaml', 'w') as f:
+            dumper.dump(conf, f)
+
+    return conf
+
+def determine_calc_plot_bools(rootname, report_folderpath, nonlin_config,
+                              nonlin_summary_pkl_filepath, sel_plots):
+    """"""
+
+    ncf = nonlin_config
+
+    nonlin_data_filepaths = get_nonlin_data_filepaths(
+        rootname, report_folderpath, ncf)
+
+    do_calc = {}
+    do_plot = {}
+
+    # First judge whether to calculate or plot based on the existence of result files
+    for k, plot_requested in sel_plots.items():
+        if plot_requested:
+
+            if k != 'tswa':
+                if not os.path.exists(nonlin_data_filepaths[k]):
+                    b_calc = True
+                else:
+                    b_calc = False
+            else:
+                b_calc = False
+                for k2 in ['tswa_xminus', 'tswa_xplus',
+                           'tswa_yminus', 'tswa_yplus']:
+                    if not os.path.exists(nonlin_data_filepaths[k2]):
+                        b_calc = True
+                        break
+
+            if b_calc:
+                b_plot = True
+            else:
+                pdf_fp = os.path.join(report_folderpath, f'{rootname}.{k}.pdf')
+                if os.path.exists(pdf_fp):
+                    b_plot = False
+                else:
+                    b_plot = True
+
+            do_calc[k] = b_calc
+            do_plot[k] = b_plot
+
+    # Then override to re-calculate or re-plot, if so requested
+    recalc_d = ncf.get('recalc', {})
+    replot_d = ncf.get('replot', {})
+    for k, plot_requested in sel_plots.items():
+        if plot_requested:
+            if (k in recalc_d) and recalc_d[k]:
+                do_calc[k] = True
+                do_plot[k] = True
+            elif (k in replot_d) and replot_d[k]:
+                do_calc[k] = False
+                do_plot[k] = True
+
+    return do_calc, do_plot
 
 
 if __name__ == '__main__':
 
-    conf = yaml.safe_load(Path('nsls2.yaml').read_text())
+    #config_filepath = 'nsls2.yaml'
+    #config_filepath = 'nsls2_autogen.yaml'
+    config_filepath = 'nsls2_autogen_min.yaml'
+
+
+    #auto_gen_yaml = True
+    auto_gen_yaml = False
+    if auto_gen_yaml:
+
+        conf = get_default_config_and_comments(example=True)
+        #conf = get_default_config_and_comments(example=False)
+
+        dumper = yaml.YAML()
+        dumper.preserve_quotes = True
+        dumper.width = 70
+        dumper.boolean_representation = ['False', 'True']
+        dumper.dump(conf, sys.stdout)
+
+        with open('test.yaml', 'w') as f:
+            dumper.dump(conf, f)
+
+        sys.exit(0)
+
+    conf = get_default_config_and_comments()
+
+    config_loader = yaml.YAML()
+    user_conf = config_loader.load(Path(config_filepath).read_text())
+
+    conf.update(user_conf)
 
     assert conf['input_LTE']['filepath'].endswith('.lte')
     input_LTE_filepath = conf['input_LTE']['filepath']
+    if input_LTE_filepath == '?.lte':
+        raise ValueError('"input_LTE/filepath" must be specified in the config file')
 
     rootname = os.path.basename(input_LTE_filepath).replace('.lte', '')
 
@@ -1854,15 +2575,14 @@ if __name__ == '__main__':
     if conf['input_LTE'].get('load_param', False):
         gen_LTE_from_base_LTE_and_param_file(conf, input_LTE_filepath)
 
-    if 'zeroSexts_filepath' in conf['input_LTE']:
+    if conf['input_LTE'].get('zeroSexts_filepath', ''):
         zeroSexts_LTE_filepath = conf['input_LTE']['zeroSexts_filepath']
         assert os.path.exists(zeroSexts_LTE_filepath)
     else:
-        zeroSexts_LTE_filepath = ''
-        if conf['input_LTE'].get('generate_zeroSexts', False):
-            # Turn off all sextupoles
-            zeroSexts_LTE_filepath = gen_zeroSexts_LTE(
-                conf, input_LTE_filepath, report_folderpath)
+        # Turn off all sextupoles
+        zeroSexts_LTE_filepath = gen_zeroSexts_LTE(
+            input_LTE_filepath, report_folderpath,
+            regenerate=conf['input_LTE'].get('regenerate_zeroSexts', False))
 
     lin_summary_pkl_filepath = os.path.join(report_folderpath,
                                             f'{rootname}.lin.pkl')
@@ -1921,49 +2641,30 @@ if __name__ == '__main__':
             assert k in all_calc_types
             sel_plots[k] = v
 
-        do_calc = {}
-        do_plot = {}
-        if not os.path.exists(nonlin_summary_pkl_filepath):
-            for k, plot_requested in sel_plots.items():
-                if plot_requested:
-                    do_calc[k] = True
-                    do_plot[k] = True
-
-                    # Make sure to override "recalc" & "replot" in the config
-                    ncf['recalc'][k] = True
-                    ncf['replot'][k] = True
-        else:
-            recalc_d = ncf.get('recalc', {})
-            replot_d = ncf.get('replot', {})
-            for k, plot_requested in sel_plots.items():
-                if plot_requested:
-                    if (k in recalc_d) and recalc_d[k]:
-                        do_calc[k] = True
-                        do_plot[k] = True
-                    elif (k in replot_d) and replot_d[k]:
-                        do_calc[k] = False
-                        do_plot[k] = True
+        do_calc, do_plot = determine_calc_plot_bools(
+            rootname, report_folderpath, ncf, nonlin_summary_pkl_filepath,
+            sel_plots)
 
         if do_calc and any(do_calc.values()):
             calc_nonlin_props(input_LTE_filepath, rootname, report_folderpath,
-                              conf['E_MeV'], ncf)
+                              conf['E_MeV'], ncf, do_calc)
 
         if do_plot and any(do_plot.values()):
 
-            tswa_page_caption_list = plot_nonlin_props(
-                rootname, report_folderpath, ncf)
+            plot_nonlin_props(
+                rootname, report_folderpath, ncf, do_plot)
 
             abs_input_LTE_filepath = os.path.abspath(input_LTE_filepath)
             LTE_contents = Path(input_LTE_filepath).read_text()
 
             with open(nonlin_summary_pkl_filepath, 'wb') as f:
                 pickle.dump([abs_input_LTE_filepath, LTE_contents, conf,
-                             rootname, tswa_page_caption_list], f)
+                             rootname], f)
 
         else:
             with open(nonlin_summary_pkl_filepath, 'rb') as f:
                 (abs_input_LTE_filepath, LTE_contents, saved_conf,
-                 rootname, tswa_page_caption_list) = pickle.load(f)
+                 rootname) = pickle.load(f)
 
             if Path(input_LTE_filepath).read_text() != LTE_contents:
                 raise RuntimeError(
@@ -1973,4 +2674,4 @@ if __name__ == '__main__':
                      'file, or re-calculate to create an updated data file.'))
 
     build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data,
-                 twiss_plot_captions, tswa_page_caption_list)
+                 twiss_plot_captions)
