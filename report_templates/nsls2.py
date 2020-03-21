@@ -2474,8 +2474,8 @@ def get_default_config_and_comments(example=False):
 
     return conf
 
-def determine_calc_plot_bools(rootname, report_folderpath, nonlin_config,
-                              nonlin_summary_pkl_filepath, sel_plots):
+def determine_calc_plot_bools(
+    rootname, report_folderpath, nonlin_config, sel_plots):
     """"""
 
     ncf = nonlin_config
@@ -2532,9 +2532,9 @@ def determine_calc_plot_bools(rootname, report_folderpath, nonlin_config,
 
 if __name__ == '__main__':
 
-    #config_filepath = 'nsls2.yaml'
+    config_filepath = 'nsls2.yaml'
     #config_filepath = 'nsls2_autogen.yaml'
-    config_filepath = 'nsls2_autogen_min.yaml'
+    #config_filepath = 'nsls2_autogen_min.yaml'
 
 
     #auto_gen_yaml = True
@@ -2586,8 +2586,6 @@ if __name__ == '__main__':
 
     lin_summary_pkl_filepath = os.path.join(report_folderpath,
                                             f'{rootname}.lin.pkl')
-    nonlin_summary_pkl_filepath = os.path.join(report_folderpath,
-                                               f'{rootname}.nonlin.pkl')
 
     if (not os.path.exists(lin_summary_pkl_filepath)) or \
         conf['lattice_props'].get('recalc', False):
@@ -2642,36 +2640,15 @@ if __name__ == '__main__':
             sel_plots[k] = v
 
         do_calc, do_plot = determine_calc_plot_bools(
-            rootname, report_folderpath, ncf, nonlin_summary_pkl_filepath,
-            sel_plots)
+            rootname, report_folderpath, ncf, sel_plots)
 
         if do_calc and any(do_calc.values()):
             calc_nonlin_props(input_LTE_filepath, rootname, report_folderpath,
                               conf['E_MeV'], ncf, do_calc)
 
         if do_plot and any(do_plot.values()):
-
             plot_nonlin_props(
                 rootname, report_folderpath, ncf, do_plot)
-
-            abs_input_LTE_filepath = os.path.abspath(input_LTE_filepath)
-            LTE_contents = Path(input_LTE_filepath).read_text()
-
-            with open(nonlin_summary_pkl_filepath, 'wb') as f:
-                pickle.dump([abs_input_LTE_filepath, LTE_contents, conf,
-                             rootname], f)
-
-        else:
-            with open(nonlin_summary_pkl_filepath, 'rb') as f:
-                (abs_input_LTE_filepath, LTE_contents, saved_conf,
-                 rootname) = pickle.load(f)
-
-            if Path(input_LTE_filepath).read_text() != LTE_contents:
-                raise RuntimeError(
-                    (f'The LTE contents saved in "{nonlin_summary_pkl_filepath}" '
-                     'does NOT exactly match with the currently specified '
-                     f'LTE file "{input_LTE_filepath}". Either check the LTE '
-                     'file, or re-calculate to create an updated data file.'))
 
     build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data,
                  twiss_plot_captions)
