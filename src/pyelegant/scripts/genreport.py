@@ -599,9 +599,9 @@ def add_fmap_section(
             d_px = pe.util.load_pgz_file(nonlin_data_filepaths['fmap_px'])
 
             assert os.path.basename(d_xy['input']['LTE_filepath']) \
-                   == input_LTE_filepath
+                   == os.path.basename(input_LTE_filepath)
             assert os.path.basename(d_px['input']['LTE_filepath']) \
-                   == input_LTE_filepath
+                   == os.path.basename(input_LTE_filepath)
             assert d_xy['input']['lattice_file_contents'] == LTE_contents
             assert d_px['input']['lattice_file_contents'] == LTE_contents
 
@@ -722,9 +722,9 @@ def add_cmap_section(
             d_px = pe.util.load_pgz_file(nonlin_data_filepaths['cmap_px'])
 
             assert os.path.basename(d_xy['input']['LTE_filepath']) \
-                   == input_LTE_filepath
+                   == os.path.basename(input_LTE_filepath)
             assert os.path.basename(d_px['input']['LTE_filepath']) \
-                   == input_LTE_filepath
+                   == os.path.basename(input_LTE_filepath)
             assert d_xy['input']['lattice_file_contents'] == LTE_contents
             assert d_px['input']['lattice_file_contents'] == LTE_contents
 
@@ -2537,6 +2537,10 @@ def gen_report_type_0(config_filepath):
     user_conf = config_loader.load(Path(config_filepath).read_text())
 
     conf.update(user_conf)
+
+    # Allow multi-line definition for a long LTE filepath in YAML
+    conf['input_LTE']['filepath'] = ''.join([
+        _s.strip() for _s in conf['input_LTE']['filepath'].splitlines()])
 
     assert conf['input_LTE']['filepath'].endswith('.lte')
     input_LTE_filepath = conf['input_LTE']['filepath']
