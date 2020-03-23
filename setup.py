@@ -85,6 +85,9 @@ setup(
     package_data = {
         'pyelegant': [facility_json_filename, version_filename]
     },
+    entry_points = {
+        'console_scripts': ['pyele_report = pyelegant.scripts.genreport:main'],
+    },
     zip_safe=False,
     description = 'Python Interface to Elegant',
     author = 'Yoshiteru Hidaka',
