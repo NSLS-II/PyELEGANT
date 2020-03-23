@@ -71,9 +71,14 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
         this_folder, 'src', 'pyelegant', version_filename), 'w') as f:
         json.dump(version, f)
 
+req_pakcages = ['numpy', 'scipy', 'matplotlib', 'h5py', 'pylatex', 'ruamel.yaml']
+if facility_name == 'nsls2apcluster':
+    req_pakcages += ['mpi4py>=3', 'dill']
+
 setup(
     name = program_name,
     version = version,
+    install_requires = req_pakcages,
     packages=find_packages('src'),
     package_dir={'': 'src'},
     #include_package_data = True,
