@@ -45,7 +45,7 @@ def gen_zeroSexts_LTE(input_LTE_filepath, report_folderpath, regenerate):
     return zeroSexts_LTE_filepath
 
 def calc_lin_props(
-    LTE_filepath, rootname, report_folderpath, E_MeV, lattice_props_conf,
+    LTE_filepath, report_folderpath, E_MeV, lattice_props_conf,
     zeroSexts_LTE_filepath=''):
     """"""
 
@@ -83,7 +83,7 @@ def calc_lin_props(
     output_filepaths = {}
     for k in list(raw_keys):
         output_filepaths[k] = os.path.join(
-            report_folderpath, f'{rootname}.twiss_{k}.pgz')
+            report_folderpath, f'twiss_{k}.pgz')
 
     for lat_type in ('one_period', 'ring'):
         pe.calc_ring_twiss(
@@ -322,18 +322,17 @@ def calc_lin_props(
     return dict(versions=pe.__version__, sel_data=sel_data)
 
 def get_only_lin_props_plot_captions(
-    rootname, report_folderpath, twiss_plot_opts, twiss_plot_captions):
+    report_folderpath, twiss_plot_opts, twiss_plot_captions):
     """"""
 
     caption_list = plot_lin_props(
-        rootname, report_folderpath, twiss_plot_opts, twiss_plot_captions,
+        report_folderpath, twiss_plot_opts, twiss_plot_captions,
         skip_plots=True)
 
     return caption_list
 
 def plot_lin_props(
-    rootname, report_folderpath, twiss_plot_opts, twiss_plot_captions,
-    skip_plots=False):
+    report_folderpath, twiss_plot_opts, twiss_plot_captions, skip_plots=False):
     """"""
 
     existing_fignums = plt.get_fignums()
@@ -341,8 +340,7 @@ def plot_lin_props(
     caption_list = []
 
     for lat_type in list(twiss_plot_opts):
-        output_filepath = os.path.join(report_folderpath,
-                                       f'{rootname}.twiss_{lat_type}.pgz')
+        output_filepath = os.path.join(report_folderpath, f'twiss_{lat_type}.pgz')
 
         try:
             assert len(twiss_plot_opts[lat_type]) == len(twiss_plot_captions[lat_type])
@@ -364,7 +362,7 @@ def plot_lin_props(
     if skip_plots:
         return caption_list
 
-    twiss_pdf_filepath = os.path.join(report_folderpath, f'{rootname}.twiss.pdf')
+    twiss_pdf_filepath = os.path.join(report_folderpath, 'twiss.pdf')
 
     fignums_to_delete = []
 
@@ -537,18 +535,17 @@ def create_beamline_elements_list_subsection(doc, flat_elem_s_name_type_list):
                 table.add_row([_s.strip().replace('#', '') for _s in line.split(':')])
 
 def add_nonlin_sections(
-    doc, conf, rootname, report_folderpath, input_LTE_filepath):
+    doc, conf, report_folderpath, input_LTE_filepath):
     """"""
 
     ncf = conf['nonlin']
 
     LTE_contents = Path(input_LTE_filepath).read_text()
 
-    nonlin_data_filepaths = get_nonlin_data_filepaths(
-        rootname, report_folderpath, ncf)
+    nonlin_data_filepaths = get_nonlin_data_filepaths(report_folderpath, ncf)
     included_types = [k for k, _included in ncf.get('include', {}).items()
                       if _included]
-    plots_pdf_paths = {k: os.path.join(report_folderpath, f'{rootname}.{k}.pdf')
+    plots_pdf_paths = {k: os.path.join(report_folderpath, f'{k}.pdf')
                        for k in included_types}
 
     new_page_required = False
@@ -574,7 +571,7 @@ def add_nonlin_sections(
             doc.append(plx.ClearPage())
 
         with open(os.path.join(report_folderpath,
-                               f'{rootname}.tswa.plot_suppl.pkl'), 'rb') as f:
+                               f'tswa.plot_suppl.pkl'), 'rb') as f:
             tswa_plot_captions = pickle.load(f)
 
         add_tswa_section(doc, plots_pdf_paths, nonlin_data_filepaths,
@@ -1019,23 +1016,23 @@ def build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data
                  twiss_plot_captions):
     """"""
 
-    doc = create_header(conf, report_folderpath)
+    doc = create_header(conf, report_folderpath, rootname)
 
     add_lattice_description(doc, conf, input_LTE_filepath)
 
     add_lattice_elements(doc, lin_data)
 
     add_lattice_props_section(
-        doc, conf, rootname, report_folderpath, lin_data, twiss_plot_captions)
+        doc, conf, report_folderpath, lin_data, twiss_plot_captions)
 
     doc.append(plx.ClearPage())
 
     add_nonlin_sections(
-        doc, conf, rootname, report_folderpath, input_LTE_filepath)
+        doc, conf, report_folderpath, input_LTE_filepath)
 
     plx.generate_pdf_w_reruns(doc, clean_tex=False, silent=False)
 
-def create_header(conf, report_folderpath):
+def create_header(conf, report_folderpath, rootname):
     """"""
 
     geometry_options = {"vmargin": "1cm", "hmargin": "1.5cm"}
@@ -1210,7 +1207,7 @@ def get_lattice_prop_row(lin_data, row_spec):
     return label_w_unit, val_str
 
 def add_lattice_props_section(
-    doc, conf, rootname, report_folderpath, lin_data, twiss_plot_captions):
+    doc, conf, report_folderpath, lin_data, twiss_plot_captions):
     """"""
 
     table_order = conf['lattice_props'].get('table_order', None)
@@ -1266,7 +1263,7 @@ def add_lattice_props_section(
                 table.add_row([label_w_unit, val_str])
 
 
-        twiss_pdf_filepath = os.path.join(report_folderpath, f'{rootname}.twiss.pdf')
+        twiss_pdf_filepath = os.path.join(report_folderpath, 'twiss.pdf')
 
         if os.path.exists(twiss_pdf_filepath):
 
@@ -1300,7 +1297,7 @@ def add_lattice_props_section(
                 doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
                 fig.add_caption('Twiss functions.')
 
-def get_nonlin_data_filepaths(rootname, report_folderpath, nonlin_config):
+def get_nonlin_data_filepaths(report_folderpath, nonlin_config):
     """"""
 
     output_filetype = 'pgz'
@@ -1340,19 +1337,18 @@ def get_nonlin_data_filepaths(rootname, report_folderpath, nonlin_config):
     assert len(suffix_list) == len(data_file_key_list)
     nonlin_data_filepaths = {}
     for k, suffix in zip(data_file_key_list, suffix_list):
-        nonlin_data_filepaths[k] = os.path.join(report_folderpath,
-                                                rootname + suffix)
+        filename = suffix[1:] # remove the first "_"
+        nonlin_data_filepaths[k] = os.path.join(report_folderpath, filename)
 
     return nonlin_data_filepaths
 
-def calc_nonlin_props(LTE_filepath, rootname, report_folderpath, E_MeV,
-                      nonlin_config, do_calc):
+def calc_nonlin_props(LTE_filepath, report_folderpath, E_MeV, nonlin_config,
+                      do_calc):
     """"""
 
     ncf = nonlin_config
 
-    nonlin_data_filepaths = get_nonlin_data_filepaths(
-        rootname, report_folderpath, ncf)
+    nonlin_data_filepaths = get_nonlin_data_filepaths(report_folderpath, ncf)
     use_beamline = ncf['use_beamline']
     N_KICKS = ncf.get('N_KICKS', dict(KQUAD=40, KSEXT=40, CSBEND=40))
 
@@ -1562,6 +1558,8 @@ def calc_tswa(
 
     n_turns = calc_opts['n_turns']
 
+    save_fft = calc_opts.get('save_fft', False)
+
     g = ncf['tswa_grids'][calc_opts['grid_name']]
     nx, ny = g['nx'], g['ny']
     x_offset = g.get('x_offset', 1e-6)
@@ -1597,7 +1595,7 @@ def calc_tswa(
             mod_kwargs[f'{plane}sign'] = sign_symbol
 
             func(output_filepath, LTE_filepath, E_MeV, abs_max, n,
-                 courant_snyder=True, return_fft_spec=True,
+                 courant_snyder=True, return_fft_spec=save_fft, save_tbt=False,
                  n_turns=n_turns, N_KICKS=N_KICKS,
                  del_tmp_files=True, run_local=False,
                  remote_opts=plane_specific_remote_opts, **mod_kwargs)
@@ -1617,6 +1615,8 @@ def calc_nonlin_chrom(
 
     n_turns = calc_opts['n_turns']
 
+    save_fft = calc_opts.get('save_fft', False)
+
     g = ncf['nonlin_chrom_grids'][calc_opts['grid_name']]
     ndelta = g['ndelta']
     x_offset = g.get('x_offset', 1e-6)
@@ -1633,16 +1633,15 @@ def calc_nonlin_chrom(
 
     pe.nonlin.calc_chrom_track(
         output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, ndelta,
-        courant_snyder=True, return_fft_spec=True,
+        courant_snyder=True, return_fft_spec=save_fft, save_tbt=False,
         use_beamline=use_beamline, N_KICKS=N_KICKS,
         n_turns=n_turns, x0_offset=x_offset, y0_offset=y_offset,
         del_tmp_files=True, run_local=False, remote_opts=remote_opts)
 
-def _save_nonlin_plots_to_pdf(
-    rootname, report_folderpath, calc_type, existing_fignums):
+def _save_nonlin_plots_to_pdf(report_folderpath, calc_type, existing_fignums):
     """"""
 
-    pp = PdfPages(os.path.join(report_folderpath, f'{rootname}.{calc_type}.pdf'))
+    pp = PdfPages(os.path.join(report_folderpath, f'{calc_type}.pdf'))
 
     for fignum in [fignum for fignum in plt.get_fignums()
                    if fignum not in existing_fignums]:
@@ -1651,13 +1650,12 @@ def _save_nonlin_plots_to_pdf(
 
     pp.close()
 
-def plot_nonlin_props(rootname, report_folderpath, nonlin_config, do_plot):
+def plot_nonlin_props(report_folderpath, nonlin_config, do_plot):
     """"""
 
     ncf = nonlin_config
 
-    nonlin_data_filepaths = get_nonlin_data_filepaths(
-        rootname, report_folderpath, ncf)
+    nonlin_data_filepaths = get_nonlin_data_filepaths(report_folderpath, ncf)
 
     existing_fignums = plt.get_fignums()
 
@@ -1667,8 +1665,7 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config, do_plot):
             nonlin_data_filepaths[calc_type], title='',
             is_diffusion=True, scatter=False)
 
-        _save_nonlin_plots_to_pdf(
-            rootname, report_folderpath, calc_type, existing_fignums)
+        _save_nonlin_plots_to_pdf(report_folderpath, calc_type, existing_fignums)
 
 
     calc_type = 'fmap_px'
@@ -1677,8 +1674,7 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config, do_plot):
             nonlin_data_filepaths[calc_type], title='',
             is_diffusion=True, scatter=False)
 
-        _save_nonlin_plots_to_pdf(
-            rootname, report_folderpath, calc_type, existing_fignums)
+        _save_nonlin_plots_to_pdf(report_folderpath, calc_type, existing_fignums)
 
     calc_type = 'cmap_xy'
     if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
@@ -1687,8 +1683,7 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config, do_plot):
             nonlin_data_filepaths[calc_type], title='', is_log10=True,
             scatter=False, **_plot_kwargs)
 
-        _save_nonlin_plots_to_pdf(
-            rootname, report_folderpath, calc_type, existing_fignums)
+        _save_nonlin_plots_to_pdf(report_folderpath, calc_type, existing_fignums)
 
     calc_type = 'cmap_px'
     if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
@@ -1697,8 +1692,7 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config, do_plot):
             nonlin_data_filepaths[calc_type], title='',
             is_log10=True, scatter=False, **_plot_kwargs)
 
-        _save_nonlin_plots_to_pdf(
-            rootname, report_folderpath, calc_type, existing_fignums)
+        _save_nonlin_plots_to_pdf(report_folderpath, calc_type, existing_fignums)
 
     calc_type = 'tswa'
     if (f'tswa_xplus' in nonlin_data_filepaths) and do_plot[calc_type]:
@@ -1833,8 +1827,7 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config, do_plot):
                                 'FFT ' + MathText(r'\nu_y') + ' vs. ' + MathText(fr'-{plane}_0'))
                             tswa_caption_keys.append(f'fft_nuy_vs_{plane}0{sign}')
 
-        _save_nonlin_plots_to_pdf(
-            rootname, report_folderpath, calc_type, existing_fignums)
+        _save_nonlin_plots_to_pdf(report_folderpath, calc_type, existing_fignums)
 
         tswa_page_caption_list = []
         for k in sel_tswa_caption_keys:
@@ -1842,8 +1835,8 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config, do_plot):
             page = i + 1
             tswa_page_caption_list.append((page, tswa_captions[i]))
 
-        with open(os.path.join(report_folderpath,
-                               f'{rootname}.tswa.plot_suppl.pkl'), 'wb') as f:
+        with open(os.path.join(
+            report_folderpath, 'tswa.plot_suppl.pkl'), 'wb') as f:
             pickle.dump(tswa_page_caption_list, f)
 
     calc_type = 'nonlin_chrom'
@@ -1862,8 +1855,7 @@ def plot_nonlin_props(rootname, report_folderpath, nonlin_config, do_plot):
         pe.nonlin.plot_chrom(
             nonlin_data_filepaths[calc_type], title='', **_plot_kwargs)
 
-        _save_nonlin_plots_to_pdf(
-            rootname, report_folderpath, calc_type, existing_fignums)
+        _save_nonlin_plots_to_pdf(report_folderpath, calc_type, existing_fignums)
 
 
 def _yaml_append_map(
@@ -2359,6 +2351,8 @@ def get_default_config_and_comments(example=False):
     remote_opts = com_map(time = sqss('7:00'))
     tswa_calc_opts = com_map(grid_name = sqss('xy1'), n_turns = 1024,
                              remote_opts = remote_opts)
+    if example:
+        _yaml_append_map(tswa_calc_opts, 'save_fft', False)
     #
     comment = 'Options specific only for tune-shift-with-amplitude calculation'
     _yaml_append_map(d, 'tswa_calc_opts', tswa_calc_opts,
@@ -2387,6 +2381,8 @@ def get_default_config_and_comments(example=False):
     remote_opts = com_map(time = sqss('7:00'))
     nonlin_chrom_calc_opts = com_map(grid_name = sqss('p1'), n_turns = 1024,
                                      remote_opts = remote_opts)
+    if example:
+        _yaml_append_map(nonlin_chrom_calc_opts, 'save_fft', False)
     #
     comment = 'Options specific only for nonlinear chromaticity calculation'
     _yaml_append_map(d, 'nonlin_chrom_calc_opts', nonlin_chrom_calc_opts,
@@ -2434,6 +2430,8 @@ def get_default_config_and_comments(example=False):
         ^ But these FFT color plots will NOT be included into
         ^ the main report. These plots may be useful for debugging
         ^ or for deciding the number of divisions for x0/y0 arrays.
+        ^ Also, this option being True requires you to have set "save_fft"
+        ^ as True (False by default) in "tswa_calc_opts".
         '''
         _yaml_set_comment_after_key(tswa_plot_opts, 'plot_fft', comment, indent=4)
         #
@@ -2454,6 +2452,8 @@ def get_default_config_and_comments(example=False):
         ^ But these FFT color plots will NOT be included into
         ^ the main report. These plots may be useful for debugging
         ^ or for deciding the number of divisions for delta arrays.
+        ^ Also, this option being True requires you to have set "save_fft"
+        ^ as True (False by default) in "nonlin_chrom_calc_opts".
         '''
         _yaml_set_comment_after_key(nonlin_chrom_plot_opts, 'plot_fft',
                                     comment, indent=4)
@@ -2474,14 +2474,12 @@ def get_default_config_and_comments(example=False):
 
     return conf
 
-def determine_calc_plot_bools(
-    rootname, report_folderpath, nonlin_config, sel_plots):
+def determine_calc_plot_bools(report_folderpath, nonlin_config, sel_plots):
     """"""
 
     ncf = nonlin_config
 
-    nonlin_data_filepaths = get_nonlin_data_filepaths(
-        rootname, report_folderpath, ncf)
+    nonlin_data_filepaths = get_nonlin_data_filepaths(report_folderpath, ncf)
 
     do_calc = {}
     do_plot = {}
@@ -2506,7 +2504,7 @@ def determine_calc_plot_bools(
             if b_calc:
                 b_plot = True
             else:
-                pdf_fp = os.path.join(report_folderpath, f'{rootname}.{k}.pdf')
+                pdf_fp = os.path.join(report_folderpath, f'{k}.pdf')
                 if os.path.exists(pdf_fp):
                     b_plot = False
                 else:
@@ -2584,8 +2582,7 @@ if __name__ == '__main__':
             input_LTE_filepath, report_folderpath,
             regenerate=conf['input_LTE'].get('regenerate_zeroSexts', False))
 
-    lin_summary_pkl_filepath = os.path.join(report_folderpath,
-                                            f'{rootname}.lin.pkl')
+    lin_summary_pkl_filepath = os.path.join(report_folderpath, 'lin.pkl')
 
     if (not os.path.exists(lin_summary_pkl_filepath)) or \
         conf['lattice_props'].get('recalc', False):
@@ -2594,7 +2591,7 @@ if __name__ == '__main__':
         conf['lattice_props']['replot'] = True
 
         d = calc_lin_props(
-            input_LTE_filepath, rootname, report_folderpath, conf['E_MeV'],
+            input_LTE_filepath, report_folderpath, conf['E_MeV'],
             conf['lattice_props'], zeroSexts_LTE_filepath=zeroSexts_LTE_filepath)
 
         lin_data = d['sel_data']
@@ -2615,16 +2612,16 @@ if __name__ == '__main__':
                  f'LTE file "{input_LTE_filepath}". Either check the LTE '
                  'file, or re-calculate to create an updated data file.'))
 
-    twiss_pdf_filepath = os.path.join(report_folderpath, f'{rootname}.twiss.pdf')
+    twiss_pdf_filepath = os.path.join(report_folderpath, 'twiss.pdf')
 
     if (not os.path.exists(twiss_pdf_filepath)) or \
         conf['lattice_props'].get('replot', False):
         twiss_plot_captions = plot_lin_props(
-            rootname, report_folderpath, conf['lattice_props']['twiss_plot_opts'],
+            report_folderpath, conf['lattice_props']['twiss_plot_opts'],
             conf['lattice_props']['twiss_plot_captions'], skip_plots=False)
     else:
         twiss_plot_captions = get_only_lin_props_plot_captions(
-            rootname, report_folderpath, conf['lattice_props']['twiss_plot_opts'],
+            report_folderpath, conf['lattice_props']['twiss_plot_opts'],
             conf['lattice_props']['twiss_plot_captions'])
 
     if 'nonlin' in conf:
@@ -2639,16 +2636,14 @@ if __name__ == '__main__':
             assert k in all_calc_types
             sel_plots[k] = v
 
-        do_calc, do_plot = determine_calc_plot_bools(
-            rootname, report_folderpath, ncf, sel_plots)
+        do_calc, do_plot = determine_calc_plot_bools(report_folderpath, ncf, sel_plots)
 
         if do_calc and any(do_calc.values()):
-            calc_nonlin_props(input_LTE_filepath, rootname, report_folderpath,
+            calc_nonlin_props(input_LTE_filepath, report_folderpath,
                               conf['E_MeV'], ncf, do_calc)
 
         if do_plot and any(do_plot.values()):
-            plot_nonlin_props(
-                rootname, report_folderpath, ncf, do_plot)
+            plot_nonlin_props(report_folderpath, ncf, do_plot)
 
     build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data,
                  twiss_plot_captions)
