@@ -1525,7 +1525,7 @@ def calc_chrom_twiss(
 
 def calc_chrom_track(
     output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, ndelta,
-    courant_snyder=True, return_fft_spec=True,
+    courant_snyder=True, return_fft_spec=True, save_tbt=True,
     n_turns=256, x0_offset=1e-5, y0_offset=1e-5, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
@@ -1540,7 +1540,7 @@ def calc_chrom_track(
         LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
         delta_min=delta_min, delta_max=delta_max, ndelta=ndelta,
         courant_snyder=courant_snyder, return_fft_spec=return_fft_spec,
-        n_turns=n_turns, x0_offset=x0_offset, y0_offset=y0_offset,
+        save_tbt=save_tbt, n_turns=n_turns, x0_offset=x0_offset, y0_offset=y0_offset,
         use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
         run_local=run_local, remote_opts=remote_opts,
@@ -1718,7 +1718,7 @@ def calc_chrom_track(
             nus = calc_chrom_from_tbt_cs(
                 delta_array, tbt['x'], tbt['y'], nux0, nuy0,
                 tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
-                init_guess_from_prev_step=True)
+                init_guess_from_prev_step=True, return_fft_spec=False)
             extra_save_kwargs = dict(
                 xptbt=tbt['xp'], yptbt=tbt['yp'],
                 betax=betax, alphax=alphax, betay=betay, alphay=alphay)
@@ -1734,7 +1734,7 @@ def calc_chrom_track(
     _save_chrom_data(
         output_filepath, output_file_type, delta_array, nuxs, nuys,
         timestamp_fin, input_dict, xtbt=tbt['x'], ytbt=tbt['y'],
-        nux0=nux0, nuy0=nuy0, **extra_save_kwargs)
+        nux0=nux0, nuy0=nuy0, save_tbt=save_tbt, **extra_save_kwargs)
 
     if del_tmp_files:
         util.delete_temp_files(
@@ -2047,7 +2047,7 @@ def _save_chrom_data(
     output_filepath, output_file_type, delta_array, nuxs, nuys, timestamp_fin,
     input_dict, xtbt=None, ytbt=None, nux0=None, nuy0=None,
     xptbt=None, yptbt=None, betax=None, alphax=None, betay=None, alphay=None,
-    fft_nus=None, fft_hAxs=None, fft_hAys=None):
+    fft_nus=None, fft_hAxs=None, fft_hAys=None, save_tbt=True):
     """
     nux0, nuy0: on-momentum tunes
     """
@@ -2060,17 +2060,17 @@ def _save_chrom_data(
         f.create_dataset('deltas', data=delta_array, **_kwargs)
         f.create_dataset('nuxs', data=nuxs, **_kwargs)
         f.create_dataset('nuys', data=nuys, **_kwargs)
-        if xtbt is not None:
+        if save_tbt and (xtbt is not None):
             f.create_dataset('xtbt', data=xtbt, **_kwargs)
-        if ytbt is not None:
+        if save_tbt and (ytbt is not None):
             f.create_dataset('ytbt', data=ytbt, **_kwargs)
         if nux0:
             f['nux0'] = nux0
         if nuy0:
             f['nuy0'] = nuy0
-        if xptbt is not None:
+        if save_tbt and (xptbt is not None):
             f.create_dataset('xptbt', data=xptbt, **_kwargs)
-        if yptbt is not None:
+        if save_tbt and (yptbt is not None):
             f.create_dataset('yptbt', data=yptbt, **_kwargs)
         if fft_nus is not None:
             f.create_dataset('fft_nus', data=fft_nus, **_kwargs)
@@ -2093,17 +2093,17 @@ def _save_chrom_data(
                  _version_PyELEGANT=__version__['PyELEGANT'],
                  _version_ELEGANT=__version__['ELEGANT'],
                  )
-        if xtbt is not None:
+        if save_tbt and (xtbt is not None):
             d['xtbt'] = xtbt
-        if ytbt is not None:
+        if save_tbt and (ytbt is not None):
             d['ytbt'] = ytbt
         if nux0:
             d['nux0'] = nux0
         if nuy0:
             d['nuy0'] = nuy0
-        if xptbt is not None:
+        if save_tbt and (xptbt is not None):
             d['xptbt'] = xptbt
-        if yptbt is not None:
+        if save_tbt and (yptbt is not None):
             d['yptbt'] = yptbt
         if fft_nus is not None:
             d['fft_nus'] = fft_nus
@@ -2443,9 +2443,9 @@ def plot_chrom(
 
 def calc_tswa_x(
     output_filepath, LTE_filepath, E_MeV, abs_xmax, nx, xsign='+',
-    courant_snyder=True, return_fft_spec=True, n_turns=256, y0_offset=1e-5,
-    use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
-    output_file_type=None, del_tmp_files=True, print_cmd=False,
+    courant_snyder=True, return_fft_spec=True, save_tbt=True, n_turns=256,
+    y0_offset=1e-5, use_beamline=None, N_KICKS=None, transmute_elements=None,
+    ele_filepath=None, output_file_type=None, del_tmp_files=True, print_cmd=False,
     run_local=True, remote_opts=None):
     """"""
 
@@ -2462,7 +2462,8 @@ def calc_tswa_x(
     return _calc_tswa(
         'x', plane_specific_input, output_filepath, LTE_filepath, E_MeV,
         x0_array, y0_array, courant_snyder=courant_snyder,
-        return_fft_spec=return_fft_spec, n_turns=n_turns, use_beamline=use_beamline,
+        return_fft_spec=return_fft_spec, save_tbt=save_tbt,
+        n_turns=n_turns, use_beamline=use_beamline,
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, output_file_type=output_file_type,
         del_tmp_files=del_tmp_files, print_cmd=print_cmd,
@@ -2470,9 +2471,9 @@ def calc_tswa_x(
 
 def calc_tswa_y(
     output_filepath, LTE_filepath, E_MeV, abs_ymax, ny, ysign='+',
-    courant_snyder=True, return_fft_spec=True, n_turns=256, x0_offset=1e-5,
-    use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
-    output_file_type=None, del_tmp_files=True, print_cmd=False,
+    courant_snyder=True, return_fft_spec=True, save_tbt=True, n_turns=256,
+    x0_offset=1e-5, use_beamline=None, N_KICKS=None, transmute_elements=None,
+    ele_filepath=None, output_file_type=None, del_tmp_files=True, print_cmd=False,
     run_local=True, remote_opts=None):
     """"""
 
@@ -2489,7 +2490,8 @@ def calc_tswa_y(
     return _calc_tswa(
         'y', plane_specific_input, output_filepath, LTE_filepath, E_MeV,
         x0_array, y0_array, courant_snyder=courant_snyder,
-        return_fft_spec=return_fft_spec, n_turns=n_turns, use_beamline=use_beamline,
+        return_fft_spec=return_fft_spec, save_tbt=save_tbt,
+        n_turns=n_turns, use_beamline=use_beamline,
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, output_file_type=output_file_type,
         del_tmp_files=del_tmp_files, print_cmd=print_cmd,
@@ -2497,7 +2499,7 @@ def calc_tswa_y(
 
 def _calc_tswa(
     scan_plane, plane_specific_input, output_filepath, LTE_filepath, E_MeV,
-    x0_array, y0_array, courant_snyder=True, return_fft_spec=True,
+    x0_array, y0_array, courant_snyder=True, return_fft_spec=True, save_tbt=True,
     n_turns=256, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
@@ -2515,7 +2517,7 @@ def _calc_tswa(
         scan_plane=scan_plane, plane_specific_input=plane_specific_input,
         LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
         x0_array=x0_array, y0_array=y0_array, courant_snyder=courant_snyder,
-        return_fft_spec=return_fft_spec, n_turns=n_turns,
+        return_fft_spec=return_fft_spec, save_tbt=save_tbt, n_turns=n_turns,
         use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
         run_local=run_local, remote_opts=remote_opts,
@@ -2710,7 +2712,7 @@ def _calc_tswa(
         output_filepath, output_file_type, x0_array, y0_array, tbt['x'], tbt['y'],
         betax, alphax, betay, alphay, nux0, nuy0, nuxs, nuys, Axs, Ays,
         time_domain_Axs, time_domain_Ays, timestamp_fin, input_dict,
-        **extra_save_kwargs)
+        save_tbt=save_tbt, **extra_save_kwargs)
 
     if del_tmp_files:
         util.delete_temp_files(
@@ -2945,7 +2947,8 @@ def _save_tswa_data(
     output_filepath, output_file_type, x0_array, y0_array, xtbt, ytbt,
     betax, alphax, betay, alphay, nux0, nuy0, nuxs, nuys, Axs, Ays,
     time_domain_Axs, time_domain_Ays, timestamp_fin, input_dict,
-    xptbt=None, yptbt=None, fft_nus=None, fft_hAxs=None, fft_hAys=None):
+    xptbt=None, yptbt=None, fft_nus=None, fft_hAxs=None, fft_hAys=None,
+    save_tbt=True):
     """
     """
 
@@ -2956,13 +2959,14 @@ def _save_tswa_data(
         f['_version_ELEGANT'] = __version__['ELEGANT']
         f.create_dataset('x0s', data=x0_array, **_kwargs)
         f.create_dataset('y0s', data=y0_array, **_kwargs)
-        f.create_dataset('xtbt', data=xtbt, **_kwargs)
-        f.create_dataset('ytbt', data=ytbt, **_kwargs)
+        if save_tbt:
+            f.create_dataset('xtbt', data=xtbt, **_kwargs)
+            f.create_dataset('ytbt', data=ytbt, **_kwargs)
         f['nux0'] = nux0
         f['nuy0'] = nuy0
-        if xptbt is not None:
+        if save_tbt and (xptbt is not None):
             f.create_dataset('xptbt', data=xptbt, **_kwargs)
-        if yptbt is not None:
+        if save_tbt and (yptbt is not None):
             f.create_dataset('yptbt', data=xptbt, **_kwargs)
         if fft_nus is not None:
             f.create_dataset('fft_nus', data=fft_nus, **_kwargs)
@@ -2983,8 +2987,7 @@ def _save_tswa_data(
 
     elif output_file_type == 'pgz':
         d = dict(
-            x0s=x0_array, y0s=y0_array, xtbt=xtbt, ytbt=ytbt,
-            nux0=nux0, nuy0=nuy0,
+            x0s=x0_array, y0s=y0_array, nux0=nux0, nuy0=nuy0,
             betax=betax, betay=betay, alphax=alphax, alphay=alphay,
             nuxs=nuxs, nuys=nuys, Axs=Axs, Ays=Ays,
             time_domain_Axs=time_domain_Axs, time_domain_Ays=time_domain_Ays,
@@ -2992,10 +2995,13 @@ def _save_tswa_data(
             _version_PyELEGANT=__version__['PyELEGANT'],
             _version_ELEGANT=__version__['ELEGANT'],
         )
-        if xptbt is not None:
-            d['xptbt'] = xptbt
-        if yptbt is not None:
-            d['yptbt'] = yptbt
+        if save_tbt:
+            d['xtbt'] = xtbt
+            d['ytbt'] = ytbt
+            if xptbt is not None:
+                d['xptbt'] = xptbt
+            if yptbt is not None:
+                d['yptbt'] = yptbt
         if fft_nus is not None:
             d['fft_nus'] = fft_nus
             d['fft_hAxs'] = fft_hAxs
