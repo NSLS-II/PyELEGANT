@@ -4421,7 +4421,12 @@ def track(
                  _version_ELEGANT=__version__['ELEGANT'],
                  )
         for coord in output_coordinates:
-            d[coord] = tbt[coord]
+            try:
+                d[coord] = tbt[coord]
+            except KeyError:
+                print('Available keys are the following:')
+                print('     ' + ', '.join(list(tbt)))
+                raise
         util.robust_pgz_file_write(output_filepath, d, nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
