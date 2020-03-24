@@ -84,10 +84,10 @@ lattice_props:
                 cur_elem: {'name': 'M_LS', 'occur': 1} # Must pick the 2nd index
         length:
             L_SS:
-                label: 'Length of Short Straight'
+                label: 'Half Length of Short Straight'
                 name_list: ['OLONG1', 'OS2B', 'OLONG2']
             L_LS:
-                label: 'Length of Long Straight'
+                label: 'Half Length of Long Straight'
                 name_list: ['OLONG2', 'OS2B', 'OLONG1']
     #
     table_order: # You can specify the order of the computed lattice property
@@ -110,7 +110,7 @@ lattice_props:
     - ['length', 'L_LS']
     - ['length', 'L_SS']
     - 'circumf' # Circumference
-    - 'circumf_change_%' # Circumference change [%] from NSLS-II
+    - ['floor_comparison', 'circumf_change_%'] # Circumference change [%] from Reference Lattice
     - 'n_periods_in_ring' # Number of super-periods for a full ring
     - ['floor_comparison', 'LS']
     - ['floor_comparison', 'SS']

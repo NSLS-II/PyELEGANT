@@ -105,12 +105,7 @@ def calc_lin_props(
         for k, ele_k in raw_keys[lat_type].items():
             sel_data[k] = twi['scalars'][ele_k]
 
-    nsls2_data = {}
-    nsls2_data['circumf'] = 791.958 # [m]
-
     sel_data['circumf'] = interm_array_data['s_ring'][-1]
-    sel_data['circumf_change_%'] = (
-        sel_data['circumf'] / nsls2_data['circumf'] - 1) * 1e2
 
     ring_mult = sel_data['circumf'] / interm_array_data['s_one_period'][-1]
     sel_data['n_periods_in_ring'] = int(np.round(ring_mult))
@@ -236,12 +231,24 @@ def calc_lin_props(
     header = header_template.format(
         titles['s'], titles['ElementName'], titles['ElementType'])
     flat_elem_s_name_type_list = [header, '-' * len(header)]
+    sel_data['tot_bend_angle_rad_per_period'] = 0.0
     for s, elem_name, elem_type in zip(
         res['flr']['columns']['s'], res['flr']['columns']['ElementName'],
         res['flr']['columns']['ElementType']):
         flat_elem_s_name_type_list.append(value_template.format(s, elem_name, elem_type))
+
+        if elem_name in elem_defs['bends']:
+            sel_data['tot_bend_angle_rad_per_period'] += \
+                elem_defs['bends'][elem_name]['ANGLE']
     #
     sel_data['flat_elem_s_name_type_list'] = flat_elem_s_name_type_list
+
+    tot_bend_angle_deg_in_ring = np.rad2deg(
+        sel_data['tot_bend_angle_rad_per_period']) * sel_data['n_periods_in_ring']
+    if np.abs(tot_bend_angle_deg_in_ring - 360.0) > 0.1:
+        raise RuntimeError(
+            ('Total ring bend angle NOT close to 360 deg: '
+             f'{tot_bend_angle_deg_in_ring:.6f} [deg]'))
 
     if extra_conf:
 
@@ -251,7 +258,7 @@ def calc_lin_props(
 
             _s = res['flr']['columns']['s']
             for key, elem_d in length.items():
-                elem_name_list = elem_d['name_list']
+                elem_name_list = [name.upper() for name in elem_d['name_list']]
                 if key in _d:
                     raise ValueError(
                         f'Duplicate key "{key}" found for "length" dict')
@@ -279,23 +286,29 @@ def calc_lin_props(
         if floor_comparison:
             _d = extra_data['floor_comparison'] = {}
 
-            nsls2_flr_filepath = floor_comparison.pop('ref_flr_filepath')
-            flr_data = pe.sdds.sdds2dicts(nsls2_flr_filepath)[0]
-            N2_X_all = flr_data['columns']['X']
-            N2_Z_all = flr_data['columns']['Z']
-            N2_ElemNames = flr_data['columns']['ElementName']
+            ref_flr_filepath = floor_comparison.pop('ref_flr_filepath')
+            flr_data = pe.sdds.sdds2dicts(ref_flr_filepath)[0]
+            ref_X_all = flr_data['columns']['X']
+            ref_Z_all = flr_data['columns']['Z']
+            ref_ElemNames = flr_data['columns']['ElementName']
 
-            N2_X, N2_Z = {}, {}
-            N2U_X, N2U_Z = {}, {}
+            ref_circumf = flr_data['columns']['s'][-1]
+            _d['circumf_change_%'] = dict(
+                val=(sel_data['circumf'] / ref_circumf - 1) * 1e2,
+                label='Circumference Change ' + plx.MathText(r'\Delta C / C')
+            )
+
+            ref_X, ref_Z = {}, {}
+            cur_X, cur_Z = {}, {}
             for key, elems_d in floor_comparison.items():
 
                 ref_elem = elems_d['ref_elem']
 
-                ind = np.where(N2_ElemNames ==
+                ind = np.where(ref_ElemNames ==
                                ref_elem['name'].upper())[0][ref_elem['occur']]
 
-                N2_X[key] = N2_X_all[ind]
-                N2_Z[key] = N2_Z_all[ind]
+                ref_X[key] = ref_X_all[ind]
+                ref_Z[key] = ref_Z_all[ind]
 
                 cur_elem = elems_d['cur_elem']
 
@@ -303,11 +316,11 @@ def calc_lin_props(
                     res['flr']['columns']['ElementName'] ==
                     cur_elem['name'].upper())[0][cur_elem['occur']]
 
-                N2U_X[key] = res['flr']['columns']['X'][ind]
-                N2U_Z[key] = res['flr']['columns']['Z'][ind]
+                cur_X[key] = res['flr']['columns']['X'][ind]
+                cur_Z[key] = res['flr']['columns']['Z'][ind]
 
-                _d[key] = dict(dx=N2U_X[key] - N2_X[key],
-                               dz=N2U_Z[key] - N2_Z[key],
+                _d[key] = dict(dx=cur_X[key] - ref_X[key],
+                               dz=cur_Z[key] - ref_Z[key],
                                label=elems_d['label'])
 
     if False:
@@ -1119,9 +1132,14 @@ def get_lattice_prop_row(lin_data, row_spec):
             val_str = plx.MathText('{:.3f}'.format(_d['L']))
 
         elif extra_props_key == 'floor_comparison':
-            unit = ' [mm]'
-            val_str = plx.MathText(
-                '({:+.2f}, {:+.2f})'.format(_d['dx'] * 1e3, _d['dz'] * 1e3))
+
+            if sub_key == 'circumf_change_%':
+                unit = r' [\%]'
+                val_str = plx.MathText('{:+.3f}'.format(_d['val']))
+            else:
+                unit = ' [mm]'
+                val_str = plx.MathText(
+                    '({:+.2f}, {:+.2f})'.format(_d['dx'] * 1e3, _d['dz'] * 1e3))
 
         else:
             raise ValueError('Unexpected key for "extra_props": {extra_props_key}')
@@ -1186,10 +1204,6 @@ def get_lattice_prop_row(lin_data, row_spec):
         label = 'Circumference ' + plx.MathText(r'C')
         unit = ' [m]'
         val_str = plx.MathText('{:.3f}'.format(lin_data[k]))
-    elif k == 'circumf_change_%':
-        label = 'Circumference Change ' + plx.MathText(r'\Delta C / C')
-        unit = r' [\%]'
-        val_str = plx.MathText('{:+.3f}'.format(lin_data[k]))
     elif k == 'n_periods_in_ring':
         label = 'Number of Super-periods'
         val_str = plx.MathText('{:d}'.format(lin_data[k]))
@@ -1228,7 +1242,6 @@ def add_lattice_props_section(
             'min_beta', # Min beta functions
             'max_min_etax', # Max & Min etax
             'circumf', # Circumference
-            'circumf_change_%', # Circumference change [%] from NSLS-II
             'n_periods_in_ring', # Number of super-periods for a full ring
         ]
 
@@ -1907,6 +1920,8 @@ def get_default_config_and_comments(example=False):
     conf = com_map()
 
     if example:
+        _yaml_append_map(conf, 'enable_pyelegant_stdout', False)
+
         _yaml_append_map(conf, 'author', '')
 
     _yaml_append_map(conf, 'E_MeV', 3e3, eol_comment='REQUIRED')
@@ -2108,7 +2123,7 @@ def get_default_config_and_comments(example=False):
         name_list = com_seq(['drift_elem_name_1', 'drift_elem_name_2', 'drift_elem_name_3'])
         name_list.fa.set_flow_style()
         spec = com_map(
-            label = sqss('Length of Short Straight'),
+            label = sqss('Half Length of Short Straight'),
             name_list = name_list,
         )
         _yaml_append_map(d3, 'L_SS', spec)
@@ -2116,7 +2131,7 @@ def get_default_config_and_comments(example=False):
         name_list = com_seq(['drift_elem_name_1', 'drift_elem_name_2', 'drift_elem_name_3'])
         name_list.fa.set_flow_style()
         spec = com_map(
-            label = sqss('Length of Long Straight'),
+            label = sqss('Half Length of Long Straight'),
             name_list = name_list,
         )
         _yaml_append_map(d3, 'L_LS', spec)
@@ -2151,7 +2166,7 @@ def get_default_config_and_comments(example=False):
             (['length', 'L_LS'], None),
             (['length', 'L_SS'], None),
             ('circumf', 'Circumference'),
-            ('circumf_change_%', 'Circumference change [%] from NSLS-II'),
+            (['floor_comparison', 'circumf_change_%'], 'Circumference change [%] from Reference Lattice'),
             ('n_periods_in_ring', 'Number of super-periods for a full ring'),
             (['floor_comparison', 'LS'], None),
             (['floor_comparison', 'SS'], None),
@@ -2537,6 +2552,9 @@ def gen_report_type_0(config_filepath):
     user_conf = config_loader.load(Path(config_filepath).read_text())
 
     conf.update(user_conf)
+
+    if conf.get('enable_pyelegant_stdout', False):
+        pe.enable_stdout()
 
     # Allow multi-line definition for a long LTE filepath in YAML
     conf['input_LTE']['filepath'] = ''.join([
