@@ -400,7 +400,7 @@ def printout(sdds_filepath, param_name_list=None,
 
     return param_dict, column_dict
 
-def sdds2dicts(sdds_filepath):
+def sdds2dicts(sdds_filepath, str_format=''):
     """"""
 
     output, meta = {}, {}
@@ -408,7 +408,7 @@ def sdds2dicts(sdds_filepath):
     meta_params, meta_columns = query(sdds_filepath, suppress_err_msg=True)
     params, columns = printout(
         sdds_filepath, param_name_list=None, column_name_list=None,
-        str_format='', show_output=False, show_cmd=False,
+        str_format=str_format, show_output=False, show_cmd=False,
         suppress_err_msg=True)
 
     meta = {}

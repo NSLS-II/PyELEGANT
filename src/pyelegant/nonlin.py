@@ -4260,11 +4260,13 @@ def plot_tswa_both_sides(
 def track(
     output_filepath, LTE_filepath, E_MeV, n_turns,
     x0=0.0, xp0=0.0, y0=0.0, yp0=0.0, delta0=0.0,
-    output_coordinates=('x', 'xp', 'y', 'yp', 'delta'),
+    output_coordinates=('x', 'xp', 'y', 'yp', 'delta'), double_format='',
     use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
     output_file_type=None, del_tmp_files=True, print_cmd=False,
     run_local=True, remote_opts=None):
-    """"""
+    """
+    An example of "double_format" is '%25.16e'.
+    """
 
     LTE_file_pathobj = Path(LTE_filepath)
 
@@ -4273,7 +4275,7 @@ def track(
     input_dict = dict(
         LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
         n_turns=n_turns, x0=x0, xp0=xp0, y0=y0, yp0=yp0, delta0=delta0,
-        output_coordinates=output_coordinates,
+        output_coordinates=output_coordinates, double_format=double_format,
         use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
         run_local=run_local, remote_opts=remote_opts,
@@ -4387,6 +4389,15 @@ def track(
     output, _ = sdds.sdds2dicts(watch_pathobj)
     #
     cols = output['columns']
+    #
+    if double_format != '':
+        coord_keys = [k if k != 'delta' else 'p' for k in list(tbt)]
+        _, _tbt_cols = sdds.printout(
+            watch_pathobj, column_name_list=coord_keys, param_name_list=[],
+            str_format=double_format, suppress_err_msg=True)
+        for k, v in _tbt_cols.items():
+            cols[k] = v
+    #
     for k in list(tbt):
         if k == 'delta':
             _delta = cols['p'] / output['params']['pCentral'] - 1.0
