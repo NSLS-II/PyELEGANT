@@ -169,12 +169,20 @@ def getDftPeak(x_rect, init_nu, window='sine', resolution=1e-8,
         peak_ind = peak_inds[0]
     else:
         peak_ind = peak_inds[1]
-    if A[peak_ind-1] > A[peak_ind+1]:
+
+    if peak_ind == len(A) - 1:
         dft_peak_nus = np.array([nus[peak_ind], nus[peak_ind-1], init_nu])
         dft_peak_As  = np.array([A[peak_ind]  , A[peak_ind-1]  , new_A])
-    else:
+    elif peak_ind == 0:
         dft_peak_nus = np.array([nus[peak_ind], nus[peak_ind+1], init_nu])
         dft_peak_As  = np.array([A[peak_ind]  , A[peak_ind+1]  , new_A])
+    else:
+        if A[peak_ind-1] > A[peak_ind+1]:
+            dft_peak_nus = np.array([nus[peak_ind], nus[peak_ind-1], init_nu])
+            dft_peak_As  = np.array([A[peak_ind]  , A[peak_ind-1]  , new_A])
+        else:
+            dft_peak_nus = np.array([nus[peak_ind], nus[peak_ind+1], init_nu])
+            dft_peak_As  = np.array([A[peak_ind]  , A[peak_ind+1]  , new_A])
 
     try:
         backup = dict(dft_peak_nus=dft_peak_nus.copy(),
