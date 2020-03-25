@@ -1928,6 +1928,9 @@ def calc_chrom_from_tbt_cs(
 
             if np.any(np.isnan(xarray)) or np.any(np.isnan(yarray)):
                 # Particle lost at some point.
+                if return_fft_spec:
+                    fft_hAxs.append(np.full((n_turns,), np.nan))
+                    fft_hAys.append(np.full((n_turns,), np.nan))
                 continue
 
             xparray = xptbt[:, i]
