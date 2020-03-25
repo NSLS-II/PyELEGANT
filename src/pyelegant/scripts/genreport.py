@@ -2458,10 +2458,17 @@ def get_default_config_and_comments(example=False):
         fit_deltalim = com_seq([-2e-2, +2e-2])
         fit_deltalim.fa.set_flow_style()
 
+        nux_lim = com_seq([0.0, 1.0])
+        nux_lim.fa.set_flow_style()
+        nuy_lim = com_seq([0.0, 1.0])
+        nuy_lim.fa.set_flow_style()
+
         nonlin_chrom_plot_opts = com_map()
         _yaml_append_map(nonlin_chrom_plot_opts, 'plot_fft', False)
         _yaml_append_map(nonlin_chrom_plot_opts, 'max_chrom_order', 4)
         _yaml_append_map(nonlin_chrom_plot_opts, 'fit_deltalim', fit_deltalim)
+        _yaml_append_map(nonlin_chrom_plot_opts, 'footprint_nuxlim', nux_lim)
+        _yaml_append_map(nonlin_chrom_plot_opts, 'footprint_nuylim', nuy_lim)
 
         comment = '''\
         ^ If True, it may take a while to save the "nonlin_chrom" PDF file.
