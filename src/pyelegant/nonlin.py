@@ -2126,7 +2126,8 @@ def _save_chrom_data(
 
 def plot_chrom(
     output_filepath, max_chrom_order=3, title='', deltalim=None, fit_deltalim=None,
-    nuxlim=None, nuylim=None, max_resonance_line_order=5, fit_label_format='+.3g',
+    nuxlim=None, nuylim=None, footprint_nuxlim=None, footprint_nuylim=None,
+    max_resonance_line_order=5, fit_label_format='+.3g',
     ax_nu_vs_delta=None, ax_nuy_vs_nux=None,
     plot_fft=False, ax_fft_hx=None, ax_fft_hy=None):
     """"""
@@ -2334,29 +2335,49 @@ def plot_chrom(
     plt.tight_layout()
 
 
+    is_fp_nuxlim_frac = False
+    if footprint_nuxlim is not None:
+        if (0.0 <= footprint_nuxlim[0] <= 1.0) and (0.0 <= footprint_nuxlim[1] <= 1.0):
+            is_fp_nuxlim_frac = True
+    else:
+        footprint_nuxlim = nuxlim.copy()
+    #
+    is_fp_nuylim_frac = False
+    if footprint_nuylim is not None:
+        if (0.0 <= footprint_nuylim[0] <= 1.0) and (0.0 <= footprint_nuylim[1] <= 1.0):
+            is_fp_nuylim_frac = True
+    else:
+        footprint_nuylim = nuylim.copy()
+    #
+    if is_fp_nuxlim_frac and is_fp_nuylim_frac:
+        _plot_fp_nu_frac = True
+    elif (not is_fp_nuxlim_frac) and (not is_fp_nuylim_frac):
+        _plot_fp_nu_frac = False
+    else:
+        raise ValueError(
+            ('"footprint_nuxlim" and "footprint_nuylim" must be either '
+             'both fractional or both non-fractional'))
 
-    if _plot_nu_frac:
+    if _plot_fp_nu_frac:
         _nuxs = nuxs - nux0_int
         _nuys = nuys - nuy0_int
 
-        frac_nuxlim = nuxlim
-        frac_nuylim = nuylim
+        frac_nuxlim = footprint_nuxlim
+        frac_nuylim = footprint_nuylim
     else:
         _nuxs = nuxs
         _nuys = nuys
 
-        frac_nuxlim = nuxlim - nux0_int
-        frac_nuylim = nuylim - nuy0_int
+        frac_nuxlim = footprint_nuxlim - nux0_int
+        frac_nuylim = footprint_nuylim - nuy0_int
 
     if ax_nuy_vs_nux:
         ax = ax_nuy_vs_nux
     else:
         _, ax = plt.subplots()
     sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=deltas * 1e2, marker='o', cmap='jet')
-    if nuxlim:
-        ax.set_xlim(nuxlim)
-    if nuylim:
-        ax.set_ylim(nuylim)
+    ax.set_xlim(footprint_nuxlim)
+    ax.set_ylim(footprint_nuylim)
     ax.set_xlabel(r'$\nu_x$', size=font_sz)
     ax.set_ylabel(r'$\nu_y$', size=font_sz)
     #
@@ -2368,11 +2389,11 @@ def plot_chrom(
     )
     for n in range(1, max_resonance_line_order):
         d = rd.getResonanceCoeffsAndLines(
-            n, np.array(frac_nuxlim) + nux0_int, frac_nuylim + nuy0_int) # <= CRITICAL: Must pass tunes w/ integer parts
+            n, np.array(frac_nuxlim) + nux0_int, np.array(frac_nuylim) + nuy0_int) # <= CRITICAL: Must pass tunes w/ integer parts
         prop = {k: lineprops[k][n-1] for k in ['color', 'linestyle', 'linewidth']}
         assert len(d['lines']) == len(d['coeffs'])
         for ((nux1, nuy1), (nux2, nuy2)), (nx, ny, _) in zip(d['lines'], d['coeffs']):
-            if _plot_nu_frac:
+            if _plot_fp_nu_frac:
                 _x = np.array([nux1 - nux0_int, nux2 - nux0_int])
                 _y = np.array([nuy1 - nuy0_int, nuy2 - nuy0_int])
             else:
