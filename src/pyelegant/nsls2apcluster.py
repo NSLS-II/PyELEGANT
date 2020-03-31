@@ -34,8 +34,8 @@ SLURM_EXCL_NODES = None
     #list(range(7, 15+1))] # exclude both apcpu & NFS nodes, i.e., including only GPFS nodes
 
 #MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant-latest', ''
-#MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant-latest elegant/2019.2.1', ''
-MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant/2020.1.1-1', '--mpi=pmi2'
+MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant-latest elegant/2020.2.0', ''
+#MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant/2020.1.1-1', '--mpi=pmi2'
 
 _p = Popen(shlex.split('which elegant'), stdout=PIPE, stderr=PIPE, encoding='utf-8')
 _out, _err = _p.communicate()
