@@ -72,8 +72,9 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
         json.dump(version, f)
 
 req_pakcages = ['numpy', 'scipy', 'matplotlib', 'h5py', 'pylatex', 'ruamel.yaml']
-if facility_name == 'nsls2apcluster':
-    req_pakcages += ['mpi4py>=3', 'dill']
+# TODO: cannot handle facility-specific required packages for now
+#if facility_name == 'nsls2apcluster':
+    #req_pakcages += ['mpi4py>=3', 'dill']
 
 setup(
     name = program_name,
