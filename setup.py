@@ -39,6 +39,9 @@ import json
 facility_json_filename = 'facility.json'
 version_filename = 'version.json'
 
+com_req_pakcages = [
+    'numpy', 'scipy', 'matplotlib', 'h5py', 'pylatex', 'ruamel.yaml']
+
 if ('install' in sys.argv) or ('sdist' in sys.argv):
 
     facility_name_opt = [v for v in sys.argv if v.startswith(f'--{facility_name_arg}=')]
@@ -71,29 +74,43 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
         this_folder, 'src', 'pyelegant', version_filename), 'w') as f:
         json.dump(version, f)
 
-req_pakcages = ['numpy', 'scipy', 'matplotlib', 'h5py', 'pylatex', 'ruamel.yaml']
-# TODO: cannot handle facility-specific required packages for now
-#if facility_name == 'nsls2apcluster':
-    #req_pakcages += ['mpi4py>=3', 'dill']
+    req_pakcages = []
+    if facility_name == 'nsls2apcluster':
+        req_pakcages += ['mpi4py>=3', 'dill']
+
+    entry_points = dict(
+        console_scripts = [
+            'pyele_report = pyelegant.scripts.genreport:main',]
+    )
+    if facility_name == 'nsls2apcluster':
+        pass
+
+    other_setup_opts = dict(
+        install_requires=req_pakcages,
+        # ^ These requirements are actually NOT being checked (as of 04/01/2020)
+        #   due to the known bug with the custom install:
+        #       (https://github.com/pypa/setuptools/issues/456)
+        entry_points=entry_points)
+elif 'egg_info' in sys.argv:
+    other_setup_opts = dict(install_requires=com_req_pakcages)
+else:
+    raise RuntimeError()
 
 setup(
     name = program_name,
     version = version,
-    install_requires = req_pakcages,
     packages=find_packages('src'),
     package_dir={'': 'src'},
     #include_package_data = True,
     package_data = {
         'pyelegant': [facility_json_filename, version_filename]
     },
-    entry_points = {
-        'console_scripts': ['pyele_report = pyelegant.scripts.genreport:main'],
-    },
     zip_safe=False,
-    description = 'Python Interface to Elegant',
+    description = 'Python Interface to ELEGANT',
     author = 'Yoshiteru Hidaka',
     maintainer = 'Yoshiteru Hidaka',
     maintainer_email = 'yhidaka@bnl.gov',
     cmdclass={'install': InstallCommand},
+    **other_setup_opts
 )
 
