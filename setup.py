@@ -80,7 +80,10 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
 
     entry_points = dict(
         console_scripts = [
-            'pyele_report = pyelegant.scripts.genreport:main',]
+            'pyele_report = pyelegant.scripts.genreport:main',
+            'pyele_slurm_print_queue = pyelegant.scripts.nsls2apcluster.slurmutil:print_queue',
+            'pyele_slurm_print_load = pyelegant.scripts.nsls2apcluster.slurmutil:print_load',
+        ]
     )
     if facility_name == 'nsls2apcluster':
         pass
