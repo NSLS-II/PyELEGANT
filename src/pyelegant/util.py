@@ -8,6 +8,8 @@ import h5py
 import numpy as np
 import itertools
 from pathlib import Path
+from subprocess import Popen, PIPE
+import shlex
 
 from . import __version__
 
@@ -608,3 +610,24 @@ def deepcopy_dict(d):
     """"""
 
     return pickle.loads(pickle.dumps(d))
+
+def chained_Popen(cmd_list):
+    """"""
+
+    if len(cmd_list) == 1:
+        cmd = cmd_list[0]
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE,
+                  encoding='utf-8')
+
+    else:
+        cmd = cmd_list[0]
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE)
+        for cmd in cmd_list[1:-1]:
+            p = Popen(shlex.split(cmd), stdin=p.stdout, stdout=PIPE, stderr=PIPE)
+        cmd = cmd_list[-1]
+        p = Popen(shlex.split(cmd), stdin=p.stdout, stdout=PIPE, stderr=PIPE,
+                  encoding='utf-8')
+
+    out, err = p.communicate()
+
+    return out, err, p.returncode
