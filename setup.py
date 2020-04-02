@@ -83,6 +83,7 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
             'pyele_report = pyelegant.scripts.genreport:main',
             'pyele_slurm_print_queue = pyelegant.scripts.nsls2apcluster.slurmutil:print_queue',
             'pyele_slurm_print_load = pyelegant.scripts.nsls2apcluster.slurmutil:print_load',
+            'pyele_slurm_scancel_regex_jobname = pyelegant.scripts.nsls2apcluster.slurmutil:scancel_by_regex_jobname',
         ]
     )
     if facility_name == 'nsls2apcluster':

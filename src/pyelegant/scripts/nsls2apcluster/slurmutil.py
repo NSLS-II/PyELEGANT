@@ -1,6 +1,29 @@
 import shlex
 from subprocess import Popen, PIPE
 import re
+import argparse
+import getpass
+
+def chained_Popen(cmd_list):
+    """"""
+
+    if len(cmd_list) == 1:
+        cmd = cmd_list[0]
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE,
+                  encoding='utf-8')
+
+    else:
+        cmd = cmd_list[0]
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE)
+        for cmd in cmd_list[1:-1]:
+            p = Popen(shlex.split(cmd), stdin=p.stdout, stdout=PIPE, stderr=PIPE)
+        cmd = cmd_list[-1]
+        p = Popen(shlex.split(cmd), stdin=p.stdout, stdout=PIPE, stderr=PIPE,
+                  encoding='utf-8')
+
+    out, err = p.communicate()
+
+    return out, err, p.returncode
 
 def print_queue():
     """"""
@@ -51,3 +74,46 @@ def print_load():
         cpu_load = '{:.2f}'.format(_cpu_load)
         node_name = combined_node_name
         print(f'{node_name:>{nMaxNodeNameLen+1:d}s} :: {nAlloc:>5s} / {nTot:>3s} :: {cpu_load:>7s}')
+
+def scancel_by_regex_jobname():
+    """
+    """
+
+    parser = argparse.ArgumentParser(
+        prog='pyele_slurm_scancel_regex_job_name',
+        description='SLURM scancel command enhanced with regular experssion pattern matching')
+    parser.add_argument('job_name_pattern', type=str,
+                        help='act only on jobs whose names match this regex pattern')
+    parser.add_argument(
+        '-d', '--dryrun', default=False, action='store_true',
+        help='Print which JOB IDs will be terminated without actually doing so.')
+
+    args = parser.parse_args()
+
+    queue_cmd = f'squeue --user={getpass.getuser()} -o "%.9i %.18j"'
+
+    cmd_list = [queue_cmd,
+                f'grep {args.job_name_pattern}']
+
+    result, err, returncode = chained_Popen(cmd_list)
+
+    if args.dryrun:
+        if result.strip() == '':
+            print('No job name match found. No jobs will be terminated.')
+        else:
+            print('Only the following jobs will be terminated:')
+            print('(JOBID, NAME)')
+            print(result)
+
+    else:
+        job_ID_list = [L.split()[0].strip() for L in result.splitlines()]
+
+        cmd = 'scancel ' + ' '.join(job_ID_list)
+        print(f'Executing "$ {cmd}"')
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+        out, err = p.communicate()
+        print(out)
+        if err:
+            print('** stderr **')
+            print(err)
+
