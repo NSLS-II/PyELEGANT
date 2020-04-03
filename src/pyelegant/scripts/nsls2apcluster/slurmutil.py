@@ -42,7 +42,7 @@ def print_load():
     out, err = p.communicate()
 
     parsed = re.findall(
-        'NodeName=([\w\d\-]+)\s+[\w=\s]+CPUAlloc=(\d+)\s+CPUTot=(\d+)\s+CPULoad=([\d\.]+)',
+        'NodeName=([\w\d\-]+)\s+[\w=\s]+CPUAlloc=(\d+)\s+CPUTot=(\d+)\s+CPULoad=([\d\.N/A]+)',
         out)
 
     nMaxNodeNameLen = max(
@@ -68,7 +68,10 @@ def print_load():
             if node_name in node_list:
                 _nAlloc += int(nAlloc)
                 _nTot += int(nTot)
-                _cpu_load += float(cpu_load)
+                if cpu_load != 'N/A':
+                    _cpu_load += float(cpu_load)
+                else:
+                    _cpu_load += float('nan')
         nAlloc = '{:d}'.format(_nAlloc)
         nTot = '{:d}'.format(_nTot)
         cpu_load = '{:.2f}'.format(_cpu_load)
