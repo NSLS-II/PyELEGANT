@@ -1,7 +1,11 @@
 import sys
 import os
 import numpy as np
+import scipy.constants
+from scipy.constants import physical_constants
+import time
 import pickle
+from types import SimpleNamespace
 import matplotlib.pylab as plt
 from matplotlib.backends.backend_pdf import PdfPages
 #import yaml
@@ -11,11 +15,19 @@ from ruamel import yaml
 #   is treated as a string.
 from pathlib import Path
 import argparse
+import xlsxwriter
 
 import pyelegant as pe
 pe.disable_stdout()
 pe.enable_stderr()
 plx = pe.latex
+
+GREEK = dict(
+    alpha=chr(0x03b1), beta=chr(0x03b2), Delta=chr(0x0394), delta=chr(0x03b4),
+    eta=chr(0x03b7), epsilon=chr(0x03b5), mu=chr(0x03bc), nu=chr(0x03bd),
+    phi=chr(0x03c6), pi=chr(0x03c0), psi=chr(0x03c8), rho=chr(0x03c1),
+    sigma=chr(0x03c3), tau=chr(0x03c4), theta=chr(0x03b8), xi=chr(0x03be),
+)
 
 def gen_LTE_from_base_LTE_and_param_file(conf, input_LTE_filepath):
     """"""
@@ -64,7 +76,8 @@ def calc_lin_props(
     interm_array_data = {} # holds data that will be only used to derive some other quantities
 
     raw_keys = dict(
-        one_period=dict(eps_x='ex0', Jx='Jx', Jy='Jy', Jdelta='Jdelta'),
+        one_period=dict(eps_x='ex0', Jx='Jx', Jy='Jy', Jdelta='Jdelta',
+                        taux='taux', tauy='tauy', taudelta='taudelta'),
         ring=dict(
             nux='nux', nuy='nuy', ksi_x_cor='dnux/dp', ksi_y_cor='dnuy/dp',
             alphac='alphac', U0_MeV='U0', dE_E='Sdelta0'),
@@ -73,7 +86,7 @@ def calc_lin_props(
 
     interm_array_keys = dict(
         one_period=dict(
-            s_one_period='s', betax_1p='betax', betay_1p='betay', etax_1p='etax',
+            s_1p='s', betax_1p='betax', betay_1p='betay', etax_1p='etax',
             elem_names_1p='ElementName'),
         ring=dict(
             s_ring='s', elem_names_ring='ElementName',
@@ -107,7 +120,7 @@ def calc_lin_props(
 
     sel_data['circumf'] = interm_array_data['s_ring'][-1]
 
-    ring_mult = sel_data['circumf'] / interm_array_data['s_one_period'][-1]
+    ring_mult = sel_data['circumf'] / interm_array_data['s_1p'][-1]
     sel_data['n_periods_in_ring'] = int(np.round(ring_mult))
     assert np.abs(ring_mult - sel_data['n_periods_in_ring']) < 1e-3
 
@@ -164,6 +177,7 @@ def calc_lin_props(
         use_beamline=conf_twi['one_period']['use_beamline'],
         parameters='%s.param')
     ed.add_block('floor_coordinates', filename = '%s.flr')
+    ed.add_block('twiss_output', filename='%s.twi', matched=True)
     #
     # The following are required to generate "%s.param"
     ed.add_block('run_control')
@@ -231,17 +245,33 @@ def calc_lin_props(
     header = header_template.format(
         titles['s'], titles['ElementName'], titles['ElementType'])
     flat_elem_s_name_type_list = [header, '-' * len(header)]
+    excel_headers = [
+        's (m)', 'L (m)', 'Element Name', 'Element Type',
+        'betax (m)', 'betay (m)', 'etax (m)', 'psix (2\pi)', 'psiy (2\pi)']
+    excel_elem_list = [excel_headers]
     sel_data['tot_bend_angle_rad_per_period'] = 0.0
-    for s, elem_name, elem_type in zip(
-        res['flr']['columns']['s'], res['flr']['columns']['ElementName'],
-        res['flr']['columns']['ElementType']):
+    assert np.all(res['twi']['columns']['s'] == res['flr']['columns']['s'])
+    for s, L, elem_name, elem_type, betax, betay, etax, psix, psiy in zip(
+        res['flr']['columns']['s'], res['flr']['columns']['ds'],
+        res['flr']['columns']['ElementName'], res['flr']['columns']['ElementType'],
+        res['twi']['columns']['betax'], res['twi']['columns']['betay'],
+        res['twi']['columns']['etax'], res['twi']['columns']['psix'],
+        res['twi']['columns']['psiy']):
+
         flat_elem_s_name_type_list.append(value_template.format(s, elem_name, elem_type))
+        excel_elem_list.append([
+            s, L, elem_name, elem_type, betax, betay, etax,
+            psix / (2 * np.pi), psiy / (2 * np.pi)])
 
         if elem_name in elem_defs['bends']:
             sel_data['tot_bend_angle_rad_per_period'] += \
                 elem_defs['bends'][elem_name]['ANGLE']
     #
+    assert len(excel_elem_list[0]) == len(excel_elem_list[1]) # Confirm that the
+    # length of headers is equal to the length of each list.
+    #
     sel_data['flat_elem_s_name_type_list'] = flat_elem_s_name_type_list
+    sel_data['excel_elem_list'] = excel_elem_list
 
     tot_bend_angle_deg_in_ring = np.rad2deg(
         sel_data['tot_bend_angle_rad_per_period']) * sel_data['n_periods_in_ring']
@@ -278,6 +308,8 @@ def calc_lin_props(
                     raise ValueError(
                         'Invalid "length" dict value for key "{}": {}'.format(
                             key, ', '.join(elem_name_list)))
+
+                L *= elem_d.get('multiplier', 1.0)
 
                 _d[key] = dict(L=L, label=elem_d['label'])
 
@@ -333,7 +365,7 @@ def calc_lin_props(
             doc.append(plx.NewLine())
         plx.generate_pdf_w_reruns(doc, clean_tex=False, silent=False)
 
-    return dict(versions=pe.__version__, sel_data=sel_data)
+    return dict(versions=pe.__version__, sel_data=sel_data, timestamp=time.time())
 
 def get_only_lin_props_plot_captions(
     report_folderpath, twiss_plot_opts, twiss_plot_captions):
@@ -381,9 +413,14 @@ def plot_lin_props(
     fignums_to_delete = []
 
     pp = PdfPages(twiss_pdf_filepath)
+    page = 0
     for fignum in plt.get_fignums():
         if fignum not in existing_fignums:
             pp.savefig(figure=fignum)
+            #plt.savefig(os.path.join(report_folderpath, f'twiss_{page:d}.svg'))
+            plt.savefig(os.path.join(report_folderpath, f'twiss_{page:d}.png'),
+                        dpi=200)
+            page += 1
             fignums_to_delete.append(fignum)
     pp.close()
 
@@ -549,7 +586,7 @@ def create_beamline_elements_list_subsection(doc, flat_elem_s_name_type_list):
                 table.add_row([_s.strip().replace('#', '') for _s in line.split(':')])
 
 def add_nonlin_sections(
-    doc, conf, report_folderpath, input_LTE_filepath):
+    doc, workbook, conf, report_folderpath, input_LTE_filepath):
     """"""
 
     ncf = conf['nonlin']
@@ -1026,23 +1063,253 @@ def add_nonlin_chrom_section(
             doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
             fig.add_caption('Nonlinear chromaticity.')
 
+def add_worksheet_lattice_props(workbook, wb_txt_fmts, wb_num_fmts, ws, lin_data):
+    """"""
+
+    normal = wb_txt_fmts.normal
+    bold = wb_txt_fmts.bold
+    bold_underline = wb_txt_fmts.bold_underline
+    italic = wb_txt_fmts.italic
+    sup = wb_txt_fmts.sup
+    sub = wb_txt_fmts.sub
+    italic_sub = wb_txt_fmts.italic_sub
+
+    nf = wb_num_fmts
+
+    row = 0
+    col = 3
+    ws.set_column(col, col, 20)
+    for k in ['Lattice ID:', 'Keywords:', '_orig_LTE_filepath:',
+              'Created by:', 'Date received:']:
+        ws.write(row, col, k, bold)
+        row += 1
+    # TODO: add the following at top
+    # Lattice ID
+    # keywords
+    # _orig_LTE_filepath
+    # Created by
+    # Date received
+
+    row = 0
+
+    # Write headers
+    ws.write(row, 0, 'Property', bold_underline)
+    ws.write(row, 1, 'Value', bold_underline)
+    row += 1
+
+    table_order = [
+        # (property_key), (symbol), (num_format)
+        ('E_GeV', [italic, 'E'], None), # Beam energy
+        ('circumf', [italic, 'C'], nf['0.000']), # Circumference
+        ('eps_x', [italic, GREEK['epsilon'], italic_sub, 'x'], nf['0.00']), # Natural horizontal emittance
+        ('nux', [italic, GREEK['nu'], italic_sub, 'x'], nf['0.000']), # Ring horiz. tune
+        ('nuy', [italic, GREEK['nu'], italic_sub, 'y'], nf['0.000']), # Ring vert. tune
+        ('ksi_nat_x', [italic, GREEK['xi'], italic_sub, 'x', sup, 'nat'],
+         nf['0.000']),
+        ('ksi_nat_y', [italic, GREEK['xi'], italic_sub, 'y', sup, 'nat'],
+         nf['0.000']),
+        ('ksi_cor_x', [italic, GREEK['xi'], italic_sub, 'x', sup, 'cor'],
+         nf['0.000']),
+        ('ksi_cor_y', [italic, GREEK['xi'], italic_sub, 'y', sup, 'cor'],
+         nf['0.000']),
+        ('alphac', [italic, GREEK['alpha'], italic_sub, 'c'], nf['0.00E+00']), # Momentum compaction
+        ('Jx', [italic, 'J', italic_sub, 'x'], nf['0.00']), # Horizontal damping partition number
+        ('Jy', [italic, 'J', italic_sub, 'y'], nf['0.00']), # Vertical damping partition number
+        ('Jdelta', [italic, 'J', italic_sub, GREEK['delta']], nf['0.00']), # Longitudinal damping partition number
+        ('taux', [italic, GREEK['tau'], italic_sub, 'x'], nf['0.00']), # Horizontal damping time
+        ('tauy', [italic, GREEK['tau'], italic_sub, 'y'], nf['0.00']), # Vertical damping time
+        ('taudelta', [italic, GREEK['tau'], italic_sub, GREEK['delta']],
+         nf['0.00']), # Longitudinal damping time
+        ('sigma_delta', [italic, GREEK['sigma'], italic_sub, GREEK['delta']],
+         nf['0.000']), # Energy spread
+        ('U0', [italic, 'U', sub, '0'], nf['###']), # Energy loss per turn
+        ('f_rev', [italic, 'f', sub, 'rev'], nf['0.000']), # Revolution frequency
+        (['beta', 'Excel_LS', 'x'], None, nf['0.00']), # Horizontal beta at LS Center
+        (['beta', 'Excel_LS', 'y'], None, nf['0.00']), # Vertical beta at LS Center
+        (['beta', 'Excel_SS', 'x'], None, nf['0.00']), # Horizontal beta at SS Center
+        (['beta', 'Excel_SS', 'y'], None, nf['0.00']), # Vertical beta at SS Center
+        ('max_betax', None, nf['0.00']), # Max horizontal beta
+        ('max_betay', None, nf['0.00']), # Max vertical beta
+        ('min_betax', None, nf['0.00']), # Min horizontal beta
+        ('min_betay', None, nf['0.00']), # Min vertical beta
+        ('max_etax', None, nf['0.0']), # Max horizontal dispersion
+        ('min_etax', None, nf['0.0']), # Min horizontal dispersion
+        (['length', 'Excel_LS'], None, nf['0.000']), # Length of LS
+        (['length', 'Excel_SS'], None, nf['0.000']), # Length of SS
+        # Fraction of straights to arcs [Use Excel formulat to compute this]
+
+        # RF voltage
+        # RF harmonic number
+        # Synchrotron tune
+        # Bunch length
+        # RF acceptance (Bucket height)
+        # Beam Lifetime
+        # DA
+    ]
+
+    for row_spec, symbol_def, num_fmt in table_order:
+        label, unit, value = get_lattice_prop_row(
+            lin_data, row_spec, excel_output=True)
+
+        label_fragments = []
+        normal_text = ''
+        for token in label.split():
+
+            if token in ('betax', 'betay', 'etax', 'etay'):
+
+                if normal_text:
+                    label_fragments += [normal, normal_text]
+                    normal_text = ''
+
+                if token == 'betax':
+                    label_fragments += [italic, GREEK['beta'], italic_sub, 'x']
+                elif token == 'betay':
+                    label_fragments += [italic, GREEK['beta'], italic_sub, 'y']
+                elif token == 'etax':
+                    label_fragments += [italic, GREEK['eta'], italic_sub, 'x']
+                elif token == 'etay':
+                    label_fragments += [italic, GREEK['eta'], italic_sub, 'y']
+                else:
+                    raise ValueError()
+
+            else:
+                normal_text += token + ' '
+
+        if normal_text:
+            label_fragments += [normal, normal_text]
+        else:
+            label_fragments += [normal, ' ']
+
+        if symbol_def is not None:
+            fragments = label_fragments + symbol_def + [normal, f' {unit}']
+        else:
+            fragments = label_fragments + [normal, f' {unit}']
+        ws.write_rich_string(row, 0, *fragments)
+
+        ws.write(row, 1, value, num_fmt)
+
+        row += 1
+
+    ws.set_column(0, 0, 40)
+
+
+def add_worksheet_LTE(workbook, wb_txt_fmts, wb_num_fmts, ws, input_LTE_filepath):
+    """"""
+
+    LTE_contents = Path(input_LTE_filepath).read_text()
+
+    normal = wb_txt_fmts.normal
+    bold = wb_txt_fmts.bold
+    courier = wb_txt_fmts.courier
+
+    ws.set_column(0, 0, 20)
+
+    ws.write(0, 0, 'Input LTE filepath:', bold)
+    ws.write(0, 1, input_LTE_filepath, normal)
+
+    ws.write(2, 0, '#' * 100, courier)
+
+    row = 4
+    for line in LTE_contents.splitlines():
+        ws.write(row, 0, line, courier)
+        row += 1
+
+def _build_workbook_formats(workbook):
+    """"""
+
+    default_font_name = 'Times New Roman'
+
+    # Change default cell format
+    workbook.formats[0].set_font_size(11)
+    workbook.formats[0].set_font_name(default_font_name)
+
+    wb_txt_fmts = SimpleNamespace()
+
+    wb_txt_fmts.normal = workbook.add_format()
+
+    wb_txt_fmts.wrap = workbook.add_format({'text_wrap': True})
+    wb_txt_fmts.bold_wrap = workbook.add_format({'bold': True, 'text_wrap': True})
+
+    wb_txt_fmts.bold = workbook.add_format({'bold': True})
+    wb_txt_fmts.italic = workbook.add_format({'italic': True})
+    wb_txt_fmts.bold_italic = workbook.add_format({'bold': True, 'italic': True})
+    wb_txt_fmts.bold_underline = workbook.add_format({'bold': True, 'underline': True})
+
+    wb_txt_fmts.sup = workbook.add_format({'font_script': 1})
+    wb_txt_fmts.sub = workbook.add_format({'font_script': 2})
+    wb_txt_fmts.italic_sup = workbook.add_format({'italic': True, 'font_script': 1})
+    wb_txt_fmts.italic_sub = workbook.add_format({'italic': True, 'font_script': 2})
+    wb_txt_fmts.bold_sup = workbook.add_format({'bold': True, 'font_script': 1})
+    wb_txt_fmts.bold_sub = workbook.add_format({'bold': True, 'font_script': 2})
+    wb_txt_fmts.bold_italic_sup = workbook.add_format(
+        {'bold': True, 'italic': True, 'font_script': 1})
+    wb_txt_fmts.bold_italic_sub = workbook.add_format(
+        {'bold': True, 'italic': True, 'font_script': 2})
+
+    wb_num_fmts = {}
+    for spec in ['0.0', '0.00', '0.000', '0.0000', '0.00E+00', '###']:
+        wb_num_fmts[spec] = workbook.add_format({'num_format': spec})
+
+    for k in list(wb_txt_fmts.__dict__):
+        fmt = getattr(wb_txt_fmts, k)
+        fmt.set_font_name(default_font_name)
+
+    for fmt in wb_num_fmts.values():
+        fmt.set_font_name(default_font_name)
+
+    # From here on, define non-default fonts
+    wb_txt_fmts.courier = workbook.add_format({'font_name': 'Courier New'})
+    wb_txt_fmts.courier_wrap = workbook.add_format(
+        {'font_name': 'Courier New', 'text_wrap': True})
+
+    return wb_txt_fmts, wb_num_fmts
+
 def build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data,
                  twiss_plot_captions):
     """"""
 
     doc = create_header(conf, report_folderpath, rootname)
 
+    workbook = xlsxwriter.Workbook(
+        os.path.join(report_folderpath, f'{rootname}_report.xlsx'))
+    wb_txt_fmts, wb_num_fmts = _build_workbook_formats(workbook)
+    # TODO: write "conf" contents into Excel file
+    worksheets = {}
+    worksheets['lat_params'] = workbook.add_worksheet('Lattice Parameters')
+    worksheets['mag_params'] = workbook.add_worksheet('Magnet Parameters')
+    worksheets['nonlin'] = workbook.add_worksheet('Nonlinear')
+    worksheets['elems_twiss'] = workbook.add_worksheet('Elements & Twiss')
+    worksheets['layout'] = workbook.add_worksheet('Layout')
+    worksheets['rf'] = workbook.add_worksheet('RF')
+    worksheets['report_config'] = workbook.add_worksheet('Report Config')
+    worksheets['lte'] = workbook.add_worksheet('LTE')
+    #
+    worksheets['lat_params'].activate()
+
     add_lattice_description(doc, conf, input_LTE_filepath)
 
     add_lattice_elements(doc, lin_data)
+    add_worksheet_lattice_elements(
+        workbook, wb_txt_fmts, wb_num_fmts, worksheets, lin_data,
+        report_folderpath)
 
     add_lattice_props_section(
         doc, conf, report_folderpath, lin_data, twiss_plot_captions)
+    add_worksheet_lattice_props(
+        workbook, wb_txt_fmts, wb_num_fmts, worksheets['lat_params'], lin_data)
+
+    add_worksheet_LTE(
+        workbook, wb_txt_fmts, wb_num_fmts, worksheets['lte'], input_LTE_filepath)
+
+    workbook.close()
+    sys.exit(0)
 
     doc.append(plx.ClearPage())
 
     add_nonlin_sections(
-        doc, conf, report_folderpath, input_LTE_filepath)
+        doc, workbook, conf, report_folderpath, input_LTE_filepath)
+
+    workbook.close()
 
     plx.generate_pdf_w_reruns(doc, clean_tex=False, silent=False)
 
@@ -1102,7 +1369,449 @@ def add_lattice_elements(doc, lin_data):
         create_beamline_elements_list_subsection(
             doc, lin_data['flat_elem_s_name_type_list'])
 
-def get_lattice_prop_row(lin_data, row_spec):
+def add_worksheet_lattice_elements(
+    workbook, wb_txt_fmts, wb_num_fmts, worksheets, lin_data, report_folderpath):
+    """"""
+
+    create_worksheet_magnet_params(
+        workbook, wb_txt_fmts, wb_num_fmts, worksheets['mag_params'], lin_data)
+
+    create_worksheet_beamline_elements_list(
+        workbook, wb_txt_fmts, wb_num_fmts, worksheets['elems_twiss'],
+        lin_data['excel_elem_list'], report_folderpath)
+
+def create_worksheet_magnet_params(workbook, wb_txt_fmts, wb_num_fmts, ws, lin_data):
+    """"""
+
+    elem_defs = lin_data['elem_defs']
+
+    mag_col_names = [
+        'name', 'L', 'K1', 'K2', 'K3', 'US_space', 'DS_space', 'aperture',
+        'theta', 'E1', 'E2', 'B', 'rho']
+    mag_col_inds = {name: i for i, name in enumerate(mag_col_names)}
+
+    next_row = 0
+
+    excel_elem_list = lin_data['excel_elem_list']
+    elem_type_ind = excel_elem_list[0].index('Element Type')
+    mod_excel_elem_list = [excel_elem_list[0]] + [
+        v for v in excel_elem_list[1:] if v[elem_type_ind] != 'MARK']
+
+    next_row = add_bend_elements_to_worksheet(
+        workbook, wb_txt_fmts, wb_num_fmts, ws, next_row, elem_defs, mag_col_inds,
+        mod_excel_elem_list, lin_data['E_GeV'])
+
+    next_row = add_quad_elements_to_worksheet(
+        workbook, wb_txt_fmts, wb_num_fmts, ws, next_row, elem_defs, mag_col_inds,
+        mod_excel_elem_list)
+
+    next_row = add_sext_elements_to_worksheet(
+        workbook, wb_txt_fmts, wb_num_fmts, ws, next_row, elem_defs, mag_col_inds,
+        mod_excel_elem_list)
+
+    #next_row = add_oct_elements_to_worksheet(
+        #workbook, wb_txt_fmts, wb_num_fmts, ws, elem_defs, next_row)
+
+    # Adjust column widths
+    max_elem_name_width = max(
+        [len('Name')] + [
+            len(k) for k in list(elem_defs['bends']) + list(elem_defs['quads'])])
+    c = mag_col_inds['name']
+    ws.set_column(c, c, max_elem_name_width + 4)
+    c = mag_col_inds['theta']
+    ws.set_column(c, c, 11)
+    c = mag_col_inds['E1']
+    ws.set_column(c, c, 10)
+    c = mag_col_inds['E2']
+    ws.set_column(c, c, 10)
+    c = mag_col_inds['B']
+    ws.set_column(c, c, 7)
+    c = mag_col_inds['rho']
+    ws.set_column(c, c, 13)
+    c = mag_col_inds['US_space']
+    ws.set_column(c, c, 12)
+    c = mag_col_inds['DS_space']
+    ws.set_column(c, c, 12)
+    c = mag_col_inds['aperture']
+    ws.set_column(c, c, 15)
+
+def _get_US_DS_drift_space(elem_name, excel_elem_list):
+    """"""
+
+    debug = True
+
+    elem_name_ind = excel_elem_list[0].index('Element Name')
+    elem_type_ind = excel_elem_list[0].index('Element Type')
+    L_ind = excel_elem_list[0].index('L (m)')
+    flat_elem_names = np.array([v[elem_name_ind] for v in excel_elem_list[1:]])
+
+    start_inds, end_inds = [], []
+    start = None
+    for elem_ind in np.where(flat_elem_names == elem_name)[0]:
+        if start is None:
+            start = elem_ind
+            start_inds.append(start)
+        else:
+            if start + 1 == elem_ind:
+                start = elem_ind
+            else:
+                end_inds.append(start)
+                start = elem_ind
+                start_inds.append(start)
+    end_inds.append(elem_ind)
+    assert len(start_inds) == len(end_inds)
+
+    if debug:
+        print(f'Element Name: {elem_name}')
+
+    us_drifts, ds_drifts = [], []
+    for si, ei in zip(start_inds, end_inds):
+        if debug:
+            _elem_type_list = [excel_elem_list[si + 1][elem_type_ind]] # +1 to exclude header
+        si -= 1 # to look at upstream element
+        ds = 0.0
+        while si > 0:
+            elem = excel_elem_list[si + 1] # +1 to exclude header
+            elem_type = elem[elem_type_ind]
+            if debug:
+                _elem_type_list.append(elem_type)
+            if elem_type in (
+                'SBEN', 'SBEND', 'RBEN', 'RBEND', 'CSBEND',
+                'QUAD', 'KQUAD', 'SEXT', 'KSEXT', 'KOCT'):
+                break
+            else:
+                ds += elem[L_ind]
+            si -= 1
+        us_drifts.append(ds)
+        if debug:
+            print('US drift: ' + ','.join(_elem_type_list))
+
+        if debug:
+            _elem_type_list = [excel_elem_list[ei + 1][elem_type_ind]] # +1 to exclude header
+        ei += 1 # to look at downstream element
+        ds = 0.0
+        while ei + 1 < len(excel_elem_list):
+            elem = excel_elem_list[ei + 1] # +1 to exclude header
+            elem_type = elem[elem_type_ind]
+            if debug:
+                _elem_type_list.append(elem_type)
+            if elem_type in (
+                'SBEN', 'SBEND', 'RBEN', 'RBEND', 'CSBEND',
+                'QUAD', 'KQUAD', 'SEXT', 'KSEXT', 'KOCT'):
+                break
+            else:
+                ds += elem[L_ind]
+            ei += 1
+        ds_drifts.append(ds)
+        if debug:
+            print('DS drift: ' + ','.join(_elem_type_list))
+
+    if debug:
+        print('US drift unique lengths:')
+        print(np.unique(us_drifts))
+        print('DS drift unique lengths:')
+        print(np.unique(ds_drifts))
+
+    return us_drifts, ds_drifts
+
+def add_bend_elements_to_worksheet(
+    workbook, wb_txt_fmts, wb_num_fmts, ws, next_row, elem_defs, mag_col_inds,
+    excel_elem_list, E_GeV):
+    """"""
+
+    if not elem_defs['bends']:
+        return next_row
+
+    bold = wb_txt_fmts.bold
+    bold_underline = wb_txt_fmts.bold_underline
+    bold_italic = wb_txt_fmts.bold_italic
+    bold_sup = wb_txt_fmts.bold_sup
+    bold_sub = wb_txt_fmts.bold_sub
+
+    wrap = wb_txt_fmts.wrap
+    bold_wrap = wb_txt_fmts.bold_wrap
+
+    ws.write(next_row, 0, 'Bending Magnets', bold_underline)
+    next_row += 1
+
+    # Write headers
+    for col_name, fragments in [
+        ['name', (bold, 'Name')],
+        ['L', (bold_italic, 'L', bold, ' (m)')],
+        ['theta',
+         (bold_italic, GREEK['theta'], bold_sub, 'bend', bold, ' (mrad)')],
+        ['E1',
+         (bold_italic, GREEK['theta'], bold_sub, 'in', bold, ' (mrad)')],
+        ['E2',
+         (bold_italic, GREEK['theta'], bold_sub, 'out', bold, ' (mrad)')],
+        ['K1',
+         (bold_italic, 'K', bold_sub, '1', bold, ' (m', bold_sup, '-2', ')')],
+        ['B', (bold_italic, 'B', bold, ' (T)')],
+        ['rho',
+         (bold, 'Bending\nRadius ', bold_italic, GREEK['rho'], bold, ' (m)',
+          wrap)],
+        ['US_space', (bold_wrap, 'Min. US\nSpace (mm)')],
+        ['DS_space', (bold_wrap, 'Min. DS\nSpace (mm)')],
+        ['aperture', (bold_wrap, 'Magnet\nAperture (mm)')],
+        ]:
+
+        col = mag_col_inds[col_name]
+
+        if len(fragments) > 2:
+            ws.write_rich_string(next_row, col, *fragments)
+        elif len(fragments) == 2:
+            ws.write(next_row, col, fragments[1], fragments[0])
+        elif len(fragments) == 1:
+            ws.write(next_row, col, fragments[0])
+        else:
+            raise ValueError()
+    next_row += 1
+
+    U0_GeV = physical_constants['electron mass energy equivalent in MeV'][0] / 1e3
+    Brho = 1e9 / scipy.constants.c * np.sqrt(E_GeV**2 - U0_GeV**2) # [T-m]
+
+    fmt = dict(
+        L=wb_num_fmts['0.000'], mrad=wb_num_fmts['0.000'],
+        K1=wb_num_fmts['0.000'], B=wb_num_fmts['0.00'], rho=wb_num_fmts['0.00'],
+        space=wb_num_fmts['0.0'])
+
+    d = elem_defs['bends']
+
+    m = mag_col_inds
+
+    for k in sorted(list(d)):
+        L, angle, e1, e2, K1 = (
+            d[k]['L'], d[k]['ANGLE'], d[k]['E1'], d[k]['E2'], d[k]['K1'])
+        rho = L / angle # bending radius [m]
+        B = Brho / rho # [T]
+
+        us_drifts, ds_drifts = _get_US_DS_drift_space(k, excel_elem_list)
+
+        ws.write(next_row, m['name'], k)
+        ws.write(next_row, m['L'], L, fmt['L'])
+        ws.write(next_row, m['theta'], angle * 1e3, fmt['mrad'])
+        ws.write(next_row, m['E1'], e1 * 1e3, fmt['mrad'])
+        ws.write(next_row, m['E2'], e2 * 1e3, fmt['mrad'])
+        ws.write(next_row, m['K1'], K1, fmt['K1'])
+        ws.write(next_row, m['B'], B, fmt['B'])
+        ws.write(next_row, m['rho'], rho, fmt['rho'])
+        ws.write(next_row, m['US_space'], np.min(us_drifts) * 1e3, fmt['space'])
+        ws.write(next_row, m['DS_space'], np.min(ds_drifts) * 1e3, fmt['space'])
+
+        next_row += 1
+
+    return next_row
+
+def add_quad_elements_to_worksheet(
+    workbook, wb_txt_fmts, wb_num_fmts, ws, next_row, elem_defs, mag_col_inds,
+    excel_elem_list):
+    """"""
+
+    if not elem_defs['quads']:
+        return next_row
+
+    bold = wb_txt_fmts.bold
+    bold_underline = wb_txt_fmts.bold_underline
+    bold_italic = wb_txt_fmts.bold_italic
+    bold_sup = wb_txt_fmts.bold_sup
+    bold_sub = wb_txt_fmts.bold_sub
+
+    bold_wrap = wb_txt_fmts.bold_wrap
+
+    if next_row != 0:
+        next_row += 1
+
+    ws.write(next_row, 0, 'Quadrupole Magnets', bold_underline)
+    next_row += 1
+
+    # Write headers
+    for col_name, fragments in [
+        ['name', (bold, 'Name')],
+        ['L', (bold_italic, 'L', bold, ' (m)')],
+        ['K1',
+         (bold_italic, 'K', bold_sub, '1', bold, ' (m', bold_sup, '-2', ')')],
+        ['US_space', (bold_wrap, 'Min. US\nSpace (mm)')],
+        ['DS_space', (bold_wrap, 'Min. DS\nSpace (mm)')],
+        ['aperture', (bold_wrap, 'Magnet\nAperture (mm)')],
+        ]:
+
+        col = mag_col_inds[col_name]
+
+        if len(fragments) > 2:
+            ws.write_rich_string(next_row, col, *fragments)
+        elif len(fragments) == 2:
+            ws.write(next_row, col, fragments[1], fragments[0])
+        elif len(fragments) == 1:
+            ws.write(next_row, col, fragments[0])
+        else:
+            raise ValueError()
+    next_row += 1
+
+    fmt = dict(L=wb_num_fmts['0.000'], K1=wb_num_fmts['0.000'],
+               space=wb_num_fmts['0.0'])
+
+    d = elem_defs['quads']
+
+    m = mag_col_inds
+
+    for k in sorted(list(d)):
+        L, K1 = d[k]['L'], d[k]['K1']
+
+        us_drifts, ds_drifts = _get_US_DS_drift_space(k, excel_elem_list)
+
+        ws.write(next_row, m['name'], k)
+        ws.write(next_row, m['L'], L, fmt['L'])
+        ws.write(next_row, m['K1'], K1, fmt['K1'])
+        ws.write(next_row, m['US_space'], np.min(us_drifts) * 1e3, fmt['space'])
+        ws.write(next_row, m['DS_space'], np.min(ds_drifts) * 1e3, fmt['space'])
+
+        next_row += 1
+
+    return next_row
+
+def add_sext_elements_to_worksheet(
+    workbook, wb_txt_fmts, wb_num_fmts, ws, next_row, elem_defs, mag_col_inds,
+    excel_elem_list):
+    """"""
+
+    if not elem_defs['sexts']:
+        return next_row
+
+    bold = wb_txt_fmts.bold
+    bold_underline = wb_txt_fmts.bold_underline
+    bold_italic = wb_txt_fmts.bold_italic
+    bold_sup = wb_txt_fmts.bold_sup
+    bold_sub = wb_txt_fmts.bold_sub
+
+    bold_wrap = wb_txt_fmts.bold_wrap
+
+    if next_row != 0:
+        next_row += 1
+
+    ws.write(next_row, 0, 'Sextupole Magnets', bold_underline)
+    next_row += 1
+
+    # Write headers
+    for col_name, fragments in [
+        ['name', (bold, 'Name')],
+        ['L', (bold_italic, 'L', bold, ' (m)')],
+        ['K2',
+         (bold_italic, 'K', bold_sub, '2', bold, ' (m', bold_sup, '-3', ')')],
+        ['US_space', (bold_wrap, 'Min. US\nSpace (mm)')],
+        ['DS_space', (bold_wrap, 'Min. DS\nSpace (mm)')],
+        ['aperture', (bold_wrap, 'Magnet\nAperture (mm)')],
+        ]:
+
+        col = mag_col_inds[col_name]
+
+        if len(fragments) > 2:
+            ws.write_rich_string(next_row, col, *fragments)
+        elif len(fragments) == 2:
+            ws.write(next_row, col, fragments[1], fragments[0])
+        elif len(fragments) == 1:
+            ws.write(next_row, col, fragments[0])
+        else:
+            raise ValueError()
+    next_row += 1
+
+    fmt = dict(L=wb_num_fmts['0.000'], K2=wb_num_fmts['0.00'],
+               space=wb_num_fmts['0.0'])
+
+    d = elem_defs['sexts']
+
+    m = mag_col_inds
+
+    for k in sorted(list(d)):
+        L, K2 = d[k]['L'], d[k]['K2']
+
+        us_drifts, ds_drifts = _get_US_DS_drift_space(k, excel_elem_list)
+
+        ws.write(next_row, m['name'], k)
+        ws.write(next_row, m['L'], L, fmt['L'])
+        ws.write(next_row, m['K2'], K2, fmt['K2'])
+        ws.write(next_row, m['US_space'], np.min(us_drifts) * 1e3, fmt['space'])
+        ws.write(next_row, m['DS_space'], np.min(ds_drifts) * 1e3, fmt['space'])
+
+        next_row += 1
+
+    return next_row
+
+def add_oct_elements_to_worksheet(workbook, elem_defs):
+    """"""
+
+    raise NotImplementedError()
+
+def create_worksheet_beamline_elements_list(
+    workbook, wb_txt_fmts, wb_num_fmts, ws, excel_elem_list, report_folderpath):
+    """"""
+
+    bold = wb_txt_fmts.bold
+    bold_italic = wb_txt_fmts.bold_italic
+    bold_italic_sub = wb_txt_fmts.bold_italic_sub
+
+    # Write some data headers.
+    header_list = excel_elem_list[0]
+    row = 0
+    for col, h in enumerate(header_list):
+        if h == 's (m)':
+            ws.write_rich_string(row, col, bold_italic, 's', bold, ' (m)')
+        elif h == 'L (m)':
+            ws.write_rich_string(row, col, bold_italic, 'L', bold, ' (m)')
+        elif h == 'betax (m)':
+            ws.write_rich_string(
+                row, col, bold_italic, GREEK['beta'], bold_italic_sub, 'x',
+                bold, ' (m)')
+        elif h == 'betay (m)':
+            ws.write_rich_string(
+                row, col, bold_italic, GREEK['beta'], bold_italic_sub, 'y',
+                bold, ' (m)')
+        elif h == 'etax (m)':
+            ws.write_rich_string(
+                row, col, bold_italic, GREEK['eta'], bold_italic_sub, 'x',
+                bold, ' (mm)')
+            etax_col_index = col
+        elif h == 'psix (2\pi)':
+            ws.write_rich_string(
+                row, col, bold_italic, GREEK['psi'], bold_italic_sub, 'x',
+                bold, ' (2', bold_italic, GREEK['pi'], bold, ')')
+        elif h == 'psiy (2\pi)':
+            ws.write_rich_string(
+                row, col, bold_italic, GREEK['psi'], bold_italic_sub, 'y',
+                bold, ' (2', bold_italic, GREEK['pi'], bold, ')')
+        else:
+            ws.write(row, col, h, bold)
+    row += 1
+
+    beta_fmt = wb_num_fmts['0.000']
+    etax_fmt = wb_num_fmts['0.000']
+    psi_fmt = wb_num_fmts['0.0000']
+
+    fmt_list = [None, None, None, None,
+                beta_fmt, beta_fmt, etax_fmt, psi_fmt, psi_fmt]
+    assert len(fmt_list) == len(excel_elem_list[1])
+
+    # Adjust the column widths for "Element Name" and "Element Type" columns
+    for col in [2, 3]:
+        max_width = max([len(v[col]) for v in excel_elem_list])
+        ws.set_column(col, col, max_width + 1)
+
+    for contents in excel_elem_list[1:]:
+        for col, (v, fmt) in enumerate(zip(contents, fmt_list)):
+            if col == etax_col_index:
+                v *= 1e3 # convert etax unit from [m] to [mm]
+            ws.write(row, col, v, fmt)
+        row += 1
+
+    #ws.insert_image(0, 10, os.path.join(report_folderpath, 'twiss_3.svg'))
+    #ws.insert_image(0, 10, os.path.join(report_folderpath, 'twiss_3.png'))
+
+    img_height = 25
+    row = 0
+    for fp in Path(report_folderpath).glob('twiss_*.png'):
+        ws.insert_image(row, len(fmt_list) + 1, fp)
+        row += img_height
+
+def get_lattice_prop_row(lin_data, row_spec, excel_output=False):
     """"""
 
     k = row_spec
@@ -1111,9 +1820,15 @@ def get_lattice_prop_row(lin_data, row_spec):
 
     if isinstance(k, list):
 
-        extra_props_key, sub_key = k
-
-        _d = lin_data['extra'][extra_props_key][sub_key]
+        if len(k) == 2:
+            extra_props_key, sub_key = k
+            _d = lin_data['extra'][extra_props_key][sub_key]
+        elif len(k) == 3:
+            extra_props_key, sub_key, extra_arg1 = k
+            _d = lin_data['extra'][extra_props_key][sub_key]
+            extra_props_key += extra_arg1
+        else:
+            raise ValueError()
 
         label = _d['label']
 
@@ -1121,6 +1836,27 @@ def get_lattice_prop_row(lin_data, row_spec):
             unit = ' [m]'
             val_str = plx.MathText(
                 '({:.2f}, {:.2f})'.format(_d['betax'], _d['betay']))
+        elif extra_props_key == 'betax':
+            if sub_key == 'Excel_SS':
+                straight_type = 'Short-Straight'
+            elif sub_key == 'Excel_LS':
+                straight_type = 'Long-Straight'
+            else:
+                raise NotImplementedError()
+            label = f'betax at {straight_type} Center'
+            unit = '(m)'
+            value = _d['betax']
+        elif extra_props_key == 'betay':
+            if sub_key == 'Excel_SS':
+                straight_type = 'Short-Straight'
+            elif sub_key == 'Excel_LS':
+                straight_type = 'Long-Straight'
+            else:
+                raise NotImplementedError()
+            label = f'betay at {straight_type} Center'
+            unit = '(m)'
+            value = _d['betay']
+
 
         elif extra_props_key == 'phase_adv':
             unit = plx.MathText(' [2\pi]')
@@ -1128,8 +1864,19 @@ def get_lattice_prop_row(lin_data, row_spec):
                 '({:.6f}, {:.6f})'.format(_d['dnux'], _d['dnuy']))
 
         elif extra_props_key == 'length':
-            unit = ' [m]'
-            val_str = plx.MathText('{:.3f}'.format(_d['L']))
+            if excel_output:
+                if sub_key == 'Excel_SS':
+                    straight_type = 'Short Straight'
+                elif sub_key == 'Excel_LS':
+                    straight_type = 'Long Straight'
+                else:
+                    raise NotImplementedError()
+                label = f'Length of {straight_type}'
+                unit = '(m)'
+                value = _d['L']
+            else:
+                unit = ' [m]'
+                val_str = plx.MathText('{:.3f}'.format(_d['L']))
 
         elif extra_props_key == 'floor_comparison':
 
@@ -1145,21 +1892,63 @@ def get_lattice_prop_row(lin_data, row_spec):
             raise ValueError('Unexpected key for "extra_props": {extra_props_key}')
 
     elif k == 'E_GeV':
-        label = f'Beam Energy'
-        unit = ' [GeV]'
-        val_str = plx.MathText(f'{lin_data[k]:.0f}')
+        if excel_output:
+            label = 'Beam Energy'
+            unit = '(GeV)'
+            value = lin_data[k]
+        else:
+            label = f'Beam Energy'
+            unit = ' [GeV]'
+            val_str = plx.MathText(f'{lin_data[k]:.0f}')
     elif k == 'eps_x':
-        label = 'Natural Horizontal Emittance ' + plx.MathText(r'\epsilon_x')
-        unit = ' [pm]'
-        val_str = plx.MathText('{:.1f}'.format(lin_data[k] * 1e12))
+        if excel_output:
+            label = 'Natural Horizontal Emittance'
+            unit = '(pm-rad)'
+            value = lin_data[k] * 1e12
+        else:
+            label = 'Natural Horizontal Emittance ' + plx.MathText(r'\epsilon_x')
+            unit = ' [pm-rad]'
+            val_str = plx.MathText('{:.1f}'.format(lin_data[k] * 1e12))
     elif k == 'J':
         label = 'Damping Partitions ' + plx.MathText(r'(J_x, J_y, J_{\delta})')
         val_str = plx.MathText('({:.2f}, {:.2f}, {:.2f})'.format(
                 lin_data['Jx'], lin_data['Jy'], lin_data['Jdelta']))
+    elif k == 'Jx':
+        label = 'Horizontal Damping Partition Number'
+        unit = '()'
+        value = lin_data[k]
+    elif k == 'Jy':
+        label = 'Vertical Damping Partition Number'
+        unit = '()'
+        value = lin_data[k]
+    elif k == 'Jdelta':
+        label = 'Longitudinal Damping Partition Number'
+        unit = '()'
+        value = lin_data[k]
+    elif k == 'taux':
+        label = 'Horizontal Damping Time'
+        unit = '(ms)'
+        value = lin_data[k] * 1e3
+    elif k == 'tauy':
+        label = 'Vertical Damping Time'
+        unit = '(ms)'
+        value = lin_data[k] * 1e3
+    elif k == 'taudelta':
+        label = 'Longitudinal Damping Time'
+        unit = '(ms)'
+        value = lin_data[k] * 1e3
     elif k == 'nu':
         label = 'Ring Tunes ' + plx.MathText(r'(\nu_x, \nu_y)')
         val_str = plx.MathText('({:.3f}, {:.3f})'.format(
             lin_data['nux'], lin_data['nuy']))
+    elif k == 'nux':
+        label = 'Horizontal Tune'
+        unit = '()'
+        value = lin_data[k]
+    elif k == 'nuy':
+        label = 'Vertical Tune'
+        unit = '()'
+        value = lin_data[k]
     elif k.startswith('ksi_'):
         if k == 'ksi_nat':
             label = 'Natural Chromaticities ' + plx.MathText(
@@ -1171,55 +1960,125 @@ def get_lattice_prop_row(lin_data, row_spec):
                 r'(\xi_x^{\mathrm{cor}}, \xi_y^{\mathrm{cor}})')
             val_str = plx.MathText('({:+.3f}, {:+.3f})'.format(
                 lin_data['ksi_x_cor'], lin_data['ksi_y_cor']))
+        elif k == 'ksi_nat_x':
+            label = 'Horzontal Natural Chromaticity'
+            unit = '()'
+            value = lin_data['ksi_x_nat']
+        elif k == 'ksi_nat_y':
+            label = 'Vertical Natural Chromaticity'
+            unit = '()'
+            value = lin_data['ksi_y_nat']
+        elif k == 'ksi_cor_x':
+            label = 'Horzontal Corrected Chromaticity'
+            unit = '()'
+            value = lin_data['ksi_x_cor']
+        elif k == 'ksi_cor_y':
+            label = 'Vertical Corrected Chromaticity'
+            unit = '()'
+            value = lin_data['ksi_y_cor']
         else:
             raise ValueError
     elif k == 'alphac':
-        label = 'Momentum Compaction ' + plx.MathText(r'\alpha_c')
-        val_str = plx.MathText(
-            pe.util.pprint_sci_notation(lin_data[k], '.2e'))
+        if excel_output:
+            label = 'Momentum Compaction'
+            unit = '()'
+            value = lin_data[k]
+        else:
+            label = 'Momentum Compaction ' + plx.MathText(r'\alpha_c')
+            val_str = plx.MathText(
+                pe.util.pprint_sci_notation(lin_data[k], '.2e'))
     elif k == 'U0':
-        label = 'Energy Loss per Turn ' + plx.MathText(r'U_0')
-        unit = ' [keV]'
-        val_str = plx.MathText('{:.0f}'.format(lin_data['U0_MeV'] * 1e3))
+        if excel_output:
+            label = 'Energy Loss per Turn'
+            unit = '(keV)'
+            value = lin_data['U0_MeV'] * 1e3
+        else:
+            label = 'Energy Loss per Turn ' + plx.MathText(r'U_0')
+            unit = ' [keV]'
+            val_str = plx.MathText('{:.0f}'.format(lin_data['U0_MeV'] * 1e3))
     elif k == 'sigma_delta':
-        label = 'Energy Spread ' + plx.MathText(r'\sigma_{\delta}')
-        unit = r' [\%]'
-        val_str = plx.MathText('{:.3f}'.format(lin_data['dE_E'] * 1e2))
+        if excel_output:
+            label = 'Energy Spread'
+            unit = '(%)'
+            value = lin_data['dE_E'] * 1e2
+        else:
+            label = 'Energy Spread ' + plx.MathText(r'\sigma_{\delta}')
+            unit = r' [\%]'
+            val_str = plx.MathText('{:.3f}'.format(lin_data['dE_E'] * 1e2))
     elif k == 'max_beta':
         label = 'max ' + plx.MathText(r'(\beta_x, \beta_y)')
         unit = ' [m]'
         val_str = plx.MathText('({:.2f}, {:.2f})'.format(
             lin_data['max_betax'], lin_data['max_betay']))
+    elif k == 'max_betax':
+        label = 'Maximum betax'
+        unit = '(m)'
+        value = lin_data[k]
+    elif k == 'max_betay':
+        label = 'Maximum betay'
+        unit = '(m)'
+        value = lin_data[k]
     elif k == 'min_beta':
         label = 'min ' + plx.MathText(r'(\beta_x, \beta_y)')
         unit = ' [m]'
         val_str = plx.MathText('({:.2f}, {:.2f})'.format(
             lin_data['min_betax'], lin_data['min_betay']))
+    elif k == 'min_betax':
+        label = 'Minimum betax'
+        unit = '(m)'
+        value = lin_data[k]
+    elif k == 'min_betay':
+        label = 'Minimum betay'
+        unit = '(m)'
+        value = lin_data[k]
     elif k == 'max_min_etax':
         label = plx.MathText(r'\eta_x') + ' (min, max)'
         unit = ' [mm]'
         val_str = plx.MathText('({:+.1f}, {:+.1f})'.format(
             lin_data['min_etax'] * 1e3, lin_data['max_etax'] * 1e3))
+    elif k == 'max_etax':
+        label = 'Maximum etax'
+        unit = '(mm)'
+        value = lin_data['max_etax'] * 1e3
+    elif k == 'min_etax':
+        label = 'Minimum etax'
+        unit = '(mm)'
+        value = lin_data['min_etax'] * 1e3
     elif k == 'circumf':
-        label = 'Circumference ' + plx.MathText(r'C')
-        unit = ' [m]'
-        val_str = plx.MathText('{:.3f}'.format(lin_data[k]))
+        if excel_output:
+            label = 'Circumference'
+            unit = '(m)'
+            value = lin_data[k]
+        else:
+            label = 'Circumference ' + plx.MathText(r'C')
+            unit = ' [m]'
+            val_str = plx.MathText('{:.3f}'.format(lin_data[k]))
+    elif k == 'f_rev':
+        label = 'Revolution Frequency'
+        unit = '(kHz)'
+        value = scipy.constants.c / lin_data['circumf'] / 1e3
     elif k == 'n_periods_in_ring':
         label = 'Number of Super-periods'
         val_str = plx.MathText('{:d}'.format(lin_data[k]))
     else:
         raise RuntimeError(f'Unhandled "table_order" key: {k}')
 
-    if isinstance(unit, plx.MathText):
-        label_w_unit = plx.NoEscape(label + unit.dumps())
-    else:
-        label_w_unit = label + unit
-        if isinstance(label_w_unit, plx.CombinedMathNormalText):
-            label_w_unit = label_w_unit.dumps_for_caption()
-        else:
-            label_w_unit = plx.NoEscape(label_w_unit)
+    if excel_output:
 
-    return label_w_unit, val_str
+        return label, unit, value
+
+    else:
+
+        if isinstance(unit, plx.MathText):
+            label_w_unit = plx.NoEscape(label + unit.dumps())
+        else:
+            label_w_unit = label + unit
+            if isinstance(label_w_unit, plx.CombinedMathNormalText):
+                label_w_unit = label_w_unit.dumps_for_caption()
+            else:
+                label_w_unit = plx.NoEscape(label_w_unit)
+
+        return label_w_unit, val_str
 
 def add_lattice_props_section(
     doc, conf, report_folderpath, lin_data, twiss_plot_captions):
@@ -2603,14 +3462,17 @@ def gen_report_type_0(config_filepath):
 
         lin_data = d['sel_data']
         lin_data['_versions'] = d['versions']
+        lin_data['_timestamp'] = d['timestamp']
         abs_input_LTE_filepath = os.path.abspath(input_LTE_filepath)
         LTE_contents = Path(input_LTE_filepath).read_text()
 
         with open(lin_summary_pkl_filepath, 'wb') as f:
-            pickle.dump([abs_input_LTE_filepath, LTE_contents, lin_data], f)
+            pickle.dump(
+                [conf, abs_input_LTE_filepath, LTE_contents, lin_data], f)
     else:
         with open(lin_summary_pkl_filepath, 'rb') as f:
-            (abs_input_LTE_filepath, LTE_contents, lin_data) = pickle.load(f)
+            (saved_conf, abs_input_LTE_filepath, LTE_contents, lin_data
+             ) = pickle.load(f)
 
         if Path(input_LTE_filepath).read_text() != LTE_contents:
             raise RuntimeError(
