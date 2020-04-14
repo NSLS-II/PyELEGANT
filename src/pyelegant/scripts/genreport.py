@@ -4,6 +4,9 @@ import numpy as np
 import scipy.constants
 from scipy.constants import physical_constants
 import time
+import datetime
+import hashlib
+import tempfile
 import pickle
 from types import SimpleNamespace
 import matplotlib.pylab as plt
@@ -322,6 +325,7 @@ def calc_lin_props(
             flr_data = pe.sdds.sdds2dicts(ref_flr_filepath)[0]
             ref_X_all = flr_data['columns']['X']
             ref_Z_all = flr_data['columns']['Z']
+            ref_theta_all = flr_data['columns']['theta']
             ref_ElemNames = flr_data['columns']['ElementName']
 
             ref_circumf = flr_data['columns']['s'][-1]
@@ -332,6 +336,7 @@ def calc_lin_props(
 
             ref_X, ref_Z = {}, {}
             cur_X, cur_Z = {}, {}
+            special_inds = dict(ref=[], cur=[])
             for key, elems_d in floor_comparison.items():
 
                 ref_elem = elems_d['ref_elem']
@@ -342,6 +347,8 @@ def calc_lin_props(
                 ref_X[key] = ref_X_all[ind]
                 ref_Z[key] = ref_Z_all[ind]
 
+                special_inds['ref'].append(ind)
+
                 cur_elem = elems_d['cur_elem']
 
                 ind = np.where(
@@ -351,9 +358,26 @@ def calc_lin_props(
                 cur_X[key] = res['flr']['columns']['X'][ind]
                 cur_Z[key] = res['flr']['columns']['Z'][ind]
 
+                special_inds['cur'].append(ind)
+
                 _d[key] = dict(dx=cur_X[key] - ref_X[key],
                                dz=cur_Z[key] - ref_Z[key],
                                label=elems_d['label'])
+
+            _d['_ref_flr_speical_inds'] = special_inds['ref']
+            _d['_cur_flr_speical_inds'] = special_inds['cur']
+
+            max_ind = max(special_inds['ref'])
+            _d['_ref_flr_x'] = ref_X_all[:max_ind+1]
+            _d['_ref_flr_z'] = ref_Z_all[:max_ind+1]
+            _d['_ref_flr_theta'] = ref_theta_all[:max_ind+1]
+
+            max_ind = max(special_inds['cur'])
+            _d['_cur_flr_x'] = res['flr']['columns']['X'][:max_ind+1]
+            _d['_cur_flr_z'] = res['flr']['columns']['Z'][:max_ind+1]
+            _d['_cur_flr_theta'] = res['flr']['columns']['theta'][:max_ind+1]
+            #_d['_cur_flr_next_elem_types'] = \
+                #res['flr']['columns']['NextElementType'][:max_ind+1]
 
     if False:
         # Check whether specified LaTeX labels are valid
@@ -398,7 +422,7 @@ def plot_lin_props(
             raise
 
         for opts, caption in zip(twiss_plot_opts[lat_type],
-                                  twiss_plot_captions[lat_type]):
+                                 twiss_plot_captions[lat_type]):
 
             if not skip_plots:
                 pe.plot_twiss(output_filepath, **opts)
@@ -1076,21 +1100,7 @@ def add_worksheet_lattice_props(workbook, wb_txt_fmts, wb_num_fmts, ws, lin_data
 
     nf = wb_num_fmts
 
-    row = 0
-    col = 3
-    ws.set_column(col, col, 20)
-    for k in ['Lattice ID:', 'Keywords:', '_orig_LTE_filepath:',
-              'Created by:', 'Date received:']:
-        ws.write(row, col, k, bold)
-        row += 1
-    # TODO: add the following at top
-    # Lattice ID
-    # keywords
-    # _orig_LTE_filepath
-    # Created by
-    # Date received
-
-    row = 0
+    row = 2 # Leave top 2 rows for lattice description & notes for property table
 
     # Write headers
     ws.write(row, 0, 'Property', bold_underline)
@@ -1136,7 +1146,18 @@ def add_worksheet_lattice_props(workbook, wb_txt_fmts, wb_num_fmts, ws, lin_data
         ('min_etax', None, nf['0.0']), # Min horizontal dispersion
         (['length', 'Excel_LS'], None, nf['0.000']), # Length of LS
         (['length', 'Excel_SS'], None, nf['0.000']), # Length of SS
-        # Fraction of straights to arcs [Use Excel formulat to compute this]
+        ('n_periods_in_ring', None, None), # Number of super-periods for a full ring
+        ('arcs_straights_frac', None, nf['0.00']), # Fraction of straights to arcs [Use Excel formulat to compute this]
+        (['floor_comparison', 'circumf_change_%'],
+         [italic, GREEK['Delta'] + 'C', '/', italic, 'C'], nf['0.000']), # Circumference change [%] from Reference Lattice
+        (['floor_comparison', 'Excel_LS', '_dx'],
+         [italic, GREEK['Delta'] + 'x', sub, 'LS'], nf['0.00']),
+        (['floor_comparison', 'Excel_LS', '_dz'],
+         [italic, GREEK['Delta'] + 'z', sub, 'LS'], nf['0.00']),
+        (['floor_comparison', 'Excel_SS', '_dx'],
+         [italic, GREEK['Delta'] + 'x', sub, 'SS'], nf['0.00']),
+        (['floor_comparison', 'Excel_SS', '_dz'],
+         [italic, GREEK['Delta'] + 'z', sub, 'SS'], nf['0.00']),
 
         # RF voltage
         # RF harmonic number
@@ -1148,8 +1169,21 @@ def add_worksheet_lattice_props(workbook, wb_txt_fmts, wb_num_fmts, ws, lin_data
     ]
 
     for row_spec, symbol_def, num_fmt in table_order:
-        label, unit, value = get_lattice_prop_row(
-            lin_data, row_spec, excel_output=True)
+
+        if row_spec not in ('arcs_straights_frac',):
+            try:
+                label, unit, value = get_lattice_prop_row(
+                    lin_data, row_spec, excel_output=True)
+            except:
+                print('# WARNING #: Failed to get info:')
+                print(row_spec)
+                continue
+        elif row_spec == 'arcs_straights_frac':
+            label = 'Fraction of Straight Sections'
+            unit = '(%)'
+            value = '=(L_LS + L_SS) * n_periods_in_ring / circumf * 1e2'
+        else:
+            raise NotImplementedError()
 
         label_fragments = []
         normal_text = ''
@@ -1186,12 +1220,235 @@ def add_worksheet_lattice_props(workbook, wb_txt_fmts, wb_num_fmts, ws, lin_data
             fragments = label_fragments + [normal, f' {unit}']
         ws.write_rich_string(row, 0, *fragments)
 
-        ws.write(row, 1, value, num_fmt)
+        col = 1
+        ws.write(row, col, value, num_fmt)
+        if row_spec in ('circumf', 'n_periods_in_ring'):
+            cell = xlsxwriter.utility.xl_rowcol_to_cell(
+                row, col, row_abs=True, col_abs=True)
+            workbook.define_name(row_spec, f"='{ws.name}'!{cell}")
+        elif row_spec == ['length', 'Excel_LS']:
+            cell = xlsxwriter.utility.xl_rowcol_to_cell(
+                row, col, row_abs=True, col_abs=True)
+            workbook.define_name('L_LS', f"='{ws.name}'!{cell}")
+        elif row_spec == ['length', 'Excel_SS']:
+            cell = xlsxwriter.utility.xl_rowcol_to_cell(
+                row, col, row_abs=True, col_abs=True)
+            workbook.define_name('L_SS', f"='{ws.name}'!{cell}")
 
         row += 1
 
     ws.set_column(0, 0, 40)
 
+def plot_geom_layout(report_folderpath, floor_comparison_dict):
+    """"""
+
+    existing_fignums = plt.get_fignums()
+
+    d = floor_comparison_dict
+
+    ref_max_ind = np.max(d['_ref_flr_speical_inds'])
+    cur_max_ind = np.max(d['_cur_flr_speical_inds'])
+
+    sort_inds_special_inds = np.argsort(d['_ref_flr_speical_inds'])
+    for k in ['_ref_flr_speical_inds', '_cur_flr_speical_inds']:
+        d[k] = np.array(d[k])[sort_inds_special_inds]
+
+    sel_zpos = dict(ref=[], cur=[])
+    sel_xpos = dict(ref=[], cur=[])
+
+    plt.figure(figsize=(9, 3))
+    # Plot reference
+    plt.plot(d['_ref_flr_z'][:ref_max_ind+1],
+             d['_ref_flr_x'][:ref_max_ind+1], 'b.-', ms=5, label='Reference')
+    max_z = np.max(d['_ref_flr_z'][:ref_max_ind+1])
+    for i in d['_ref_flr_speical_inds']:
+        plt.plot(d['_ref_flr_z'][i], d['_ref_flr_x'][i], 'b+', ms=20)
+        sel_zpos['ref'].append(d['_ref_flr_z'][i])
+        sel_xpos['ref'].append(d['_ref_flr_x'][i])
+    nonbend_to_bend_inds_forward = np.where(
+        np.diff(d['_ref_flr_theta']) != 0.0)[0]
+    #nonbend_to_bend_inds_backward = np.sort(len(d['_ref_flr_theta']) + np.where(
+        #np.diff(d['_ref_flr_theta'][::-1]) != 0.0)[0] * (-1))
+    for bend_ind in nonbend_to_bend_inds_forward:
+        z_ini = d['_ref_flr_z'][bend_ind]
+        x_ini = d['_ref_flr_x'][bend_ind]
+        prev_ind = bend_ind - 1
+        z_prev = d['_ref_flr_z'][prev_ind]
+        x_prev = d['_ref_flr_x'][prev_ind]
+        while z_ini == z_prev:
+            prev_ind -= 1
+            z_prev = d['_ref_flr_z'][prev_ind]
+            x_prev = d['_ref_flr_x'][prev_ind]
+            if z_prev == 0:
+                break
+        slope = (x_ini - x_prev) / (z_ini - z_prev)
+
+        z_fin = max_z
+        x_fin = slope * (z_fin - z_ini) + x_ini
+        plt.plot([z_ini, z_fin], [x_ini, x_fin], 'b-.', lw=1)
+    #
+    # Plot current
+    plt.plot(d['_cur_flr_z'][:cur_max_ind+1],
+             d['_cur_flr_x'][:cur_max_ind+1], 'r.-', ms=5, label='Current')
+    for i in d['_cur_flr_speical_inds']:
+        plt.plot(d['_cur_flr_z'][i], d['_cur_flr_x'][i], 'rx', ms=15)
+        sel_zpos['cur'].append(d['_cur_flr_z'][i])
+        sel_xpos['cur'].append(d['_cur_flr_x'][i])
+    nonbend_to_bend_inds_forward = np.where(
+        np.diff(d['_cur_flr_theta']) != 0.0)[0]
+    for bend_ind in nonbend_to_bend_inds_forward:
+        z_ini = d['_cur_flr_z'][bend_ind]
+        x_ini = d['_cur_flr_x'][bend_ind]
+        prev_ind = bend_ind - 1
+        z_prev = d['_cur_flr_z'][prev_ind]
+        x_prev = d['_cur_flr_x'][prev_ind]
+        while z_ini == z_prev:
+            prev_ind -= 1
+            z_prev = d['_cur_flr_z'][prev_ind]
+            x_prev = d['_cur_flr_x'][prev_ind]
+            if z_prev == 0:
+                break
+        slope = (x_ini - x_prev) / (z_ini - z_prev)
+
+        z_fin = max_z
+        x_fin = slope * (z_fin - z_ini) + x_ini
+        plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=1)
+    #
+    plt.legend(loc='best')
+    #plt.axis('image')
+    plt.axis('equal')
+    plt.xlabel(r'$z\, [\mathrm{m}]$', size=20)
+    plt.ylabel(r'$x\, [\mathrm{m}]$', size=20)
+    plt.tight_layout()
+
+    for iSel, (z_ref, z_cur, x_ref, x_cur) in enumerate(zip(
+        sel_zpos['ref'], sel_zpos['cur'], sel_xpos['ref'], sel_xpos['cur'])):
+
+        clip_zrange = 6.0
+        viz_margin = 0.03
+
+        zlim = [max([0.0,
+                     np.min([z_ref, z_cur]) - clip_zrange]),
+                min([np.max([z_ref, z_cur]) + clip_zrange,
+                     np.max(
+                         [np.max(d['_ref_flr_z'][:ref_max_ind+1]) + 0.5,
+                          np.max(d['_cur_flr_z'][:cur_max_ind+1]) + 0.5])
+                     ])
+                ]
+        viz_zlim = [min([z_ref, z_cur]) - viz_margin,
+                    max([z_ref, z_cur]) + viz_margin]
+
+        plt.figure()
+        clip = np.logical_and(d['_ref_flr_z'][:ref_max_ind+1] >= zlim[0],
+                              d['_ref_flr_z'][:ref_max_ind+1] <= zlim[1],)
+        plt.plot(d['_ref_flr_z'][:ref_max_ind+1][clip],
+                 d['_ref_flr_x'][:ref_max_ind+1][clip], 'b.-', ms=5,
+                 label='Reference')
+        i = d['_ref_flr_speical_inds'][iSel]
+        plt.plot(d['_ref_flr_z'][i], d['_ref_flr_x'][i], 'b+', ms=20)
+        clip = np.logical_and(d['_cur_flr_z'][:cur_max_ind+1] >= zlim[0],
+                              d['_cur_flr_z'][:cur_max_ind+1] <= zlim[1],)
+        plt.plot(d['_cur_flr_z'][:cur_max_ind+1],
+                 d['_cur_flr_x'][:cur_max_ind+1], 'r.-', ms=5, label='Current')
+        i = d['_cur_flr_speical_inds'][iSel]
+        plt.plot(d['_cur_flr_z'][i], d['_cur_flr_x'][i], 'rx', ms=15)
+        plt.xlim(viz_zlim)
+        plt.ylim([min([x_ref, x_cur]) - viz_margin,
+                  max([x_ref, x_cur]) + viz_margin])
+        plt.grid(True, linestyle=':')
+        plt.legend(loc='best')
+        plt.xlabel(r'$z\, [\mathrm{m}]$', size=20)
+        plt.ylabel(r'$x\, [\mathrm{m}]$', size=20)
+        plt.tight_layout()
+
+    flr_pdf_filepath = os.path.join(report_folderpath, 'floor.pdf')
+
+    fignums_to_delete = []
+
+    pp = PdfPages(flr_pdf_filepath)
+    page = 0
+    for fignum in plt.get_fignums():
+        if fignum not in existing_fignums:
+            pp.savefig(figure=fignum)
+            #plt.savefig(os.path.join(report_folderpath, f'floor_{page:d}.svg'))
+            plt.savefig(os.path.join(report_folderpath, f'floor_{page:d}.png'),
+                        dpi=200)
+            page += 1
+            fignums_to_delete.append(fignum)
+    pp.close()
+
+    #plt.show()
+
+    for fignum in fignums_to_delete:
+        plt.close(fignum)
+
+def add_worksheet_geom_layout(
+    workbook, wb_txt_fmts, wb_num_fmts, ws, report_folderpath, lin_data):
+    """"""
+
+    bold = wb_txt_fmts.bold
+    bold_italic = wb_txt_fmts.bold_italic
+    bold_underline = wb_txt_fmts.bold_underline
+
+    d = lin_data['extra']['floor_comparison']
+
+    header_list = [(bold_italic, 'x', bold, ' (m)'),
+                   (bold_italic, 'z', bold, ' (m)'),
+                   (bold_italic, GREEK['theta'], bold, ' (deg)'),]
+
+    row, col = 0, 0
+    ws.write(row, col, 'Reference', bold_underline)
+    col += len(header_list) + 1
+    ws.write(row, col, 'Current', bold_underline)
+
+    row = 1
+    col = 0
+    # Write headers for reference layout
+    for fragments in header_list:
+        ws.write_rich_string(row, col, *fragments)
+        col += 1
+    col += 1
+    # Write headers for current layout
+    for fragments in header_list:
+        ws.write_rich_string(row, col, *fragments)
+        col += 1
+
+    # Write coordinates for reference layout
+    row = 2
+    col = 0
+    for iRow, (x, z, theta) in enumerate(zip(
+        d['_ref_flr_x'], d['_ref_flr_z'], d['_ref_flr_theta'])):
+        if iRow not in d['_ref_flr_speical_inds']:
+            fmt = wb_num_fmts['0.0000']
+        else:
+            fmt = wb_num_fmts['bg_yellow_0.0000']
+        ws.write(row, col, x, fmt)
+        ws.write(row, col+1, z, fmt)
+        ws.write(row, col+2, np.rad2deg(theta) * (-1), fmt)
+        row += 1
+
+    # Write coordinates for current layout
+    row = 2
+    col = len(header_list) + 1
+    for iRow, (x, z, theta) in enumerate(zip(
+        d['_cur_flr_x'], d['_cur_flr_z'], d['_cur_flr_theta'])):
+        if iRow not in d['_cur_flr_speical_inds']:
+            fmt = wb_num_fmts['0.0000']
+        else:
+            fmt = wb_num_fmts['bg_yellow_0.0000']
+        ws.write(row, col, x, fmt)
+        ws.write(row, col+1, z, fmt)
+        ws.write(row, col+2, np.rad2deg(theta) * (-1), fmt)
+        row += 1
+
+    row = 0
+    for iFig, fp in enumerate(sorted(Path(report_folderpath).glob('floor_*.png'))):
+        if iFig == 0:
+            img_height = 15
+        else:
+            img_height = 25
+        ws.insert_image(row, len(header_list) * 2 + 2, fp)
+        row += img_height
 
 def add_worksheet_LTE(workbook, wb_txt_fmts, wb_num_fmts, ws, input_LTE_filepath):
     """"""
@@ -1230,6 +1487,8 @@ def _build_workbook_formats(workbook):
     wb_txt_fmts.wrap = workbook.add_format({'text_wrap': True})
     wb_txt_fmts.bold_wrap = workbook.add_format({'bold': True, 'text_wrap': True})
 
+    wb_txt_fmts.bold_top = workbook.add_format({'bold': True, 'align': 'top'})
+
     wb_txt_fmts.bold = workbook.add_format({'bold': True})
     wb_txt_fmts.italic = workbook.add_format({'italic': True})
     wb_txt_fmts.bold_italic = workbook.add_format({'bold': True, 'italic': True})
@@ -1249,6 +1508,8 @@ def _build_workbook_formats(workbook):
     wb_num_fmts = {}
     for spec in ['0.0', '0.00', '0.000', '0.0000', '0.00E+00', '###']:
         wb_num_fmts[spec] = workbook.add_format({'num_format': spec})
+    wb_num_fmts['bg_yellow_0.0000'] = workbook.add_format({
+        'num_format': '0.0000', 'bg_color': 'yellow'})
 
     for k in list(wb_txt_fmts.__dict__):
         fmt = getattr(wb_txt_fmts, k)
@@ -1257,6 +1518,10 @@ def _build_workbook_formats(workbook):
     for fmt in wb_num_fmts.values():
         fmt.set_font_name(default_font_name)
 
+    wb_num_fmts['mm/dd/yyyy'] = workbook.add_format(
+        {'num_format': 'mm/dd/yyyy', 'align': 'left',
+         'font_name': default_font_name})
+
     # From here on, define non-default fonts
     wb_txt_fmts.courier = workbook.add_format({'font_name': 'Courier New'})
     wb_txt_fmts.courier_wrap = workbook.add_format(
@@ -1264,8 +1529,9 @@ def _build_workbook_formats(workbook):
 
     return wb_txt_fmts, wb_num_fmts
 
-def build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data,
-                 twiss_plot_captions):
+def build_report(
+    user_conf, conf, input_LTE_filepath, rootname, report_folderpath, lin_data,
+    twiss_plot_captions):
     """"""
 
     doc = create_header(conf, report_folderpath, rootname)
@@ -1273,7 +1539,7 @@ def build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data
     workbook = xlsxwriter.Workbook(
         os.path.join(report_folderpath, f'{rootname}_report.xlsx'))
     wb_txt_fmts, wb_num_fmts = _build_workbook_formats(workbook)
-    # TODO: write "conf" contents into Excel file
+
     worksheets = {}
     worksheets['lat_params'] = workbook.add_worksheet('Lattice Parameters')
     worksheets['mag_params'] = workbook.add_worksheet('Magnet Parameters')
@@ -1286,7 +1552,13 @@ def build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data
     #
     worksheets['lat_params'].activate()
 
+    add_worksheet_config(workbook, wb_txt_fmts, wb_num_fmts,
+                         worksheets['report_config'], user_conf, conf)
+
     add_lattice_description(doc, conf, input_LTE_filepath)
+    add_worksheet_lattice_description(
+        workbook, wb_txt_fmts, wb_num_fmts, worksheets['lat_params'],
+        conf, input_LTE_filepath)
 
     add_lattice_elements(doc, lin_data)
     add_worksheet_lattice_elements(
@@ -1298,11 +1570,12 @@ def build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data
     add_worksheet_lattice_props(
         workbook, wb_txt_fmts, wb_num_fmts, worksheets['lat_params'], lin_data)
 
+    add_worksheet_geom_layout(
+        workbook, wb_txt_fmts, wb_num_fmts, worksheets['layout'],
+        report_folderpath, lin_data)
+
     add_worksheet_LTE(
         workbook, wb_txt_fmts, wb_num_fmts, worksheets['lte'], input_LTE_filepath)
-
-    workbook.close()
-    sys.exit(0)
 
     doc.append(plx.ClearPage())
 
@@ -1339,6 +1612,43 @@ def create_header(conf, report_folderpath, rootname):
 
     return doc
 
+def add_worksheet_config(workbook, wb_txt_fmts, wb_num_fmts, ws, user_conf, conf):
+    """"""
+
+    bold = wb_txt_fmts.bold
+    courier = wb_txt_fmts.courier
+
+    ws.set_column(0, 0, 15)
+    ws.set_column(1, 1, 150)
+
+    dumper = yaml.YAML()
+    dumper.preserve_quotes = True
+    dumper.width = 110
+    dumper.boolean_representation = ['False', 'True']
+    dumper.indent(mapping=2, sequence=2, offset=0) # Default: (mapping=2, sequence=2, offset=0)
+
+    row = 0
+    ws.write(row, 0, 'User Config:', bold)
+
+    with tempfile.NamedTemporaryFile() as tmp:
+        with open(tmp.name, 'w') as f:
+            dumper.dump(user_conf, f)
+        contents = Path(tmp.name).read_text()
+    for line in contents.splitlines():
+        ws.write(row, 1, line, courier)
+        row += 1
+
+    row += 1
+    ws.write(row, 0, 'Actual Config:', bold)
+
+    with tempfile.NamedTemporaryFile() as tmp:
+        with open(tmp.name, 'w') as f:
+            dumper.dump(conf, f)
+        contents = Path(tmp.name).read_text()
+    for line in contents.splitlines():
+        ws.write(row, 1, line, courier)
+        row += 1
+
 def add_lattice_description(doc, conf, input_LTE_filepath):
     """"""
 
@@ -1357,6 +1667,86 @@ def add_lattice_description(doc, conf, input_LTE_filepath):
         for para in custom_paragraphs:
             doc.append(plx.NewParagraph())
             doc.append(para.strip())
+
+def add_worksheet_lattice_description(
+    workbook, wb_txt_fmts, wb_num_fmts, ws, conf, input_LTE_filepath):
+    """"""
+
+    description_paras = '\n'.join([
+        str(para) for para in
+        conf['report_paragraphs'].get('lattice_description', [])])
+    property_table_notes = '\n'.join([
+        str(para) for para in
+        conf['report_paragraphs'].get('lattice_properties', [])])
+
+    bold_top = wb_txt_fmts.bold_top
+    bold = wb_txt_fmts.bold
+    wrap = wb_txt_fmts.wrap
+
+    courier = wb_txt_fmts.courier
+
+    row = 0
+    col = 3
+    ws.set_column(col, col, 20)
+    ws.set_column(col+1, col+1, 100)
+    label_d = dict(
+        description='Description:', table_notes='Notes for Table:',
+        LTE_filepath='LTE filepath:',
+        hash='LTE Hash (SHA-1):', keywords='Keywords:', lat_author='Created by:',
+        lat_recv_date='Date received:', orig_LTE_filepath='Orig. LTE filepath:',
+    )
+    for k, label in label_d.items():
+        if k in ('description', 'table_notes'):
+            ws.write(row, col, label, bold_top)
+        else:
+            ws.write(row, col, label, bold)
+
+        if k == 'description':
+            ws.write(row, col+1, description_paras.strip(), wrap)
+        elif k == 'table_notes':
+            ws.write(row, col+1, property_table_notes.strip(), wrap)
+
+        elif k == 'hash':
+            sha = hashlib.sha1()
+            sha.update(Path(input_LTE_filepath).read_text().encode('utf-8'))
+            LTE_SHA1 = sha.hexdigest()
+
+            ws.write(row, col+1, LTE_SHA1, courier)
+
+        elif k == 'keywords':
+            keywords = ', '.join(conf.get('lattice_keywords', []))
+            if keywords:
+                ws.write(row, col+1, keywords)
+
+        elif k == 'lat_author':
+            author = conf.get('lattice_author', '')
+            if author:
+                ws.write(row, col+1, author)
+
+        elif k == 'lat_recv_date':
+            date_str = conf.get('lattice_received_date', '')
+            if date_str:
+                try:
+                    datenum = datetime.datetime.strptime(date_str, '%m/%d/%Y')
+                except:
+                    raise ValueError((
+                        'Invalid "lattice_received_date". '
+                        'Must be in the fomrat "%m/%d/%Y"'))
+
+                ws.write(row, col+1, datenum, wb_num_fmts['mm/dd/yyyy'])
+
+        elif k == 'LTE_filepath':
+            ws.write(row, col+1, input_LTE_filepath.strip())
+
+        elif k == 'orig_LTE_filepath':
+            orig_LTE_fp = conf.get('orig_LTE_filepath', '')
+            if orig_LTE_fp:
+                ws.write(row, col+1, orig_LTE_fp.strip())
+
+        else:
+            raise ValueError()
+
+        row += 1
 
 def add_lattice_elements(doc, lin_data):
     """"""
@@ -1772,11 +2162,11 @@ def create_worksheet_beamline_elements_list(
             etax_col_index = col
         elif h == 'psix (2\pi)':
             ws.write_rich_string(
-                row, col, bold_italic, GREEK['psi'], bold_italic_sub, 'x',
+                row, col, bold_italic, GREEK['phi'], bold_italic_sub, 'x',
                 bold, ' (2', bold_italic, GREEK['pi'], bold, ')')
         elif h == 'psiy (2\pi)':
             ws.write_rich_string(
-                row, col, bold_italic, GREEK['psi'], bold_italic_sub, 'y',
+                row, col, bold_italic, GREEK['phi'], bold_italic_sub, 'y',
                 bold, ' (2', bold_italic, GREEK['pi'], bold, ')')
         else:
             ws.write(row, col, h, bold)
@@ -1881,12 +2271,25 @@ def get_lattice_prop_row(lin_data, row_spec, excel_output=False):
         elif extra_props_key == 'floor_comparison':
 
             if sub_key == 'circumf_change_%':
-                unit = r' [\%]'
-                val_str = plx.MathText('{:+.3f}'.format(_d['val']))
+                if excel_output:
+                    label = 'Circumference Change'
+                    unit = '(%)'
+                    value = _d['val']
+                else:
+                    unit = r' [\%]'
+                    val_str = plx.MathText('{:+.3f}'.format(_d['val']))
             else:
                 unit = ' [mm]'
                 val_str = plx.MathText(
                     '({:+.2f}, {:+.2f})'.format(_d['dx'] * 1e3, _d['dz'] * 1e3))
+        elif extra_props_key == 'floor_comparison_dx':
+            label = f'Source Point Diff. @ {sub_key.replace("Excel_", "")}'
+            unit = '(mm)'
+            value = _d['dx'] * 1e3
+        elif extra_props_key == 'floor_comparison_dz':
+            label = f'Source Point Diff. @ {sub_key.replace("Excel_", "")}'
+            unit = '(mm)'
+            value = _d['dz'] * 1e3
 
         else:
             raise ValueError('Unexpected key for "extra_props": {extra_props_key}')
@@ -2058,8 +2461,13 @@ def get_lattice_prop_row(lin_data, row_spec, excel_output=False):
         unit = '(kHz)'
         value = scipy.constants.c / lin_data['circumf'] / 1e3
     elif k == 'n_periods_in_ring':
-        label = 'Number of Super-periods'
-        val_str = plx.MathText('{:d}'.format(lin_data[k]))
+        if excel_output:
+            label = 'Number of Super-periods'
+            unit = '()'
+            value = lin_data[k]
+        else:
+            label = 'Number of Super-periods'
+            val_str = plx.MathText('{:d}'.format(lin_data[k]))
     else:
         raise RuntimeError(f'Unhandled "table_order" key: {k}')
 
@@ -2763,7 +3171,627 @@ def _yaml_set_comment_after_key(com_map, key, comment, indent):
     com_map.yaml_set_comment_before_after_key(
         next_key, before=comment, indent=indent)
 
-def get_default_config_and_comments(example=False):
+def _get_default_config_and_comments_func_versions():
+    """"""
+
+    func_versions = {'1.0': get_default_config_and_comments_v1_0,
+                     '0.1': get_default_config_and_comments_v0_1}
+
+    return func_versions
+
+def get_default_config_and_comments(config_version, example=False):
+    """
+    """
+
+    func_versions = _get_default_config_and_comments_func_versions()
+
+    return func_versions[config_version](example=example)
+
+def get_default_config_and_comments_v1_0(example=False):
+    """
+    """
+
+    production = True
+    #production = False
+
+    com_map = yaml.comments.CommentedMap
+    com_seq = yaml.comments.CommentedSeq
+    sqss = yaml.scalarstring.SingleQuotedScalarString
+
+    anchors = {}
+
+    conf = com_map()
+
+    _yaml_append_map(conf, 'report_class', 'nsls2u_default', eol_comment='REQUIRED')
+    if example:
+        _yaml_append_map(conf, 'report_version', '1.0', eol_comment='REQUIRED')
+        _yaml_append_map(conf, 'report_author', '')
+
+    _yaml_append_map(conf, 'lattice_author', '', eol_comment='REQUIRED')
+    _yaml_append_map(conf, 'lattice_keywords', [], eol_comment='REQUIRED')
+    _yaml_append_map(
+        conf, 'lattice_received_date',
+        time.strftime('%m/%d/%Y', time.localtime()), eol_comment='REQUIRED')
+
+    if example:
+        _yaml_append_map(conf, '_orig_LTE_filepath', '')
+
+        _yaml_append_map(conf, 'enable_pyelegant_stdout', False)
+
+    _yaml_append_map(conf, 'E_MeV', 3e3, eol_comment='REQUIRED')
+
+    # ##########################################################################
+
+    _yaml_append_map(conf, 'input_LTE', com_map(),
+                     eol_comment='REQUIRED', before_comment='\n')
+    d = conf['input_LTE']
+    #
+    _yaml_append_map(d, 'filepath', sqss('?.lte'), eol_comment='REQUIRED')
+    #
+    if example:
+        comment = '''
+        If "load_param" is True, you must specify "base_filepath" (%s.lte) and
+        "param_filepath" (%s.param).'''
+        _yaml_append_map(d, 'load_param', False,
+                         before_comment=comment, before_indent=2)
+        _yaml_append_map(d, 'base_LTE_filepath', '')
+        _yaml_append_map(d, 'param_filepath', '')
+
+        comment = '''
+        If "zeroSexts_filepath" is specified and not an empty string, the script
+        assumes this the path to the LTE file with all the sextupoles turned off.
+        In this case, the value of "regenerate_zeroSexts" will be ignored.
+        '''
+        _yaml_append_map(d, 'zeroSexts_filepath', '',
+                         before_comment=comment, before_indent=2)
+        comment = '''\
+        Whether "regenerate_zeroSexts" is True or False, if "zeroSexts_filepath"
+        is not specified and an already auto-generated zero-sexts LTE file does
+        not exist, the script will generate a zero-sexts version of the input
+        LTE file. If "regenerate_zeroSexts" is True, the script will regenerate
+        the zero-sexts LTE file even when it already exists.
+        '''
+        _yaml_append_map(d, 'regenerate_zeroSexts', False,
+                         before_comment=comment, before_indent=2)
+
+    # ##########################################################################
+
+    _yaml_append_map(conf, 'report_paragraphs', com_map(), before_comment='\n')
+    d = conf['report_paragraphs']
+    if example:
+        comment = '''
+        Supply paragraphs to be added into the "Lattice Description" section of the
+        report as a list of strings without newline characters.'''
+        _yaml_append_map(d, 'lattice_description', [],
+                         before_comment=comment, before_indent=2)
+
+        comment = '''
+        Supply paragraphs to be added into the "Lattice Properties" section of the
+        report as a list of strings without newline characters.'''
+        _yaml_append_map(d, 'lattice_properties', [],
+                         before_comment=comment, before_indent=2)
+
+    # ##########################################################################
+
+    _yaml_append_map(conf, 'lattice_props', com_map(), before_comment='\n')
+    d = conf['lattice_props']
+
+    if example:
+        _yaml_append_map(d, 'recalc', False, before_comment='\n')
+        _yaml_append_map(d, 'replot', False)
+
+    _yaml_append_map(d, 'use_beamline_cell', sqss('CELL'), eol_comment='REQUIRED')
+    d['use_beamline_cell'].yaml_set_anchor('use_beamline_cell')
+    anchors['use_beamline_cell'] = d['use_beamline_cell']
+    _yaml_append_map(d, 'use_beamline_ring', sqss('RING'), eol_comment='REQUIRED')
+    d['use_beamline_ring'].yaml_set_anchor('use_beamline_ring')
+    anchors['use_beamline_ring'] = d['use_beamline_ring']
+
+    #---------------------------------------------------------------------------
+
+    if example:
+        _yaml_append_map(d, 'twiss_calc_opts', com_map(), before_comment='\n')
+        d2 = d['twiss_calc_opts']
+
+        _yaml_append_map(d2, 'one_period', com_map())
+        d3 = d2['one_period']
+        _yaml_append_map(d3, 'use_beamline', anchors['use_beamline_cell'])
+        _yaml_append_map(d3, 'element_divisions', 10)
+
+        _yaml_append_map(d2, 'ring_natural', com_map(),
+                         eol_comment='K2 values of all sextupoles set to zero')
+        d3 = d2['ring_natural']
+        _yaml_append_map(d3, 'use_beamline', anchors['use_beamline_ring'])
+
+        _yaml_append_map(d2, 'ring', com_map())
+        d3 = d2['ring']
+        _yaml_append_map(d3, 'use_beamline', anchors['use_beamline_ring'])
+
+    #---------------------------------------------------------------------------
+
+    _yaml_append_map(d, 'twiss_plot_opts', com_map(), before_comment='\n',
+                     eol_comment='REQUIRED')
+    d2 = d['twiss_plot_opts']
+
+    _yaml_append_map(d2, 'one_period', com_seq())
+    d3 = d2['one_period']
+    #
+    m = com_map(print_scalars = [], right_margin_adj = 0.85)
+    m.fa.set_flow_style()
+    d3.append(m)
+    #
+    zoom_in = com_map(print_scalars = [], right_margin_adj = 0.85, slim = [0, 9],
+                      disp_elem_names = {
+                          'bends': True, 'quads': True, 'sexts': True,
+                          'font_size': 8, 'extra_dy_frac': 0.05})
+    zoom_in.fa.set_flow_style()
+    zoom_in.yaml_set_anchor('zoom_in')
+    anchors['zoom_in'] = zoom_in
+    d3.append(zoom_in)
+    #
+    for slim in ([4, 16], [14, 23]):
+        sq = com_seq(slim)
+        sq.fa.set_flow_style()
+        overwrite = com_map(slim = sq)
+        overwrite.add_yaml_merge([(0, anchors['zoom_in'])])
+        d3.append(overwrite)
+
+    if example:
+        _yaml_append_map(d2, 'ring_natural', com_seq())
+        _yaml_append_map(d2, 'ring', com_seq())
+
+    #---------------------------------------------------------------------------
+
+    _yaml_append_map(d, 'twiss_plot_captions', com_map(), before_comment='\n',
+                     eol_comment='REQUIRED')
+    d2 = d['twiss_plot_captions']
+
+    _yaml_append_map(d2, 'one_period', com_seq())
+    d3 = d2['one_period']
+    #
+    d3.append(sqss('Twiss functions for 2 cells (1 super-period).'))
+    d3.append(sqss('Twiss functions $(0 \le s \le 9)$.'))
+    d3.append(sqss('Twiss functions $(4 \le s \le 16)$.'))
+    d3.append(sqss('Twiss functions $(14 \le s \le 23)$.'))
+
+    if example:
+        _yaml_append_map(d2, 'ring_natural', com_seq())
+        _yaml_append_map(d2, 'ring', com_seq())
+
+    #---------------------------------------------------------------------------
+
+    if example:
+        _yaml_append_map(d, 'extra_props', com_map(), before_comment='\n')
+        d2 = d['extra_props']
+
+        _yaml_append_map(d2, 'beta', com_map())
+        d3 = d2['beta']
+        #
+        spec = com_map(label = sqss('$(\beta_x, \beta_y)$ at LS Center'),
+                       name = sqss('LS_marker_elem_name'), occur = 0)
+        _yaml_append_map(d3, 'LS', spec)
+        #
+        spec = com_map(label = sqss('$(\beta_x, \beta_y)$ at SS Center'),
+                       name = sqss('SS_marker_elem_name'), occur = 0)
+        _yaml_append_map(d3, 'SS', spec)
+
+        _yaml_append_map(d2, 'phase_adv', com_map())
+        d3 = d2['phase_adv']
+        #
+        elem1 = com_map(name = 'LS_marker_elem_name', occur = 0)
+        elem1.fa.set_flow_style()
+        elem2 = com_map(name = 'SS_marker_elem_name', occur = 0)
+        elem2.fa.set_flow_style()
+        spec = com_map(
+            label = sqss(r'Phase Advance btw. LS \& SS $(\Delta\nu_x, \Delta\nu_y)$'),
+            elem1 = elem1, elem2 = elem2)
+        _yaml_append_map(d3, 'LS & SS', spec)
+
+        _yaml_append_map(d2, 'floor_comparison', com_map())
+        d3 = d2['floor_comparison']
+        #
+        _yaml_append_map(d3, 'ref_flr_filepath', sqss('?.flr'),
+                         eol_comment='REQUIRED if "floor_comparison" is specified')
+        #
+        ref_elem = com_map(name = 'SS_center_marker_elem_name_in_ref_lattice', occur = 0)
+        ref_elem.fa.set_flow_style()
+        cur_elem = com_map(name = 'SS_center_marker_elem_name_in_cur_lattice', occur = 0)
+        cur_elem.fa.set_flow_style()
+        spec = com_map(
+            label = sqss('Source Point Diff. at SS $(\Delta x, \Delta z)$'),
+            ref_elem = ref_elem, cur_elem = cur_elem)
+        _yaml_append_map(d3, 'SS', spec)
+        #
+        ref_elem = com_map(name = 'LS_center_marker_elem_name_in_ref_lattice', occur = 1)
+        ref_elem.fa.set_flow_style()
+        cur_elem = com_map(name = 'LS_center_marker_elem_name_in_cur_lattice', occur = 1)
+        cur_elem.fa.set_flow_style()
+        spec = com_map(
+            label = sqss('Source Point Diff. at LS $(\Delta x, \Delta z)$'),
+            ref_elem = ref_elem, cur_elem = cur_elem)
+        _yaml_append_map(d3, 'LS', spec)
+
+        _yaml_append_map(d2, 'length', com_map())
+        d3 = d2['length']
+        #
+        name_list = com_seq(['drift_elem_name_1', 'drift_elem_name_2', 'drift_elem_name_3'])
+        name_list.fa.set_flow_style()
+        spec = com_map(
+            label = sqss('Half Length of Short Straight'),
+            name_list = name_list,
+        )
+        _yaml_append_map(d3, 'L_SS', spec)
+        #
+        name_list = com_seq(['drift_elem_name_1', 'drift_elem_name_2', 'drift_elem_name_3'])
+        name_list.fa.set_flow_style()
+        spec = com_map(
+            label = sqss('Half Length of Long Straight'),
+            name_list = name_list,
+        )
+        _yaml_append_map(d3, 'L_LS', spec)
+
+    #---------------------------------------------------------------------------
+
+    if example:
+
+        comment = '''
+        You can here specify the order of the computed lattice property values in
+        the table within the generated report.'''
+        _yaml_append_map(d, 'table_order', com_seq(), before_comment=comment,
+                         before_indent=2)
+        d2 = d['table_order']
+        #
+        for i, (prop_name_or_list, comment) in enumerate([
+            ('E_GeV', 'Beam energy'),
+            ('eps_x', 'Natural horizontal emittance'),
+            ('J', 'Damping partitions'),
+            ('nu', 'Ring tunes'),
+            ('ksi_nat', 'Natural chromaticities'),
+            ('ksi_cor', 'Corrected chromaticities'),
+            ('alphac', 'Momentum compaction'),
+            ('U0', 'Energy loss per turn'),
+            ('sigma_delta', 'Energy spread'),
+            (['beta', 'LS'], None),
+            (['beta', 'SS'], None),
+            ('max_beta', 'Max beta functions'),
+            ('min_beta', 'Min beta functions'),
+            ('max_min_etax', 'Max & Min etax'),
+            (['phase_adv', 'LS & SS'], None),
+            (['length', 'L_LS'], None),
+            (['length', 'L_SS'], None),
+            ('circumf', 'Circumference'),
+            (['floor_comparison', 'circumf_change_%'], 'Circumference change [%] from Reference Lattice'),
+            ('n_periods_in_ring', 'Number of super-periods for a full ring'),
+            (['floor_comparison', 'LS'], None),
+            (['floor_comparison', 'SS'], None),
+        ]):
+
+            if isinstance(prop_name_or_list, str):
+                d2.append(sqss(prop_name_or_list))
+            else:
+                prop_list = com_seq([sqss(v) for v in prop_name_or_list])
+                prop_list.fa.set_flow_style()
+                d2.append(prop_list)
+
+            _kwargs = dict(column=0)
+            if comment is not None:
+                d2.yaml_add_eol_comment(comment, len(d2)-1, **_kwargs)
+
+    # ##########################################################################
+
+    _yaml_append_map(conf, 'nonlin', com_map(), before_comment='\n')
+    d = conf['nonlin']
+
+    keys = ['fmap_xy', 'fmap_px', 'cmap_xy', 'cmap_px', 'tswa', 'nonlin_chrom']
+    comments = [
+        'On-Momentum Frequency Map', 'Off-Momentum Frequency Map',
+        'On-Momentum Chaos Map', 'Off-Momentum Chaos Map',
+        'Tune Shift with Amplitude', 'Nonlinear Chromaticity',
+    ]
+    assert len(keys) == len(comments)
+
+    m = com_map()
+    for k, c in zip(keys, comments):
+        _yaml_append_map(m, k, True, eol_comment=c)
+    _yaml_append_map(d, 'include', m, eol_comment='REQUIRED')
+
+    if example:
+        m = com_map()
+        for k, c in zip(keys, comments):
+            _yaml_append_map(m, k, False, eol_comment=c)
+        _yaml_append_map(
+            d, 'recalc', m,
+            eol_comment='Will re-calculate potentially time-consuming data')
+
+        m = com_map()
+        for k, c in zip(keys, comments):
+            _yaml_append_map(m, k, False, eol_comment=c)
+        _yaml_append_map(
+            d, 'replot', m,
+            eol_comment='Will re-plot and save plotss as PDF files')
+
+    _yaml_append_map(d, 'use_beamline', anchors['use_beamline_ring'],
+                     eol_comment='REQUIRED',
+                     before_comment='\nCommon Options', before_indent=2)
+
+    N_KICKS = com_map(KQUAD=40, KSEXT=8, CSBEND=12)
+    N_KICKS.fa.set_flow_style()
+    _yaml_append_map(d, 'N_KICKS', N_KICKS, eol_comment='REQUIRED')
+
+    #---------------------------------------------------------------------------
+
+    default_max_ntasks = 80
+
+    common_remote_opts = com_map()
+    _yaml_append_map(common_remote_opts, 'ntasks', default_max_ntasks,
+                     eol_comment='REQUIRED')
+    if example:
+        _yaml_append_map(common_remote_opts, 'partition', sqss('short'))
+        _yaml_append_map(common_remote_opts, 'mail_type_end', False,
+                         eol_comment='If True, will send email at the end of job.')
+        _yaml_append_map(common_remote_opts, 'mail_user', sqss('your_username@bnl.gov'),
+                         eol_comment='REQUIRED only if "mail_type_end" is True.')
+        nodelist = com_seq(
+            ['apcpu-001', 'apcpu-002', 'apcpu-003', 'apcpu-004', 'apcpu-005'])
+        nodelist.fa.set_flow_style()
+        _yaml_append_map(
+            common_remote_opts, 'nodelist', nodelist,
+            eol_comment='list of strings for worker node names that will be used for the job')
+        _yaml_append_map(
+            common_remote_opts, 'time', sqss('2:00:00'),
+            eol_comment='Specify max job run time in SLURM time string format')
+    comment = '''
+    Common parallel options (can be overwritten in the options block
+    for each specific calculation type):
+    '''
+    _yaml_append_map(d, 'common_remote_opts', common_remote_opts,
+                     eol_comment='REQUIRED',
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    xy1 = com_map(xmin = -8e-3, xmax = +8e-3, ymin = 0.0, ymax = +2e-3,
+                  nx = 201, ny = 201)
+    if example:
+        _yaml_append_map(xy1, 'x_offset', 1e-6,
+                         before_comment='Optional (below)', before_indent=6)
+        _yaml_append_map(xy1, 'y_offset', 1e-6)
+        _yaml_append_map(xy1, 'delta_offset', 0.0)
+    xy1.yaml_set_anchor('map_xy1')
+    anchors['map_xy1'] = xy1
+    #
+    xyTest = com_map(nx = 21, ny = 21)
+    #xyTest.fa.set_flow_style()
+    xyTest.add_yaml_merge([(0, anchors['map_xy1'])])
+    #
+    xy_grids = com_map(xy1 = xy1, xyTest = xyTest)
+    #
+    comment = '''
+    List of 2-D x-y grid specs for fmap & cmap calculations:'''
+    _yaml_append_map(d, 'xy_grids', xy_grids,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    px1 = com_map(
+        delta_min = -0.05, delta_max = +0.05, xmin = -8e-3, xmax = +8e-3,
+        ndelta = 201, nx = 201)
+    if example:
+        _yaml_append_map(px1, 'x_offset', 1e-6,
+                         before_comment='Optional (below)', before_indent=6)
+        _yaml_append_map(px1, 'y_offset', 1e-6)
+        _yaml_append_map(px1, 'delta_offset', 0.0)
+    px1.yaml_set_anchor('map_px1')
+    anchors['map_px1'] = px1
+    #
+    pxTest = com_map(ndelta = 21, nx = 21)
+    #pxTest.fa.set_flow_style()
+    pxTest.add_yaml_merge([(0, anchors['map_px1'])])
+    #
+    px_grids = com_map(px1 = px1, pxTest = pxTest)
+    #
+    comment = '''
+    List of 2-D delta-x grid specs for fmap & cmap calculations:'''
+    _yaml_append_map(d, 'px_grids', px_grids,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    if production:
+        opts = com_map(grid_name = sqss('xy1'), n_turns = 1024)
+    else:
+        opts = com_map(grid_name = sqss('xyTest'), n_turns = 1024)
+    comment = '\nOptions specific only for on-momentum frequency map calculation'
+    _yaml_append_map(
+        d, 'fmap_xy_calc_opts', opts,
+        before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    if production:
+        opts = com_map(grid_name = sqss('px1'), n_turns = 1024)
+    else:
+        opts = com_map(grid_name = sqss('pxTest'), n_turns = 1024)
+    comment = '\nOptions specific only for off-momentum frequency map calculation'
+    _yaml_append_map(
+        d, 'fmap_px_calc_opts', opts,
+        before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    if production:
+        opts = com_map(grid_name = sqss('xy1'), n_turns = 128)
+    else:
+        opts = com_map(grid_name = sqss('xyTest'), n_turns = 128)
+    comment = '\nOptions specific only for on-momentum chaos map calculation'
+    _yaml_append_map(
+        d, 'cmap_xy_calc_opts', opts,
+        before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    if production:
+        opts = com_map(grid_name = sqss('px1'), n_turns = 128)
+    else:
+        opts = com_map(grid_name = sqss('pxTest'), n_turns = 128)
+    comment = '\nOptions specific only for off-momentum chaos map calculation'
+    _yaml_append_map(
+        d, 'cmap_px_calc_opts', opts,
+        before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    xy1 = com_map(abs_xmax = 1e-3, nx = 50, abs_ymax = 0.5e-3, ny = 50)
+    if example:
+        _yaml_append_map(xy1, 'x_offset', 1e-6,
+                         before_comment='Optional (below)', before_indent=6)
+        _yaml_append_map(xy1, 'y_offset', 1e-6)
+    xy1.yaml_set_anchor('tswa_xy1')
+    anchors['tswa_xy1'] = xy1
+    #
+    tswa_grids = com_map(xy1 = xy1)
+    #
+    comment = '''
+    List of 1-D grid specs for tune-shift-with-amplitude calculation:'''
+    _yaml_append_map(d, 'tswa_grids', tswa_grids,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    remote_opts = com_map(time = sqss('7:00'))
+    tswa_calc_opts = com_map(grid_name = sqss('xy1'), n_turns = 1024,
+                             remote_opts = remote_opts)
+    if example:
+        _yaml_append_map(tswa_calc_opts, 'save_fft', False)
+    #
+    comment = 'Options specific only for tune-shift-with-amplitude calculation'
+    _yaml_append_map(d, 'tswa_calc_opts', tswa_calc_opts,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    p1 = com_map(delta_min = -4e-2, delta_max = +3e-2, ndelta = 100)
+    if example:
+        _yaml_append_map(p1, 'x_offset', 1e-6,
+                         before_comment='Optional (below)', before_indent=6)
+        _yaml_append_map(p1, 'y_offset', 1e-6)
+        _yaml_append_map(p1, 'delta_offset', 0.0)
+    p1.yaml_set_anchor('p1')
+    anchors['p1'] = p1
+    #
+    nonlin_chrom_grids = com_map(p1 = p1)
+    #
+    comment = '''
+    List of 1-D grid specs for nonlinear chromaticity calculation:'''
+    _yaml_append_map(d, 'nonlin_chrom_grids', nonlin_chrom_grids,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    remote_opts = com_map(time = sqss('7:00'))
+    nonlin_chrom_calc_opts = com_map(grid_name = sqss('p1'), n_turns = 1024,
+                                     remote_opts = remote_opts)
+    if example:
+        _yaml_append_map(nonlin_chrom_calc_opts, 'save_fft', False)
+    #
+    comment = 'Options specific only for nonlinear chromaticity calculation'
+    _yaml_append_map(d, 'nonlin_chrom_calc_opts', nonlin_chrom_calc_opts,
+                     before_comment=comment, before_indent=2)
+
+    #---------------------------------------------------------------------------
+
+    if example:
+
+        comment = '''
+        ## Plot Options ##'''
+        _yaml_append_map(d, 'cmap_xy_plot_opts', com_map(cmin = -24, cmax = -10),
+                         before_comment=comment, before_indent=2)
+
+        #---------------------------------------------------------------------------
+
+        _yaml_append_map(d, 'cmap_px_plot_opts', com_map(cmin = -24, cmax = -10))
+
+        #---------------------------------------------------------------------------
+
+        nux_lim = com_seq([0.0, 1.0])
+        nux_lim.fa.set_flow_style()
+        nuy_lim = com_seq([0.0, 1.0])
+        nuy_lim.fa.set_flow_style()
+        #
+        tswa_plot_opts = com_map(
+            plot_plus_minus_combined = True, plot_xy0 = True, plot_Axy = False,
+            use_time_domain_amplitude = True, plot_fft = False,
+            footprint_nuxlim = nux_lim, footprint_nuylim = nuy_lim,
+            fit_xmin = -0.5e-3, fit_xmax = +0.5e-3,
+            fit_ymin = -0.25e-3, fit_ymax = +0.25e-3,
+        )
+        comment = '''\
+        ^ Even if True, these plots will NOT be included into the main report,
+        ^ but will be saved to the "tswa" PDF file.
+        '''
+        _yaml_set_comment_after_key(tswa_plot_opts, 'plot_Axy', comment, indent=4)
+        #
+        tswa_plot_opts.yaml_add_eol_comment(
+            'Only relevant when "plot_Axy" is True', 'use_time_domain_amplitude',
+            column=0)
+        #
+        comment = '''\
+        ^ If True, it may take a while to save the "tswa" PDF file.
+        ^ But these FFT color plots will NOT be included into
+        ^ the main report. These plots may be useful for debugging
+        ^ or for deciding the number of divisions for x0/y0 arrays.
+        ^ Also, this option being True requires you to have set "save_fft"
+        ^ as True (False by default) in "tswa_calc_opts".
+        '''
+        _yaml_set_comment_after_key(tswa_plot_opts, 'plot_fft', comment, indent=4)
+        #
+        _yaml_append_map(d, 'tswa_plot_opts', tswa_plot_opts)
+
+        #---------------------------------------------------------------------------
+
+        fit_deltalim = com_seq([-2e-2, +2e-2])
+        fit_deltalim.fa.set_flow_style()
+
+        nux_lim = com_seq([0.0, 1.0])
+        nux_lim.fa.set_flow_style()
+        nuy_lim = com_seq([0.0, 1.0])
+        nuy_lim.fa.set_flow_style()
+
+        nonlin_chrom_plot_opts = com_map()
+        _yaml_append_map(nonlin_chrom_plot_opts, 'plot_fft', False)
+        _yaml_append_map(nonlin_chrom_plot_opts, 'max_chrom_order', 4)
+        _yaml_append_map(nonlin_chrom_plot_opts, 'fit_deltalim', fit_deltalim)
+        _yaml_append_map(nonlin_chrom_plot_opts, 'footprint_nuxlim', nux_lim)
+        _yaml_append_map(nonlin_chrom_plot_opts, 'footprint_nuylim', nuy_lim)
+
+        comment = '''\
+        ^ If True, it may take a while to save the "nonlin_chrom" PDF file.
+        ^ But these FFT color plots will NOT be included into
+        ^ the main report. These plots may be useful for debugging
+        ^ or for deciding the number of divisions for delta arrays.
+        ^ Also, this option being True requires you to have set "save_fft"
+        ^ as True (False by default) in "nonlin_chrom_calc_opts".
+        '''
+        _yaml_set_comment_after_key(nonlin_chrom_plot_opts, 'plot_fft',
+                                    comment, indent=4)
+
+        _yaml_append_map(d, 'nonlin_chrom_plot_opts', nonlin_chrom_plot_opts)
+
+    # ##########################################################################
+
+    if False:
+        dumper = yaml.YAML()
+        dumper.preserve_quotes = True
+        dumper.width = 70
+        dumper.boolean_representation = ['False', 'True']
+        dumper.dump(conf, sys.stdout)
+
+        with open('test.yaml', 'w') as f:
+            dumper.dump(conf, f)
+
+    return conf
+
+def get_default_config_and_comments_v0_1(example=False):
     """
     """
 
@@ -2779,6 +3807,8 @@ def get_default_config_and_comments(example=False):
     conf = com_map()
 
     if example:
+        _yaml_append_map(conf, 'config_version', '0.1')
+
         _yaml_append_map(conf, 'enable_pyelegant_stdout', False)
 
         _yaml_append_map(conf, 'author', '')
@@ -3412,10 +4442,17 @@ def determine_calc_plot_bools(report_folderpath, nonlin_config, sel_plots):
 def gen_report_type_0(config_filepath):
     """"""
 
-    conf = get_default_config_and_comments()
-
     config_loader = yaml.YAML()
+    config_loader.preserve_quotes = True
     user_conf = config_loader.load(Path(config_filepath).read_text())
+
+    config_version = user_conf.get('config_version', None)
+
+    if not config_version:
+        func_versions = _get_default_config_and_comments_func_versions()
+        # Get latest version
+        config_version = sorted(list(func_versions))[-1]
+    conf = get_default_config_and_comments(config_version)
 
     conf.update(user_conf)
 
@@ -3493,6 +4530,13 @@ def gen_report_type_0(config_filepath):
             report_folderpath, conf['lattice_props']['twiss_plot_opts'],
             conf['lattice_props']['twiss_plot_captions'])
 
+    if 'floor_comparison' in lin_data['extra']:
+        flr_pdf_filepath = os.path.join(report_folderpath, 'floor.pdf')
+        if (not os.path.exists(flr_pdf_filepath)) or \
+            conf['lattice_props'].get('replot', False):
+            plot_geom_layout(
+                report_folderpath, lin_data['extra']['floor_comparison'])
+
     if 'nonlin' in conf:
 
         ncf = conf['nonlin']
@@ -3514,16 +4558,17 @@ def gen_report_type_0(config_filepath):
         if do_plot and any(do_plot.values()):
             plot_nonlin_props(report_folderpath, ncf, do_plot)
 
-    build_report(conf, input_LTE_filepath, rootname, report_folderpath, lin_data,
-                 twiss_plot_captions)
+    build_report(
+        user_conf, conf, input_LTE_filepath, rootname, report_folderpath,
+        lin_data, twiss_plot_captions)
 
-def gen_example_config_file(config_filepath, full_or_min):
+def gen_example_config_file(config_filepath, full_or_min, config_version):
     """"""
 
     if full_or_min == 'full':
-        conf = get_default_config_and_comments(example=True)
+        conf = get_default_config_and_comments(config_version, example=True)
     elif full_or_min == 'min':
-        conf = get_default_config_and_comments(example=False)
+        conf = get_default_config_and_comments(config_version, example=False)
     else:
         raise ValueError('"full_or_min" must be either `True` or `False`')
 
@@ -3553,10 +4598,16 @@ def get_parsed_args():
         '-m', '--min-example-config', default=False, action='store_true',
         help='Generate a minimum-example config YAML file')
     parser.add_argument(
+        '--example-config-version', type=str, default='1.0',
+        help=('Version of example config YAML file to be generated. '
+              'Ignored if "--full-example-config" and "--min-example-config" '
+              'are not specified'
+              '(default: 1.0, all available: [1.0, 0.1])'))
+    parser.add_argument(
         'config_filepath', type=str,
         help='''\
     Path to YAML file that contains configurations for report generation.
-    Or, if "--full-example-config" or "--min-example-config" was specified,
+    Or, if "--full-example-config" or "--min-example-config" is specified,
     an example config file will be generated and saved at this file path.''')
 
     args = parser.parse_args()
@@ -3565,6 +4616,7 @@ def get_parsed_args():
         print(f'Record Type = {args.type}')
         print(f'Generate Full Example Config? = {args.full_example_config}')
         print(f'Generate Min Example Config? = {args.min_example_config}')
+        print(f'Example Config Version? = {args.example_config_version}')
         print(f'Config File = {args.config_filepath}')
 
     return args
@@ -3575,9 +4627,9 @@ def gen_report(args):
     config_filepath = args.config_filepath
 
     if args.full_example_config:
-        gen_example_config_file(config_filepath, 'full')
+        gen_example_config_file(config_filepath, 'full', arg.example_config_version)
     elif args.min_example_config:
-        gen_example_config_file(config_filepath, 'min')
+        gen_example_config_file(config_filepath, 'min', arg.example_config_version)
     else:
         if args.type == 0:
             if not os.path.exists(config_filepath):
