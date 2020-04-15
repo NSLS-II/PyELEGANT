@@ -1721,8 +1721,9 @@ def add_worksheet_lattice_description(
     label_d = dict(
         description='Description:', table_notes='Notes for Table:',
         LTE_filepath='LTE filepath:',
-        hash='LTE Hash (SHA-1):', keywords='Keywords:', lat_author='Created by:',
-        lat_recv_date='Date received:', orig_LTE_filepath='Orig. LTE filepath:',
+        hash='LTE Hash (SHA-1):', keywords='Keywords:',
+        lat_author='LTE Created by:', lat_recv_date='Date LTE Received:',
+        orig_LTE_filepath='Orig. LTE filepath:',
     )
     for k, label in label_d.items():
         if k in ('description', 'table_notes'):
@@ -4766,13 +4767,17 @@ class Report_NSLS2U_Default:
         self.add_pdf_lattice_props(twiss_plot_captions)
         self.add_xlsx_lattice_props()
 
-        self.doc.append(plx.ClearPage())
-
-        self.add_pdf_nonlin()
-
         self.add_xlsx_geom_layout()
 
         self.add_xlsx_LTE()
+
+        self.add_xlsx_RF()
+
+        self.add_xlsx_lifetime()
+
+        self.doc.append(plx.ClearPage())
+
+        self.add_pdf_nonlin()
 
         plx.generate_pdf_w_reruns(self.doc, clean_tex=False, silent=False)
         self.workbook.close()
@@ -4811,7 +4816,8 @@ class Report_NSLS2U_Default:
         """"""
 
         self.workbook = xlsxwriter.Workbook(
-            os.path.join(self.report_folderpath, f'{self.rootname}_report.xlsx'))
+            os.path.join(self.report_folderpath, f'{self.rootname}_report.xlsx'),
+            options={'nan_inf_to_errors': True})
 
         self._build_workbook_formats()
 
@@ -4828,6 +4834,13 @@ class Report_NSLS2U_Default:
 
         self.worksheets = worksheets
 
+        # Placeholder for copying from a worksheet to antoerh sheet
+        self.xlsx_map = dict(lat_params={})
+
+        self.lattice_props = {}
+        # key   := Excel defined name
+        # value := corresponding property value
+
     def _build_workbook_formats(self):
         """"""
 
@@ -4842,6 +4855,12 @@ class Report_NSLS2U_Default:
         wb_txt_fmts = SimpleNamespace()
 
         wb_txt_fmts.normal = wb.add_format()
+        wb_txt_fmts.normal_center = wb.add_format(
+            {'align': 'center', 'valign': 'vcenter'})
+        wb_txt_fmts.normal_center_wrap = wb.add_format(
+            {'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+        wb_txt_fmts.normal_center_border = wb.add_format(
+            {'align': 'center', 'valign': 'vcenter', 'border': 1})
 
         wb_txt_fmts.wrap = wb.add_format({'text_wrap': True})
         wb_txt_fmts.bold_wrap = wb.add_format({'bold': True, 'text_wrap': True})
@@ -5060,8 +5079,11 @@ class Report_NSLS2U_Default:
 
                     for k in sorted(list(d)):
                         L, K3 = d[k]['L'], d[k]['K3']
+                        val_str = f'{K3:+.4g}'
+                        if 'e' in val_str:
+                            val_str = pe.util.pprint_sci_notation(K3, '.4e')
                         table.add_row([
-                            k, plx.MathText(f'{L:.3f}'), plx.MathText(f'{K3:+.4g}')])
+                            k, plx.MathText(f'{L:.3f}'), plx.MathText(val_str)])
 
     def add_pdf_L2_beamline_elements_list(self):
         """"""
@@ -5402,6 +5424,13 @@ class Report_NSLS2U_Default:
             unit = ' [kHz]'
             val_str = '${:.3f}$'.format(
                 scipy.constants.c / lin_data['circumf'] / 1e3)
+        elif k == 'T_rev':
+            label = 'Revolution Period '
+            symbol = '$T_{\mathrm{rev}}$'
+            unit = ' [$\mu$s]'
+            f_rev = scipy.constants.c / lin_data['circumf'] # [Hz]
+            T_rev = 1.0 / f_rev # [s]
+            val_str = '${:.3f}$'.format(T_rev * 1e6)
         else:
             raise RuntimeError(f'Unhandled "pdf_table_order" key: {k}')
 
@@ -5958,13 +5987,18 @@ class Report_NSLS2U_Default:
 
         row = 0
         col = 3
-        ws.set_column(col, col, 20)
+        ws.set_column(col, col, 23)
         ws.set_column(col+1, col+1, 100)
         label_d = dict(
             description='Description:', table_notes='Notes for Table:',
             LTE_filepath='LTE filepath:',
-            hash='LTE Hash (SHA-1):', keywords='Keywords:', lat_author='Created by:',
-            lat_recv_date='Date received:', orig_LTE_filepath='Orig. LTE filepath:',
+            hash='LTE Hash (SHA-1):', keywords='Keywords:',
+            lat_author='LTE Created by:', lat_recv_date='Date LTE Received:',
+            elegant_version='ELEGANT Version:',
+            pyelegant_version='PyELEGANT Version:',
+            report_class='Report Class:', report_version='Report Version:',
+            report_author='Report Created by:',
+            orig_LTE_filepath='Orig. LTE filepath:',
         )
         for k, label in label_d.items():
             if k in ('description', 'table_notes'):
@@ -5993,6 +6027,10 @@ class Report_NSLS2U_Default:
                 author = conf.get('lattice_author', '')
                 if author:
                     ws.write(row, col+1, author)
+            elif k == 'report_author':
+                author = conf.get('report_author', '')
+                if author:
+                    ws.write(row, col+1, author)
 
             elif k == 'lat_recv_date':
                 date_str = conf.get('lattice_received_date', '')
@@ -6008,6 +6046,15 @@ class Report_NSLS2U_Default:
 
             elif k == 'LTE_filepath':
                 ws.write(row, col+1, input_LTE_filepath.strip())
+
+            elif k == 'elegant_version':
+                ws.write(row, col+1, pe.__version__['ELEGANT'])
+            elif k == 'pyelegant_version':
+                ws.write(row, col+1, pe.__version__['PyELEGANT'])
+            elif k == 'report_class':
+                ws.write(row, col+1, conf['report_class'])
+            elif k == 'report_version':
+                ws.write(row, col+1, conf['report_version'])
 
             elif k == 'orig_LTE_filepath':
                 orig_LTE_fp = conf.get('orig_LTE_filepath', '')
@@ -6471,6 +6518,8 @@ class Report_NSLS2U_Default:
 
         ws = self.worksheets['elems_twiss']
 
+        ws.freeze_panes(1, 0) # Freeze the first row
+
         wb_txt_fmts = self.wb_txt_fmts
         wb_num_fmts = self.wb_num_fmts
 
@@ -6542,6 +6591,103 @@ class Report_NSLS2U_Default:
             ws.insert_image(row, len(fmt_list) + 1, fp)
             row += img_height
 
+    def calc_xlsx_rf_volt_dep_props(self):
+        """"""
+
+        rf_dep_calc_opts = self.conf.get('rf_dep_calc_opts', None)
+        if rf_dep_calc_opts is None:
+            self.rf_dep_props = None
+            return
+
+        rf_volts = np.array(rf_dep_calc_opts['rf_V']) # [V]
+        h = rf_dep_calc_opts['harmonic_number']
+
+        c = scipy.constants.c
+        m_e_eV = physical_constants[
+            'electron mass energy equivalent in MeV'][0] * 1e6
+
+        E_GeV = self.lattice_props['E_GeV'] # [GeV]
+        alphac = self.lattice_props['alphac'] # momentum compaction
+        U0_eV = self.lattice_props['U0_keV'] * 1e3 # energy loss per turn [eV]
+        circumf = self.lattice_props['circumf'] # circumference [m]
+        sigma_delta = self.lattice_props['sigma_delta_percent'] * 1e-2 # energy spread [frac]
+
+        f_rf = h * c / circumf # RF frequency [Hz]
+
+        # Synchronous Phase
+        synch_phases_deg = np.rad2deg(np.pi - np.arcsin(U0_eV / rf_volts))
+
+        # Synchrotron Tune
+        nu_s = np.sqrt(
+            -rf_volts / (E_GeV * 1e9) * np.cos(np.deg2rad(synch_phases_deg))
+            * alphac * h / (2 * np.pi))
+
+        # Bunch Length
+        sigma_z_m = alphac * sigma_delta * circumf / (2 * np.pi * nu_s) # [m]
+        sigma_z_ps = sigma_z_m / c * 1e12 # [ps]
+
+        # RF Bucket Height (RF Acceptance)
+        #
+        # See Section 3.1.4.6 on p.212 of Chao & Tigner, "Handbook
+        # of Accelerator Physics and Engineering" for analytical
+        # formula of RF bucket height, which is "A_s" in Eq. (32),
+        # which is equal to (epsilon_max/E_0) [fraction] in Eq. (33).
+        #
+        # Note that the slip factor (eta) is approximately equal
+        # to momentum compaction in the case of NSLS-II.
+        gamma = 1.0 + E_GeV * 1e9 / m_e_eV
+        gamma_t = 1.0 / np.sqrt(alphac)
+        slip_fac = 1.0 / (gamma_t**2) - 1.0 / (gamma**2) # approx. equal to "mom_compac"
+        q = rf_volts / U0_eV # overvoltage factor
+        F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
+        rf_bucket_heights_percent = 1e2 * np.sqrt(
+            U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
+
+        self.rf_dep_props = dict(
+            rf_volts=rf_volts, h=h, f_rf=f_rf, synch_phases_deg=synch_phases_deg,
+            nu_s=nu_s, sigma_z_m=sigma_z_m, sigma_z_ps=sigma_z_ps,
+            rf_bucket_heights_percent=rf_bucket_heights_percent,
+        )
+
+    def calc_xlsx_lifetime_props(self):
+        """"""
+
+        lifetime_calc_opts = self.conf.get('lifetime_calc_opts', None)
+        if lifetime_calc_opts is None:
+            self.lifetime_props = None
+            return
+
+        total_beam_current_mA = lifetime_calc_opts['total_beam_current_mA']
+        num_filled_bunches = lifetime_calc_opts['num_filled_bunches']
+        beam_current_per_bunch_mA = total_beam_current_mA / num_filled_bunches
+
+        total_charge_C = total_beam_current_mA * 1e-3 * (
+            self.lattice_props['T_rev_us'] * 1e-6)
+        total_charge_uC = total_charge_C * 1e6
+        charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
+
+        eps_ys = np.array(lifetime_calc_opts['eps_y']) # [m-rad]
+
+        eps_0 = self.lattice_props['eps_x_pm'] * 1e-12 # equilibrium emittance
+
+        coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
+        # used in ELEGANT's "touschekLifetime" function.
+        coupling_percent = coupling * 1e2
+
+        eps_xs = eps_0 / (1 + coupling) # [m-rad]
+
+        tau_hrs = np.full(
+            (len(eps_ys), len(self.rf_dep_props['rf_volts'])), np.nan)
+
+        self.lifetime_props = dict(
+            total_beam_current_mA=total_beam_current_mA,
+            num_filled_bunches=num_filled_bunches,
+            beam_current_per_bunch_mA=beam_current_per_bunch_mA,
+            total_charge_uC=total_charge_uC,
+            charge_per_bunch_nC=charge_per_bunch_nC,
+            eps_ys=eps_ys, eps_xs=eps_xs,
+            coupling_percent=coupling_percent, tau_hrs=tau_hrs)
+
     def add_xlsx_lattice_props(self):
         """"""
 
@@ -6576,6 +6722,7 @@ class Report_NSLS2U_Default:
                 'sigma_delta', # Energy spread
                 'U0', # Energy loss per turn
                 'f_rev', # Revolution frequency
+                'T_rev', # Revolution period
                 ['req_props', 'beta', 'LS', 'x'], # Horizontal beta at LS Center
                 ['req_props', 'beta', 'LS', 'y'], # Vertical beta at LS Center
                 ['req_props', 'beta', 'SS', 'x'], # Horizontal beta at SS Center
@@ -6599,6 +6746,7 @@ class Report_NSLS2U_Default:
                 # Bunch length
                 # RF acceptance (Bucket height)
                 # Beam Lifetime
+                # Lattice momentum accetance
                 # DA
             ]
 
@@ -6608,20 +6756,34 @@ class Report_NSLS2U_Default:
                     table_order.append(spec)
 
 
-        defined_names = {}
-        for row_spec in table_order:
-            try:
-                (label_fragments, value, num_fmt
-                 ) = self.get_xlsx_lattice_prop_row(row_spec)
-            except:
-                continue
+        self.defined_names = {
+            # (row_spec_str): (Excel defined name)
+            'n_periods_in_ring': 'n_periods_in_ring',
+            'circumf': 'circumf',
+            ('\n'.join(['req_props', 'length', 'LS'])): 'L_LS',
+            ('\n'.join(['req_props', 'length', 'SS'])): 'L_SS',
+            'U0': 'U0_keV',
+            'E_GeV': 'E_GeV',
+            'alphac': 'alphac',
+            'sigma_delta': 'sigma_delta_percent',
+            'eps_x': 'eps_x_pm',
+            'T_rev': 'T_rev_us',
+        }
 
-            if isinstance(value, dict):
-                for row_spec_str, name in value['defined_names'].items():
-                    if row_spec_str not in defined_names:
-                        defined_names[row_spec_str] = name
-                    else:
-                        assert defined_names[row_spec_str] == name
+        for row_spec_str, defined_name in self.defined_names.items():
+            if '\n' in row_spec_str:
+                row_spec = row_spec_str.splitlines()
+            else:
+                row_spec = row_spec_str
+            (_, value, _) = self.get_xlsx_lattice_prop_row(row_spec)
+
+            self.lattice_props[defined_name] = value
+
+        # Compute RF-voltage-dependent properties
+        self.calc_xlsx_rf_volt_dep_props()
+
+        # Compute lifetime-related properties
+        self.calc_xlsx_lifetime_props()
 
         for row_spec in table_order:
 
@@ -6637,21 +6799,23 @@ class Report_NSLS2U_Default:
             ws.write_rich_string(row, 0, *label_fragments)
 
             col = 1
-            if not isinstance(value, dict):
-                ws.write(row, col, value, num_fmt)
-            else:
-                ws.write(row, col, value['formula'], num_fmt)
+            ws.write(row, col, value, num_fmt)
+
+            cell = xlsxwriter.utility.xl_rowcol_to_cell(
+                row, col, row_abs=True, col_abs=True)
+            cell_address = f"='{ws.name}'!{cell}"
 
             if isinstance(row_spec, list):
                 row_spec_str = '\n'.join(row_spec)
             else:
                 row_spec_str = row_spec
 
-            if row_spec_str in defined_names:
-                cell = xlsxwriter.utility.xl_rowcol_to_cell(
-                    row, col, row_abs=True, col_abs=True)
-                wb.define_name(defined_names[row_spec_str],
-                               f"='{ws.name}'!{cell}")
+            self.xlsx_map['lat_params'][row_spec_str] = dict(
+                label_fragments=label_fragments, cell_address=cell_address,
+                num_fmt=num_fmt)
+
+            if row_spec_str in self.defined_names:
+                wb.define_name(self.defined_names[row_spec_str], cell_address)
 
             row += 1
 
@@ -6854,6 +7018,13 @@ class Report_NSLS2U_Default:
             unit = [normal, ' (kHz)']
             value, num_fmt = (
                 scipy.constants.c / lin_data['circumf'] / 1e3, nf['0.000'])
+        elif k == 'T_rev':
+            label = [normal, 'Revolution Period ']
+            symbol = [italic, 'T', sub, 'rev']
+            unit = [normal, ' (', italic, GREEK['mu'], 's)']
+            f_rev = scipy.constants.c / lin_data['circumf'] # [Hz]
+            T_rev = 1.0 / f_rev # [s]
+            value, num_fmt = (T_rev * 1e6, nf['0.000'])
         elif k in ('max_betax', 'max_betay', 'min_betax', 'min_betay'):
             plane = k[-1]
             max_min = ('Maximum' if k.startswith('max_') else 'Minimum')
@@ -6877,15 +7048,7 @@ class Report_NSLS2U_Default:
             label = [normal, 'Fraction of Straight Sections ']
             symbol = []
             unit = [normal, ' (%)']
-            defined_names = {
-                'n_periods_in_ring': 'n_periods_in_ring',
-                'circumf': 'circumf',
-                ('\n'.join(['req_props', 'length', 'LS'])): 'L_LS',
-                ('\n'.join(['req_props', 'length', 'SS'])): 'L_SS',
-            }
-            value = dict(
-                defined_names = defined_names,
-                formula = '=(L_LS + L_SS) * n_periods_in_ring / circumf * 1e2')
+            value = '=(L_LS + L_SS) * n_periods_in_ring / circumf * 1e2'
             num_fmt = nf['0.00']
         else:
             raise RuntimeError(f'Unhandled "xlsx_table_order" key: {k}')
@@ -6989,6 +7152,183 @@ class Report_NSLS2U_Default:
         for line in self.LTE_contents.splitlines():
             ws.write(row, 0, line, courier)
             row += 1
+
+    def add_xlsx_RF(self):
+        """"""
+
+        ws = self.worksheets['rf']
+
+        wb_txt_fmts = self.wb_txt_fmts
+        wb_num_fmts = self.wb_num_fmts
+
+        bold = wb_txt_fmts.bold
+        normal = wb_txt_fmts.normal
+        normal_center_wrap = wb_txt_fmts.normal_center_wrap
+        normal_center_border = wb_txt_fmts.normal_center_border
+        italic = wb_txt_fmts.italic
+        italic_sub = wb_txt_fmts.italic_sub
+
+        ws.set_column(0, 0, 40)
+
+        row = 0
+
+        ws.write(row, 0, 'Lattice Property', bold)
+        ws.write(row, 1, 'Value', bold)
+        row += 1
+
+        for row_spec_str in (
+            'E_GeV', 'circumf', 'n_periods_in_ring',
+            '\n'.join(['req_props', 'length', 'LS']),
+            '\n'.join(['req_props', 'length', 'SS']),
+            'eps_x', 'alphac', 'U0', 'sigma_delta',
+            ):
+            d = self.xlsx_map['lat_params'][row_spec_str]
+            ws.write_rich_string(row, 0, *d['label_fragments'])
+            ws.write(row, 1, d['cell_address'], d['num_fmt'])
+            row += 1
+
+        row += 1
+
+        ws.write(row, 0, 'Voltage-independent Property', bold)
+        ws.write(row, 1, 'Value', bold)
+        row += 1
+
+        ws.write(row, 0, 'Harmonic Number ()', normal)
+        ws.write(row, 1, self.rf_dep_props['h'], None)
+        row += 1
+
+        ws.write(row, 0, 'RF Frequency (MHz)', normal)
+        ws.write(row, 1, self.rf_dep_props['f_rf'] / 1e6, wb_num_fmts['0.000'])
+        row += 1
+
+        row += 1
+
+        ws.write(row, 0, 'Voltage-dependent Property', bold)
+        ws.write(row, 1, 'Values', bold)
+        row += 1
+
+        ws.write(row, 0, 'RF Voltage (MV)', normal)
+        for col, v in enumerate(self.rf_dep_props['rf_volts']):
+            ws.write(row, col+1, v / 1e6, wb_num_fmts['0.0'])
+        row += 1
+
+        ws.write(row, 0, 'Synchrotron Tune ()', normal)
+        for col, v in enumerate(self.rf_dep_props['nu_s']):
+            ws.write(row, col+1, v, wb_num_fmts['0.000000'])
+        row += 1
+
+        ws.write(row, 0, 'Synchronous Phase (deg)', normal)
+        for col, v in enumerate(self.rf_dep_props['synch_phases_deg']):
+            ws.write(row, col+1, v, wb_num_fmts['0.00'])
+        row += 1
+
+        ws.write(row, 0, 'RF Bucket Height (%)', normal)
+        for col, v in enumerate(self.rf_dep_props['rf_bucket_heights_percent']):
+            ws.write(row, col+1, v, wb_num_fmts['0.0'])
+        row += 1
+
+        ws.write(row, 0, 'Zero-Current RMS Bunch Length (mm)', normal)
+        for col, v in enumerate(self.rf_dep_props['sigma_z_m']):
+            ws.write(row, col+1, v * 1e3, wb_num_fmts['0.00'])
+        row += 1
+
+        ws.write(row, 0, 'Zero-Current RMS Bunch Length (ps)', normal)
+        for col, v in enumerate(self.rf_dep_props['sigma_z_ps']):
+            ws.write(row, col+1, v, wb_num_fmts['0.00'])
+        row += 1
+
+        row += 1
+
+        ws.write(row, 0, 'Beam Current Property', bold)
+        ws.write(row, 1, 'Value', bold)
+        row += 1
+
+        ws.write(row, 0, 'Number of Filled Bunches ()', normal)
+        ws.write(row, 1, self.lifetime_props['num_filled_bunches'],
+                 wb_num_fmts['###'])
+        row += 1
+
+        ws.write(row, 0, 'Total Beam Current (mA)', normal)
+        ws.write(row, 1, self.lifetime_props['total_beam_current_mA'],
+                 wb_num_fmts['###'])
+        row += 1
+
+        ws.write(row, 0, 'Beam Current per Bunch (mA)', normal)
+        ws.write(row, 1, self.lifetime_props['beam_current_per_bunch_mA'],
+                 wb_num_fmts['0.00'])
+        row += 1
+
+        ws.write_rich_string(row, 0, normal, 'Total Beam Charge (', italic,
+                             GREEK['mu'], normal, 'C)')
+        ws.write(row, 1, self.lifetime_props['total_charge_uC'],
+                 wb_num_fmts['0.00'])
+        row += 1
+
+        ws.write(row, 0, 'Beam Charge per Bunch (nC)', normal)
+        ws.write(row, 1, self.lifetime_props['charge_per_bunch_nC'],
+                 wb_num_fmts['0.00'])
+        row += 1
+
+        row += 1
+
+        ws.write(row, 0, 'Beam Lifetime (hr)', bold)
+        #
+        col = 1
+        cell_format = normal_center_wrap
+        ws.merge_range(row, col, row + 1, col, '', cell_format)
+        ws.write_rich_string(
+            row, col, italic, GREEK['epsilon'], italic_sub, 'y', ' (pm-rad)',
+            cell_format)
+        #
+        col += 1
+        cell_format = normal_center_wrap
+        ws.merge_range(row, col, row + 1, col, '', cell_format)
+        ws.write_rich_string(
+            row, col, italic, GREEK['epsilon'], italic_sub, 'x', ' (pm-rad)',
+            cell_format)
+        #
+        col += 1
+        cell_format = normal_center_wrap
+        ws.merge_range(row, col, row + 1, col, '', cell_format)
+        ws.write_rich_string(
+            row, col, 'Coupling ', italic, GREEK['epsilon'], italic_sub, 'y',
+            '/', italic, GREEK['epsilon'], italic_sub, 'x', ' (%)',
+            cell_format)
+        #
+        col += 1
+        table_col_offset = col
+        #
+        ws.merge_range(
+            row, table_col_offset, row,
+            table_col_offset + len(self.rf_dep_props['rf_volts']) - 1,
+            'RF Voltage (MV)', normal_center_border)
+        row += 1
+        #
+        for col, v in enumerate(self.rf_dep_props['rf_volts']):
+            ws.write(row, col+table_col_offset, v / 1e6, wb_num_fmts['0.0'])
+        row += 1
+        #
+        col = 1
+        for row_shift, (eps_y, eps_x, kappa, tau_hr_array) in enumerate(zip(
+            self.lifetime_props['eps_ys'], self.lifetime_props['eps_xs'],
+            self.lifetime_props['coupling_percent'],
+            self.lifetime_props['tau_hrs'])):
+            ws.write(row + row_shift, col, eps_y * 1e12, wb_num_fmts['0.0'])
+            ws.write(row + row_shift, col+1, eps_x * 1e12, wb_num_fmts['0.0'])
+            ws.write(row + row_shift, col+2, kappa, wb_num_fmts['0.0'])
+            for col_shift, tau_hr in enumerate(tau_hr_array):
+                ws.write(row + row_shift, table_col_offset + col_shift, tau_hr,
+                         wb_num_fmts['0.000'])
+
+
+    def add_xlsx_lifetime(self):
+        """ TODO """
+
+        lt_calc_opts = self.conf.get('lifetime_calc_opts', None)
+        if lt_calc_opts is None:
+            return
+
+        eps_ys = np.array(lt_calc_opts['eps_y']) # [m-rad]
 
     def set_up_lattice(self):
         """"""
@@ -8159,6 +8499,8 @@ class Report_NSLS2U_Default:
     def _get_default_config_v1_0(self, example=False):
         """"""
 
+        report_version = '1.0'
+
         production = True
         #production = False
 
@@ -8172,8 +8514,11 @@ class Report_NSLS2U_Default:
 
         _yaml_append_map(conf, 'report_class', 'nsls2u_default',
                          eol_comment='REQUIRED')
+
+        _yaml_append_map(conf, 'report_version', sqss(report_version),
+                         eol_comment='REQUIRED')
+
         if example:
-            _yaml_append_map(conf, 'report_version', '1.0')
             _yaml_append_map(conf, 'report_author', '')
             _yaml_append_map(conf, 'enable_pyelegant_stdout', False)
 
