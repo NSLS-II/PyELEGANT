@@ -2661,7 +2661,7 @@ def calc_nonlin_props(LTE_filepath, report_folderpath, E_MeV, nonlin_config,
 
     nonlin_data_filepaths = get_nonlin_data_filepaths(report_folderpath, ncf)
     use_beamline = ncf['use_beamline']
-    N_KICKS = ncf.get('N_KICKS', dict(KQUAD=40, KSEXT=40, CSBEND=40))
+    N_KICKS = ncf.get('N_KICKS', dict(CSBEND=40, KQUAD=40, KSEXT=20, KOCT=20))
 
     common_remote_opts = ncf['common_remote_opts']
 
@@ -7401,6 +7401,7 @@ class Report_NSLS2U_Default:
 
         if (not os.path.exists(zeroSexts_LTE_filepath)) or regenerate:
             alter_elements = dict(name='*', type='KSEXT', item='K2', value = 0.0)
+            alter_elements = dict(name='*', type='KOCT', item='K3', value = 0.0)
             pe.eleutil.save_lattice_after_alter_elements(
                 input_LTE_filepath, zeroSexts_LTE_filepath, alter_elements)
 
@@ -8209,7 +8210,7 @@ class Report_NSLS2U_Default:
 
         nonlin_data_filepaths = self.get_nonlin_data_filepaths()
         use_beamline = ncf['use_beamline']
-        N_KICKS = ncf.get('N_KICKS', dict(KQUAD=40, KSEXT=40, CSBEND=40))
+        N_KICKS = ncf.get('N_KICKS', dict(CSBEND=40, KQUAD=40, KSEXT=20, KOCT=20))
 
         common_remote_opts = ncf['common_remote_opts']
 
@@ -9082,7 +9083,7 @@ class Report_NSLS2U_Default:
                          eol_comment='REQUIRED',
                          before_comment='\nCommon Options', before_indent=2)
 
-        N_KICKS = com_map(KQUAD=40, KSEXT=8, CSBEND=12)
+        N_KICKS = com_map(CSBEND=40, KQUAD=40, KSEXT=20, KOCT=20)
         N_KICKS.fa.set_flow_style()
         _yaml_append_map(d, 'N_KICKS', N_KICKS, eol_comment='REQUIRED')
 
