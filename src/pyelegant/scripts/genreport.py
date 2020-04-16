@@ -4932,7 +4932,7 @@ class Report_NSLS2U_Default:
             custom_paragraphs = conf['report_paragraphs'].get('lattice_description', [])
             for para in custom_paragraphs:
                 doc.append(plx.NewParagraph())
-                doc.append(para.strip())
+                doc.append(plx.NoEscape(para.strip()))
 
     def add_pdf_lattice_elements(self):
         """"""
@@ -7187,138 +7187,144 @@ class Report_NSLS2U_Default:
             ws.write(row, 1, d['cell_address'], d['num_fmt'])
             row += 1
 
-        row += 1
+        if self.rf_dep_props is not None:
 
-        ws.write(row, 0, 'Voltage-independent Property', bold)
-        ws.write(row, 1, 'Value', bold)
-        row += 1
+            row += 1
 
-        ws.write(row, 0, 'Harmonic Number ()', normal)
-        ws.write(row, 1, self.rf_dep_props['h'], None)
-        row += 1
+            ws.write(row, 0, 'Voltage-independent Property', bold)
+            ws.write(row, 1, 'Value', bold)
+            row += 1
 
-        ws.write(row, 0, 'RF Frequency (MHz)', normal)
-        ws.write(row, 1, self.rf_dep_props['f_rf'] / 1e6, wb_num_fmts['0.000'])
-        row += 1
+            ws.write(row, 0, 'Harmonic Number ()', normal)
+            ws.write(row, 1, self.rf_dep_props['h'], None)
+            row += 1
 
-        row += 1
+            ws.write(row, 0, 'RF Frequency (MHz)', normal)
+            ws.write(row, 1, self.rf_dep_props['f_rf'] / 1e6, wb_num_fmts['0.000'])
+            row += 1
 
-        ws.write(row, 0, 'Voltage-dependent Property', bold)
-        ws.write(row, 1, 'Values', bold)
-        row += 1
+            row += 1
 
-        ws.write(row, 0, 'RF Voltage (MV)', normal)
-        for col, v in enumerate(self.rf_dep_props['rf_volts']):
-            ws.write(row, col+1, v / 1e6, wb_num_fmts['0.0'])
-        row += 1
+            ws.write(row, 0, 'Voltage-dependent Property', bold)
+            ws.write(row, 1, 'Values', bold)
+            row += 1
 
-        ws.write(row, 0, 'Synchrotron Tune ()', normal)
-        for col, v in enumerate(self.rf_dep_props['nu_s']):
-            ws.write(row, col+1, v, wb_num_fmts['0.000000'])
-        row += 1
+            ws.write(row, 0, 'RF Voltage (MV)', normal)
+            for col, v in enumerate(self.rf_dep_props['rf_volts']):
+                ws.write(row, col+1, v / 1e6, wb_num_fmts['0.0'])
+            row += 1
 
-        ws.write(row, 0, 'Synchronous Phase (deg)', normal)
-        for col, v in enumerate(self.rf_dep_props['synch_phases_deg']):
-            ws.write(row, col+1, v, wb_num_fmts['0.00'])
-        row += 1
+            ws.write(row, 0, 'Synchrotron Tune ()', normal)
+            for col, v in enumerate(self.rf_dep_props['nu_s']):
+                ws.write(row, col+1, v, wb_num_fmts['0.000000'])
+            row += 1
 
-        ws.write(row, 0, 'RF Bucket Height (%)', normal)
-        for col, v in enumerate(self.rf_dep_props['rf_bucket_heights_percent']):
-            ws.write(row, col+1, v, wb_num_fmts['0.0'])
-        row += 1
+            ws.write(row, 0, 'Synchronous Phase (deg)', normal)
+            for col, v in enumerate(self.rf_dep_props['synch_phases_deg']):
+                ws.write(row, col+1, v, wb_num_fmts['0.00'])
+            row += 1
 
-        ws.write(row, 0, 'Zero-Current RMS Bunch Length (mm)', normal)
-        for col, v in enumerate(self.rf_dep_props['sigma_z_m']):
-            ws.write(row, col+1, v * 1e3, wb_num_fmts['0.00'])
-        row += 1
+            ws.write(row, 0, 'RF Bucket Height (%)', normal)
+            for col, v in enumerate(self.rf_dep_props['rf_bucket_heights_percent']):
+                ws.write(row, col+1, v, wb_num_fmts['0.0'])
+            row += 1
 
-        ws.write(row, 0, 'Zero-Current RMS Bunch Length (ps)', normal)
-        for col, v in enumerate(self.rf_dep_props['sigma_z_ps']):
-            ws.write(row, col+1, v, wb_num_fmts['0.00'])
-        row += 1
+            ws.write(row, 0, 'Zero-Current RMS Bunch Length (mm)', normal)
+            for col, v in enumerate(self.rf_dep_props['sigma_z_m']):
+                ws.write(row, col+1, v * 1e3, wb_num_fmts['0.00'])
+            row += 1
 
-        row += 1
+            ws.write(row, 0, 'Zero-Current RMS Bunch Length (ps)', normal)
+            for col, v in enumerate(self.rf_dep_props['sigma_z_ps']):
+                ws.write(row, col+1, v, wb_num_fmts['0.00'])
+            row += 1
 
-        ws.write(row, 0, 'Beam Current Property', bold)
-        ws.write(row, 1, 'Value', bold)
-        row += 1
+        if self.lifetime_props is not None:
 
-        ws.write(row, 0, 'Number of Filled Bunches ()', normal)
-        ws.write(row, 1, self.lifetime_props['num_filled_bunches'],
-                 wb_num_fmts['###'])
-        row += 1
+            row += 1
 
-        ws.write(row, 0, 'Total Beam Current (mA)', normal)
-        ws.write(row, 1, self.lifetime_props['total_beam_current_mA'],
-                 wb_num_fmts['###'])
-        row += 1
+            ws.write(row, 0, 'Beam Current Property', bold)
+            ws.write(row, 1, 'Value', bold)
+            row += 1
 
-        ws.write(row, 0, 'Beam Current per Bunch (mA)', normal)
-        ws.write(row, 1, self.lifetime_props['beam_current_per_bunch_mA'],
-                 wb_num_fmts['0.00'])
-        row += 1
+            ws.write(row, 0, 'Number of Filled Bunches ()', normal)
+            ws.write(row, 1, self.lifetime_props['num_filled_bunches'],
+                     wb_num_fmts['###'])
+            row += 1
 
-        ws.write_rich_string(row, 0, normal, 'Total Beam Charge (', italic,
-                             GREEK['mu'], normal, 'C)')
-        ws.write(row, 1, self.lifetime_props['total_charge_uC'],
-                 wb_num_fmts['0.00'])
-        row += 1
+            ws.write(row, 0, 'Total Beam Current (mA)', normal)
+            ws.write(row, 1, self.lifetime_props['total_beam_current_mA'],
+                     wb_num_fmts['###'])
+            row += 1
 
-        ws.write(row, 0, 'Beam Charge per Bunch (nC)', normal)
-        ws.write(row, 1, self.lifetime_props['charge_per_bunch_nC'],
-                 wb_num_fmts['0.00'])
-        row += 1
+            ws.write(row, 0, 'Beam Current per Bunch (mA)', normal)
+            ws.write(row, 1, self.lifetime_props['beam_current_per_bunch_mA'],
+                     wb_num_fmts['0.00'])
+            row += 1
 
-        row += 1
+            ws.write_rich_string(row, 0, normal, 'Total Beam Charge (', italic,
+                                 GREEK['mu'], normal, 'C)')
+            ws.write(row, 1, self.lifetime_props['total_charge_uC'],
+                     wb_num_fmts['0.00'])
+            row += 1
 
-        ws.write(row, 0, 'Beam Lifetime (hr)', bold)
-        #
-        col = 1
-        cell_format = normal_center_wrap
-        ws.merge_range(row, col, row + 1, col, '', cell_format)
-        ws.write_rich_string(
-            row, col, italic, GREEK['epsilon'], italic_sub, 'y', ' (pm-rad)',
-            cell_format)
-        #
-        col += 1
-        cell_format = normal_center_wrap
-        ws.merge_range(row, col, row + 1, col, '', cell_format)
-        ws.write_rich_string(
-            row, col, italic, GREEK['epsilon'], italic_sub, 'x', ' (pm-rad)',
-            cell_format)
-        #
-        col += 1
-        cell_format = normal_center_wrap
-        ws.merge_range(row, col, row + 1, col, '', cell_format)
-        ws.write_rich_string(
-            row, col, 'Coupling ', italic, GREEK['epsilon'], italic_sub, 'y',
-            '/', italic, GREEK['epsilon'], italic_sub, 'x', ' (%)',
-            cell_format)
-        #
-        col += 1
-        table_col_offset = col
-        #
-        ws.merge_range(
-            row, table_col_offset, row,
-            table_col_offset + len(self.rf_dep_props['rf_volts']) - 1,
-            'RF Voltage (MV)', normal_center_border)
-        row += 1
-        #
-        for col, v in enumerate(self.rf_dep_props['rf_volts']):
-            ws.write(row, col+table_col_offset, v / 1e6, wb_num_fmts['0.0'])
-        row += 1
-        #
-        col = 1
-        for row_shift, (eps_y, eps_x, kappa, tau_hr_array) in enumerate(zip(
-            self.lifetime_props['eps_ys'], self.lifetime_props['eps_xs'],
-            self.lifetime_props['coupling_percent'],
-            self.lifetime_props['tau_hrs'])):
-            ws.write(row + row_shift, col, eps_y * 1e12, wb_num_fmts['0.0'])
-            ws.write(row + row_shift, col+1, eps_x * 1e12, wb_num_fmts['0.0'])
-            ws.write(row + row_shift, col+2, kappa, wb_num_fmts['0.0'])
-            for col_shift, tau_hr in enumerate(tau_hr_array):
-                ws.write(row + row_shift, table_col_offset + col_shift, tau_hr,
-                         wb_num_fmts['0.000'])
+            ws.write(row, 0, 'Beam Charge per Bunch (nC)', normal)
+            ws.write(row, 1, self.lifetime_props['charge_per_bunch_nC'],
+                     wb_num_fmts['0.00'])
+            row += 1
+
+        if (self.rf_dep_props is not None) and (self.lifetime_props is not None):
+
+            row += 1
+
+            ws.write(row, 0, 'Beam Lifetime (hr)', bold)
+            #
+            col = 1
+            cell_format = normal_center_wrap
+            ws.merge_range(row, col, row + 1, col, '', cell_format)
+            ws.write_rich_string(
+                row, col, italic, GREEK['epsilon'], italic_sub, 'y', ' (pm-rad)',
+                cell_format)
+            #
+            col += 1
+            cell_format = normal_center_wrap
+            ws.merge_range(row, col, row + 1, col, '', cell_format)
+            ws.write_rich_string(
+                row, col, italic, GREEK['epsilon'], italic_sub, 'x', ' (pm-rad)',
+                cell_format)
+            #
+            col += 1
+            cell_format = normal_center_wrap
+            ws.merge_range(row, col, row + 1, col, '', cell_format)
+            ws.write_rich_string(
+                row, col, 'Coupling ', italic, GREEK['epsilon'], italic_sub, 'y',
+                '/', italic, GREEK['epsilon'], italic_sub, 'x', ' (%)',
+                cell_format)
+            #
+            col += 1
+            table_col_offset = col
+            #
+            ws.merge_range(
+                row, table_col_offset, row,
+                table_col_offset + len(self.rf_dep_props['rf_volts']) - 1,
+                'RF Voltage (MV)', normal_center_border)
+            row += 1
+            #
+            for col, v in enumerate(self.rf_dep_props['rf_volts']):
+                ws.write(row, col+table_col_offset, v / 1e6, wb_num_fmts['0.0'])
+            row += 1
+            #
+            col = 1
+            for row_shift, (eps_y, eps_x, kappa, tau_hr_array) in enumerate(zip(
+                self.lifetime_props['eps_ys'], self.lifetime_props['eps_xs'],
+                self.lifetime_props['coupling_percent'],
+                self.lifetime_props['tau_hrs'])):
+                ws.write(row + row_shift, col, eps_y * 1e12, wb_num_fmts['0.0'])
+                ws.write(row + row_shift, col+1, eps_x * 1e12, wb_num_fmts['0.0'])
+                ws.write(row + row_shift, col+2, kappa, wb_num_fmts['0.0'])
+                for col_shift, tau_hr in enumerate(tau_hr_array):
+                    ws.write(row + row_shift, table_col_offset + col_shift, tau_hr,
+                             wb_num_fmts['0.000'])
 
 
     def add_xlsx_lifetime(self):
@@ -9015,6 +9021,29 @@ class Report_NSLS2U_Default:
                 _kwargs = dict(column=0)
                 if comment is not None:
                     d2.yaml_add_eol_comment(comment, len(d2)-1, **_kwargs)
+
+        # ##########################################################################
+
+        if example:
+            _yaml_append_map(conf, 'rf_dep_calc_opts', com_map(), before_comment='\n')
+            d = conf['rf_dep_calc_opts']
+
+            _yaml_append_map(d, 'harmonic_number', 1320)
+            array = com_seq([1.5e6, 2e6, 2.5e6, 3e6])
+            array.fa.set_flow_style()
+            _yaml_append_map(d, 'rf_V', array)
+
+        # ##########################################################################
+
+        if example:
+            _yaml_append_map(conf, 'lifetime_calc_opts', com_map(), before_comment='\n')
+            d = conf['lifetime_calc_opts']
+
+            _yaml_append_map(d, 'total_beam_current_mA', 5e2)
+            _yaml_append_map(d, 'num_filled_bunches', 1200)
+            array = com_seq([8e-12, 20e-12])
+            array.fa.set_flow_style()
+            _yaml_append_map(d, 'eps_y', array)
 
         # ##########################################################################
 
