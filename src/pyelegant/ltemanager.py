@@ -12,13 +12,17 @@ class Lattice():
         """Constructor"""
 
         self.convertible_element_types = [
-            'DRIF','EDRIFT','RFCA','KQUAD','KSEXT','CSBEND','CSBEN','MULT',
+            'DRIF','EDRIFT','RFCA',
+            'CSBEND', 'CSBEN', 'SBEN','SBEND',
+            'KQUAD', 'QUAD',
+            'KSEXT', 'SEXT',
+            'KOCT', 'OCTU',
+            'MULT',
             #'UKICKMAP',
             #'HKICK','VKICK','KICKER',
             'EHKICK','EVKICK','EKICKER',
             'MARK', 'MONI',
             #'SCRAPER',
-            'QUAD','SEXT','SBEN','SBEND',
             #'SOLE',
             'MALIGN', 'WATCH',
             ]
