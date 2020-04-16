@@ -31,6 +31,9 @@ GREEK = dict(
     phi=chr(0x03c6), pi=chr(0x03c0), psi=chr(0x03c8), rho=chr(0x03c1),
     sigma=chr(0x03c3), tau=chr(0x03c4), theta=chr(0x03b8), xi=chr(0x03be),
 )
+SYMBOL = dict(
+    partial=chr(0x2202), minus=chr(0x2013), # 0x2013 := "en dash"
+)
 
 def gen_LTE_from_base_LTE_and_param_file(conf, input_LTE_filepath):
     """"""
@@ -4778,6 +4781,7 @@ class Report_NSLS2U_Default:
         self.doc.append(plx.ClearPage())
 
         self.add_pdf_nonlin()
+        self.add_xlsx_nonlin()
 
         plx.generate_pdf_w_reruns(self.doc, clean_tex=False, silent=False)
         self.workbook.close()
@@ -5469,9 +5473,8 @@ class Report_NSLS2U_Default:
             if new_page_required:
                 doc.append(plx.ClearPage())
 
-            with open(os.path.join(report_folderpath,
-                                   f'tswa.plot_suppl.pkl'), 'rb') as f:
-                tswa_plot_captions = pickle.load(f)
+            with open(self.tswa_plot_suppl_filepath, 'rb') as f:
+                tswa_plot_captions, tswa_data = pickle.load(f)
 
             self.add_pdf_L2_tswa(
                 plots_pdf_paths, nonlin_data_filepaths, tswa_plot_captions)
@@ -7336,6 +7339,113 @@ class Report_NSLS2U_Default:
 
         eps_ys = np.array(lt_calc_opts['eps_y']) # [m-rad]
 
+    def add_xlsx_nonlin(self):
+        """"""
+
+        ws = self.worksheets['nonlin']
+
+        wb_txt_fmts = self.wb_txt_fmts
+        num_txt_fmts = self.wb_num_fmts
+
+        normal = wb_txt_fmts.normal
+        bold = wb_txt_fmts.bold
+        italic = wb_txt_fmts.italic
+        italic_sub = wb_txt_fmts.italic_sub
+
+        nonlin_data_filepaths = self.get_nonlin_data_filepaths()
+
+        # Write headers
+        row = 0
+        ws.write(row, 0, 'Term Name', bold)
+        ws.write(row, 1, 'Drives', bold)
+        ws.write(row, 2, 'Value', bold)
+        row += 1
+
+        ws.set_column(0, 0, 12)
+        ws.set_column(1, 1, 12)
+        ws.set_column(2, 2, 8)
+
+        minus = SYMBOL['minus']
+        delta = [italic, GREEK['delta']]
+        nux = [italic, GREEK['nu'], italic_sub, 'x']
+        nuy = [italic, GREEK['nu'], italic_sub, 'y']
+        nuxy = [italic, GREEK['nu'], italic_sub, 'x,y']
+        betax = [italic, GREEK['beta'], italic_sub, 'x']
+        betay = [italic, GREEK['beta'], italic_sub, 'y']
+        etax = [italic, GREEK['eta'], italic_sub, 'x']
+        Jx = [italic, 'J', italic_sub, 'x']
+        Jy = [italic, 'J', italic_sub, 'y']
+        Jyx = [italic, 'J', italic_sub, 'y,x']
+
+        def p_d(numerator, denominator):
+            """ partial derivative """
+            return [italic, SYMBOL['partial']] + numerator + [normal, '/'] + \
+                   [italic, SYMBOL['partial']] + denominator
+
+        h_drv_explanation = {
+            'h11001': p_d(nux, delta), 'h00111': p_d(nuy, delta),
+            'h20001': p_d(betax, delta), 'h00201': p_d(betay, delta),
+            'h10002': p_d(etax, delta), 'h21000': nux,
+            'h30000': [normal, '3'] + nux, 'h10110': nux,
+            'h10020': nux + [normal, ' ' + minus + ' 2'] + nuy,
+            'h10200': nux + [normal, ' + 2'] + nuy,
+            'h22000': p_d(nux, Jx), 'h11110': p_d(nuxy, Jyx),
+            'h00220': p_d(nuy, Jy), 'h31000': [normal, '2'] + nux,
+            'h40000': [normal, '4'] + nux, 'h20110': [normal, '2'] + nux,
+            'h11200': [normal, '2'] + nuy,
+            'h20020': [normal, '2'] + nux + [normal, ' ' + minus + ' 2'] + nuy,
+            'h20200': [normal, '2'] + nux + [normal, ' + 2'] + nuy,
+            'h00310': [normal, '2'] + nuy, 'h00400': [normal, '4'] + nuy}
+
+        for k, frag in h_drv_explanation.items():
+            ws.write_rich_string(
+                row, 0, normal, '|', italic, 'h', normal, k[1:], normal, '|')
+            ws.write_rich_string(row, 1, *frag)
+            ws.write(row, 2, self.lin_data[k], num_txt_fmts['0.00E+00'])
+            row += 1
+
+
+        # Retrieve tracking-based tswa data
+        with open(self.tswa_plot_suppl_filepath, 'rb') as f:
+            _, tswa_data = pickle.load(f)
+
+        # Write header for tswa
+        row = 0
+        col_offset = 4
+        nfmt = num_txt_fmts['0.00E+00']
+        #
+        ws.set_column(col_offset+1, col_offset+1, 12)
+        ws.set_column(col_offset+2, col_offset+2, 12)
+        ws.set_column(col_offset+3, col_offset+3, 12)
+        #
+        ws.write(row, col_offset, 'Tune Shift with Amplitude', bold)
+        row += 1
+        ws.write(row, col_offset+1, '&twiss_output', normal)
+        ws.write(row, col_offset+2, 'tracking (+)', normal)
+        ws.write(row, col_offset+3, f'tracking ({SYMBOL["minus"]})', normal)
+        row += 1
+        #
+        ws.write_rich_string(row, col_offset, *p_d(nux, Jx))
+        ws.write(row, col_offset+1, self.lin_data['dnux_dJx'], nfmt)
+        ws.write(row, col_offset+2, tswa_data['x']['+']['dnux_dJx0'], nfmt)
+        ws.write(row, col_offset+3, tswa_data['x']['-']['dnux_dJx0'], nfmt)
+        row += 1
+        ws.write_rich_string(row, col_offset, *p_d(nuy, Jx))
+        ws.write(row, col_offset+1, self.lin_data['dnux_dJy'], nfmt)
+        # ^ Note there is no "dnuy_dJx", so re-using self.lin_data['dnux_dJy'].
+        ws.write(row, col_offset+2, tswa_data['x']['+']['dnuy_dJx0'], nfmt)
+        ws.write(row, col_offset+3, tswa_data['x']['-']['dnuy_dJx0'], nfmt)
+        row += 1
+        ws.write_rich_string(row, col_offset, *p_d(nux, Jy))
+        ws.write(row, col_offset+1, self.lin_data['dnux_dJy'], nfmt)
+        ws.write(row, col_offset+2, tswa_data['y']['+']['dnux_dJy0'], nfmt)
+        ws.write(row, col_offset+3, tswa_data['y']['-']['dnux_dJy0'], nfmt)
+        row += 1
+        ws.write_rich_string(row, col_offset, *p_d(nuy, Jy))
+        ws.write(row, col_offset+1, self.lin_data['dnuy_dJy'], nfmt)
+        ws.write(row, col_offset+2, tswa_data['y']['+']['dnuy_dJy0'], nfmt)
+        ws.write(row, col_offset+3, tswa_data['y']['-']['dnuy_dJy0'], nfmt)
+
     def set_up_lattice(self):
         """"""
 
@@ -7359,6 +7469,9 @@ class Report_NSLS2U_Default:
         report_folderpath = f'report_{rootname}'
         self.report_folderpath = report_folderpath
         Path(report_folderpath).mkdir(exist_ok=True)
+
+        self.tswa_plot_suppl_filepath = os.path.join(
+            self.report_folderpath, f'tswa.plot_suppl.pkl')
 
         if conf['input_LTE'].get('load_param', False):
             gen_LTE_from_base_LTE_and_param_file()
@@ -7477,6 +7590,16 @@ class Report_NSLS2U_Default:
                 alphac='alphac', U0_MeV='U0', dE_E='Sdelta0'),
             ring_natural=dict(ksi_x_nat='dnux/dp', ksi_y_nat='dnuy/dp'),
         )
+        #
+        tswa_dict = dict(dnux_dJx='dnux/dJx', dnux_dJy='dnux/dJy',
+                         dnuy_dJy='dnuy/dJy')
+        h_drv_dict = {k: k for k in [
+            'h11001', 'h00111', 'h20001', 'h00201', 'h10002', 'h21000', 'h30000',
+            'h10110', 'h10020', 'h10200', 'h22000', 'h11110', 'h00220', 'h31000',
+            'h40000', 'h20110', 'h11200', 'h20020', 'h20200', 'h00310', 'h00400']}
+        raw_keys['ring'].update(tswa_dict)
+        raw_keys['ring'].update(h_drv_dict)
+        conf_twi['ring']['compute_driving_terms'] = True
 
         interm_array_keys = dict(
             one_period=dict(
@@ -8375,15 +8498,20 @@ class Report_NSLS2U_Default:
 
             MathText = plx.MathText # for short-hand notation
 
+            tswa_data = {}
+
             if plot_plus_minus_combined:
 
                 for plane in ['x', 'y']:
 
-                    pe.nonlin.plot_tswa_both_sides(
+                    tswa_data[plane] = {}
+
+                    out = pe.nonlin.plot_tswa_both_sides(
                         nonlin_data_filepaths[f'tswa_{plane}plus'],
                         nonlin_data_filepaths[f'tswa_{plane}minus'],
                         title='', **_plot_kwargs
                     )
+                    tswa_data[plane].update(out)
 
                     if _plot_kwargs['plot_xy0']:
                         tswa_captions.append(
@@ -8410,16 +8538,18 @@ class Report_NSLS2U_Default:
                                     minus=np.abs(_plot_kwargs['fit_ymin']))
 
                 for plane in ['x', 'y']:
+                    tswa_data[plane] = {}
                     for sign in ['plus', 'minus']:
                         data_key = f'tswa_{plane}{sign}'
                         if plane == 'x':
-                            pe.nonlin.plot_tswa(
+                            out = pe.nonlin.plot_tswa(
                                 nonlin_data_filepaths[data_key], title='',
                                 fit_abs_xmax=fit_abs_xmax[sign], **_plot_kwargs)
                         else:
-                            pe.nonlin.plot_tswa(
+                            out = pe.nonlin.plot_tswa(
                                 nonlin_data_filepaths[data_key], title='',
                                 fit_abs_ymax=fit_abs_ymax[sign], **_plot_kwargs)
+                        tswa_data[plane].update(out)
 
                         if sign == 'plus':
                             if _plot_kwargs['plot_xy0']:
@@ -8468,9 +8598,8 @@ class Report_NSLS2U_Default:
                 page = i + 1
                 tswa_page_caption_list.append((page, tswa_captions[i]))
 
-            with open(os.path.join(
-                self.report_folderpath, 'tswa.plot_suppl.pkl'), 'wb') as f:
-                pickle.dump(tswa_page_caption_list, f)
+            with open(self.tswa_plot_suppl_filepath, 'wb') as f:
+                pickle.dump([tswa_page_caption_list, tswa_data], f)
 
         calc_type = 'nonlin_chrom'
         if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
