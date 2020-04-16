@@ -3049,6 +3049,8 @@ def plot_tswa(
 
     assert max_resonance_line_order <= 5
 
+    ret = {} # variable to be returned
+
     is_nuxlim_frac = False
     if nuxlim:
         if (0.0 <= nuxlim[0] <= 1.0) and (0.0 <= nuxlim[1] <= 1.0):
@@ -3128,6 +3130,7 @@ def plot_tswa(
     if scan_plane == 'x':
         if np.sign(x0s[-1]) > 0:
             fit_roi = (x0s <= fit_abs_xmax)
+            side = '+'
             scan_sign = +1.0
             scan_sign_str = ''
             scan_sign_beta_str = (
@@ -3135,6 +3138,7 @@ def plot_tswa(
                 fr'$(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})')
         else:
             fit_roi = (x0s >= fit_abs_xmax * (-1))
+            side = '-'
             scan_sign = -1.0
             scan_sign_str = '-'
             scan_sign_beta_str = (
@@ -3144,10 +3148,12 @@ def plot_tswa(
         if plot_xy0:
             coeffs = np.polyfit(Jx0s[fit_roi], nuxs[fit_roi], 1)
             dnux_dJx0 = coeffs[0]
+            ret[side]['dnux_dJx0'] = dnux_dJx0
             nux_fit0 = np.poly1d(coeffs)
 
             coeffs = np.polyfit(Jx0s[fit_roi], nuys[fit_roi], 1)
             dnuy_dJx0 = coeffs[0]
+            ret[side]['dnuy_dJx0'] = dnuy_dJx0
             nuy_fit0 = np.poly1d(coeffs)
 
             if False: # Not being used and will generate warning about poor fit
@@ -3169,10 +3175,12 @@ def plot_tswa(
         if plot_Axy:
             coeffs = np.polyfit(Jxs[fit_roi], nuxs[fit_roi], 1)
             dnux_dJx = coeffs[0]
+            ret[side]['dnux_dJx'] = dnux_dJx
             nux_fit = np.poly1d(coeffs)
 
             coeffs = np.polyfit(Jxs[fit_roi], nuys[fit_roi], 1)
             dnuy_dJx = coeffs[0]
+            ret[side]['dnuy_dJx'] = dnuy_dJx
             nuy_fit = np.poly1d(coeffs)
 
             if False: # Not being used
@@ -3193,6 +3201,7 @@ def plot_tswa(
     elif scan_plane == 'y':
         if np.sign(y0s[-1]) > 0:
             fit_roi = (y0s <= fit_abs_ymax)
+            side = '+'
             scan_sign = +1.0
             scan_sign_str = ''
             scan_sign_beta_str = (
@@ -3200,6 +3209,7 @@ def plot_tswa(
                 fr'$(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})')
         else:
             fit_roi = (y0s >= fit_abs_ymax * (-1))
+            side = '-'
             scan_sign = -1.0
             scan_sign_str = '-'
             scan_sign_beta_str = (
@@ -3209,10 +3219,12 @@ def plot_tswa(
         if plot_xy0:
             coeffs = np.polyfit(Jy0s[fit_roi], nuxs[fit_roi], 1)
             dnux_dJy0 = coeffs[0]
+            ret[side]['dnux_dJy0'] = dnux_dJy0
             nux_fit0 = np.poly1d(coeffs)
 
             coeffs = np.polyfit(Jy0s[fit_roi], nuys[fit_roi], 1)
             dnuy_dJy0 = coeffs[0]
+            ret[side]['dnuy_dJy0'] = dnuy_dJy0
             nuy_fit0 = np.poly1d(coeffs)
 
             if False: # Not being used and will generate warning about poor fit
@@ -3234,10 +3246,12 @@ def plot_tswa(
         if plot_Axy:
             coeffs = np.polyfit(Jys[fit_roi], nuxs[fit_roi], 1)
             dnux_dJy = coeffs[0]
+            ret[side]['dnux_dJy'] = dnux_dJy
             nux_fit = np.poly1d(coeffs)
 
             coeffs = np.polyfit(Jys[fit_roi], nuys[fit_roi], 1)
             dnuy_dJy = coeffs[0]
+            ret[side]['dnuy_dJy'] = dnuy_dJy
             nuy_fit = np.poly1d(coeffs)
 
             if False: # Not being used
@@ -3607,6 +3621,7 @@ def plot_tswa(
             cb.ax.title.set_position((0.5, 1.02))
             plt.tight_layout()
 
+    return ret
 
 def plot_tswa_both_sides(
     output_filepath_positive, output_filepath_negative, title='',
@@ -3619,6 +3634,8 @@ def plot_tswa_both_sides(
     """"""
 
     assert max_resonance_line_order <= 5
+
+    ret = {} # variable to be returned
 
     is_nuxlim_frac = False
     if nuxlim:
@@ -3717,6 +3734,9 @@ def plot_tswa_both_sides(
     beta_str = fr'\{{(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})\}}'
 
     for side in ['+', '-']:
+
+        ret[side] = {}
+
         nuxs[side] += nux0_int
         nuys[side] += nuy0_int
 
@@ -3739,10 +3759,12 @@ def plot_tswa_both_sides(
             if plot_xy0:
                 coeffs = np.polyfit(Jx0s[side][fit_roi], nuxs[side][fit_roi], 1)
                 dnux_dJx0 = coeffs[0]
+                ret[side]['dnux_dJx0'] = dnux_dJx0
                 nux_fit0[side] = np.poly1d(coeffs)
 
                 coeffs = np.polyfit(Jx0s[side][fit_roi], nuys[side][fit_roi], 1)
                 dnuy_dJx0 = coeffs[0]
+                ret[side]['dnuy_dJx0'] = dnuy_dJx0
                 nuy_fit0[side] = np.poly1d(coeffs)
 
                 if False: # Not being used and will generate warning about poor fit
@@ -3764,10 +3786,12 @@ def plot_tswa_both_sides(
             if plot_Axy:
                 coeffs = np.polyfit(Jxs[side][fit_roi], nuxs[side][fit_roi], 1)
                 dnux_dJx = coeffs[0]
+                ret[side]['dnux_dJx'] = dnux_dJx
                 nux_fit[side] = np.poly1d(coeffs)
 
                 coeffs = np.polyfit(Jxs[side][fit_roi], nuys[side][fit_roi], 1)
                 dnuy_dJx = coeffs[0]
+                ret[side]['dnuy_dJx'] = dnuy_dJx
                 nuy_fit[side] = np.poly1d(coeffs)
 
                 if False: # Not being used
@@ -3791,10 +3815,12 @@ def plot_tswa_both_sides(
             if plot_xy0:
                 coeffs = np.polyfit(Jy0s[side][fit_roi], nuxs[side][fit_roi], 1)
                 dnux_dJy0 = coeffs[0]
+                ret[side]['dnux_dJy0'] = dnux_dJy0
                 nux_fit0[side] = np.poly1d(coeffs)
 
                 coeffs = np.polyfit(Jy0s[side][fit_roi], nuys[side][fit_roi], 1)
                 dnuy_dJy0 = coeffs[0]
+                ret[side]['dnuy_dJy0'] = dnuy_dJy0
                 nuy_fit0[side] = np.poly1d(coeffs)
 
                 if False: # Not being used and will generate warning about poor fit
@@ -3816,10 +3842,12 @@ def plot_tswa_both_sides(
             if plot_Axy:
                 coeffs = np.polyfit(Jys[side][fit_roi], nuxs[side][fit_roi], 1)
                 dnux_dJy = coeffs[0]
+                ret[side]['dnux_dJy'] = dnux_dJy
                 nux_fit[side] = np.poly1d(coeffs)
 
                 coeffs = np.polyfit(Jys[side][fit_roi], nuys[side][fit_roi], 1)
                 dnuy_dJy = coeffs[0]
+                ret[side]['dnuy_dJy'] = dnuy_dJy
                 nuy_fit[side] = np.poly1d(coeffs)
 
                 if False: # Not being used
@@ -4280,6 +4308,8 @@ def plot_tswa_both_sides(
             cb.ax.set_title(EQ_STR)
             cb.ax.title.set_position((0.5, 1.02))
             plt.tight_layout()
+
+    return ret
 
 def track(
     output_filepath, LTE_filepath, E_MeV, n_turns,
