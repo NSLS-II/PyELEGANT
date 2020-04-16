@@ -6566,7 +6566,7 @@ class Report_NSLS2U_Default:
         etax_fmt = wb_num_fmts['0.000']
         psi_fmt = wb_num_fmts['0.0000']
 
-        fmt_list = [None, None, None, None,
+        fmt_list = [None, None, None, None, None,
                     beta_fmt, beta_fmt, etax_fmt, psi_fmt, psi_fmt]
         assert len(fmt_list) == len(excel_elem_list[1])
 
@@ -7672,21 +7672,25 @@ class Report_NSLS2U_Default:
             titles['s'], titles['ElementName'], titles['ElementType'])
         flat_elem_s_name_type_list = [header, '-' * len(header)]
         excel_headers = [
-            's (m)', 'L (m)', 'Element Name', 'Element Type',
+            's (m)', 'L (m)', 'Element Name', 'Element Type', 'Element Occurrence',
             'betax (m)', 'betay (m)', 'etax (m)', 'psix (2\pi)', 'psiy (2\pi)']
         excel_elem_list = [excel_headers]
         sel_data['tot_bend_angle_rad_per_period'] = 0.0
         assert np.all(res['twi']['columns']['s'] == res['flr']['columns']['s'])
-        for s, L, elem_name, elem_type, betax, betay, etax, psix, psiy in zip(
+        for (s, L, elem_name, elem_type, elem_occur, betax, betay, etax,
+             psix, psiy) in zip(
             res['flr']['columns']['s'], res['flr']['columns']['ds'],
-            res['flr']['columns']['ElementName'], res['flr']['columns']['ElementType'],
+            res['flr']['columns']['ElementName'],
+            res['flr']['columns']['ElementType'],
+            res['flr']['columns']['ElementOccurence'],
             res['twi']['columns']['betax'], res['twi']['columns']['betay'],
             res['twi']['columns']['etax'], res['twi']['columns']['psix'],
             res['twi']['columns']['psiy']):
 
-            flat_elem_s_name_type_list.append(value_template.format(s, elem_name, elem_type))
+            flat_elem_s_name_type_list.append(
+                value_template.format(s, elem_name, elem_type))
             excel_elem_list.append([
-                s, L, elem_name, elem_type, betax, betay, etax,
+                s, L, elem_name, elem_type, elem_occur, betax, betay, etax,
                 psix / (2 * np.pi), psiy / (2 * np.pi)])
 
             if elem_name in elem_defs['bends']:
