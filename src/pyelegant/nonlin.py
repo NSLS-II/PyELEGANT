@@ -2163,6 +2163,8 @@ def plot_chrom(
 
     assert max_resonance_line_order <= 5
 
+    ret = {} # variable to be returned
+
     is_nuxlim_frac = False
     if nuxlim:
         if (0.0 <= nuxlim[0] <= 1.0) and (0.0 <= nuxlim[1] <= 1.0):
@@ -2259,6 +2261,7 @@ def plot_chrom(
     coeffs = dict(
         x=np.polyfit(fit_deltas[~nux_nan_inds], fit_nuxs[~nux_nan_inds], max_chrom_order),
         y=np.polyfit(fit_deltas[~nuy_nan_inds], fit_nuys[~nuy_nan_inds], max_chrom_order))
+    ret['fit_coeffs'] = coeffs
 
     fit_label = {}
     for plane in ['x', 'y']:
@@ -2493,6 +2496,8 @@ def plot_chrom(
             cb.ax.set_title(EQ_STR)
             cb.ax.title.set_position((0.5, 1.02))
             plt.tight_layout()
+
+    return ret
 
 def calc_tswa_x(
     output_filepath, LTE_filepath, E_MeV, abs_xmax, nx, xsign='+',
