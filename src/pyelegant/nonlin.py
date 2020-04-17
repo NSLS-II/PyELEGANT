@@ -991,6 +991,8 @@ def calc_find_aper_nlines(
 def plot_find_aper_nlines(output_filepath, title='', xlim=None, ylim=None):
     """"""
 
+    ret = {} # variable to be returned
+
     try:
         d = util.load_pgz_file(output_filepath)
         g = d['data']['aper']['arrays']
@@ -1020,17 +1022,25 @@ def plot_find_aper_nlines(output_filepath, title='', xlim=None, ylim=None):
         plt.xlim([v * 1e3 for v in xlim])
     if ylim is not None:
         plt.ylim([v * 1e3 for v in ylim])
-    area_info_title = (fr'$(x_{{\mathrm{{min}}}}={np.min(x)*1e3:.1f}, '
-                       fr'x_{{\mathrm{{max}}}}={np.max(x)*1e3:.1f}, ')
+    ret['x_min'] = np.min(x)
+    ret['x_max'] = np.max(x)
+    ret['y_min'] = np.min(y)
+    ret['y_max'] = np.max(y)
+    ret['neg_y_search'] = neg_y_search
+    ret['area'] = area
+    xy_bd_title = (fr'$(x_{{\mathrm{{min}}}}={ret["x_min"]*1e3:.1f}, '
+                   fr'x_{{\mathrm{{max}}}}={ret["x_max"]*1e3:.1f}, ')
     if neg_y_search:
-        area_info_title += fr'y_{{\mathrm{{min}}}}={np.min(y)*1e3:.1f}, '
-    area_info_title += fr'y_{{\mathrm{{max}}}}={np.max(y)*1e3:.1f})\, [\mathrm{{mm}}], '
-    area_info_title += fr'\mathrm{{Area}}={area*1e6:.1f}\, [\mathrm{{mm}}^2]$'
+        xy_bd_title += fr'y_{{\mathrm{{min}}}}={ret["y_min"]*1e3:.1f}, '
+    xy_bd_title += fr'y_{{\mathrm{{max}}}}={ret["y_max"]*1e3:.1f})\, [\mathrm{{mm}}]$'
+    area_title = fr'$\mathrm{{Area}}={area*1e6:.1f}\, [\mathrm{{mm}}^2]$'
     if title != '':
-        plt.title('\n'.join([title, area_info_title]), size=font_sz)
+        plt.title('\n'.join([title, xy_bd_title, area_title]), size=font_sz)
     else:
-        plt.title(area_info_title, size=font_sz)
+        plt.title('\n'.join([xy_bd_title, area_title]), size=font_sz)
     plt.tight_layout()
+
+    return ret
 
 def calc_mom_aper(
     output_filepath, LTE_filepath, E_MeV, x_initial=1e-5, y_initial=1e-5,
