@@ -4677,6 +4677,18 @@ class Report_NSLS2U_Default:
     def __init__(self, user_conf=None, example_args=None):
         """Constructor"""
 
+        self.all_nonlin_calc_types = [
+            'xy_aper', 'fmap_xy', 'fmap_px', 'cmap_xy', 'cmap_px',
+            'tswa', 'nonlin_chrom', 'mom_aper']
+        self.all_nonlin_calc_comments = [
+            'Dynamic Aperture',
+            'On-Momentum Frequency Map', 'Off-Momentum Frequency Map',
+            'On-Momentum Chaos Map', 'Off-Momentum Chaos Map',
+            'Tune Shift with Amplitude', 'Nonlinear Chromaticity',
+            'Momentum Aperture',
+        ]
+        assert len(self.all_nonlin_calc_types) == len(self.all_nonlin_calc_comments)
+
         if user_conf:
 
             self.user_conf = user_conf
@@ -4785,6 +4797,13 @@ class Report_NSLS2U_Default:
 
         plx.generate_pdf_w_reruns(self.doc, clean_tex=False, silent=False)
         self.workbook.close()
+
+
+    def _convert_multiline_to_oneline(self, multiline_str):
+        """"""
+
+        return ' '.join([s.strip() for s in multiline_str.splitlines()
+                         if s.strip()])
 
     def init_pdf_report(self):
         """"""
@@ -5455,6 +5474,9 @@ class Report_NSLS2U_Default:
 
         new_page_required = False
 
+        if 'xy_aper' in included_types:
+            self.add_pdf_L2_xy_aper(plots_pdf_paths, nonlin_data_filepaths)
+
         if ('fmap_xy' in included_types) or ('fmap_px' in included_types):
 
             self.add_pdf_L2_fmap(plots_pdf_paths, nonlin_data_filepaths)
@@ -5473,7 +5495,7 @@ class Report_NSLS2U_Default:
             if new_page_required:
                 doc.append(plx.ClearPage())
 
-            with open(self.tswa_plot_suppl_filepath, 'rb') as f:
+            with open(self.suppl_plot_data_filepath['tswa'], 'rb') as f:
                 tswa_plot_captions, tswa_data = pickle.load(f)
 
             self.add_pdf_L2_tswa(
@@ -5487,6 +5509,62 @@ class Report_NSLS2U_Default:
 
             self.add_pdf_L2_nonlin_chrom(plots_pdf_paths, nonlin_data_filepaths)
             new_page_required = True
+
+    def add_pdf_L2_xy_aper(self, plots_pdf_paths, nonlin_data_filepaths):
+        """"""
+
+        doc = self.doc
+        LTE_contents = self.LTE_contents
+        input_LTE_filepath = self.input_LTE_filepath
+
+        with doc.create(plx.Section('Dynamic Aperture')):
+            if os.path.exists(plots_pdf_paths['xy_aper']):
+                d = pe.util.load_pgz_file(nonlin_data_filepaths['xy_aper'])
+
+                assert os.path.basename(d['input']['LTE_filepath']) \
+                       == os.path.basename(input_LTE_filepath)
+                assert d['input']['lattice_file_contents'] == LTE_contents
+
+                n_turns = d['input']['n_turns']
+                abs_xmax = d['input']['xmax']
+                abs_ymax = d['input']['ymax']
+                n_lines = d['input']['n_lines']
+                ini_ndiv = d['input']['ini_ndiv']
+                xmin_mm = - abs_xmax * 1e3
+                xmax_mm = abs_xmax * 1e3
+                if d['input']['neg_y_search']:
+                    ymin_mm = - abs_ymax * 1e3
+                else:
+                    ymin_mm = 0.0
+                ymax_mm = abs_ymax * 1e3
+                xstep_um = abs_xmax / (ini_ndiv - 1) * 1e6
+                ystep_um = abs_ymax / (ini_ndiv - 1) * 1e6
+                para = f'''\
+                The dynamic aperture was searched by tracking particles for
+                {n_turns:d} turns along {n_lines:d} radial lines in the range of
+                ${xmin_mm:+.1f} \le x [\mathrm{{mm}}] \le {xmax_mm:+.1f}$ and
+                ${ymin_mm:+.1f} \le y [\mathrm{{mm}}] \le {ymax_mm:+.1f}$
+                with initial horizontal and vertical step sizes of
+                {xstep_um:.1f} and {ystep_um:.1f} $\mu$m, respectively.
+                '''
+                para = self._convert_multiline_to_oneline(para)
+                doc.append(plx.NoEscape(para))
+
+                ver_sentence = f'''\
+                ELEGANT version {d["_version_ELEGANT"]} was used to compute the
+                dynamic aperture data.
+                '''
+                ver_sentence = self._convert_multiline_to_oneline(ver_sentence)
+
+                doc.append(plx.NewParagraph())
+                doc.append(plx.NoEscape(ver_sentence))
+                doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                with doc.create(plx.Figure(position='h!t')) as fig:
+                    doc.append(plx.NoEscape(r'\centering'))
+                    fig.add_image(os.path.basename(plots_pdf_paths['xy_aper']),
+                                  width=plx.utils.NoEscape(r'0.5\linewidth'))
+                    doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                    fig.add_caption('Dyanmic Aperture.')
 
     def add_pdf_L2_fmap(self, plots_pdf_paths, nonlin_data_filepaths):
         """"""
@@ -6590,12 +6668,10 @@ class Report_NSLS2U_Default:
                 ws.write(row, col, v, fmt)
             row += 1
 
-        #ws.insert_image(0, 10, os.path.join(report_folderpath, 'twiss_3.svg'))
-        #ws.insert_image(0, 10, os.path.join(report_folderpath, 'twiss_3.png'))
-
         img_height = 25
         row = 0
-        for fp in Path(self.report_folderpath).glob('twiss_*.png'):
+        #for fp in sorted(Path(self.report_folderpath).glob('twiss_*.svg')):
+        for fp in sorted(Path(self.report_folderpath).glob('twiss_*.png')):
             ws.insert_image(row, len(fmt_list) + 1, fp)
             row += img_height
 
@@ -7357,8 +7433,6 @@ class Report_NSLS2U_Default:
         italic = wb_txt_fmts.italic
         italic_sub = wb_txt_fmts.italic_sub
 
-        nonlin_data_filepaths = self.get_nonlin_data_filepaths()
-
         # Write headers
         row = 0
         ws.write(row, 0, 'Term Name', bold)
@@ -7411,7 +7485,7 @@ class Report_NSLS2U_Default:
 
 
         # Retrieve tracking-based tswa data
-        with open(self.tswa_plot_suppl_filepath, 'rb') as f:
+        with open(self.suppl_plot_data_filepath['tswa'], 'rb') as f:
             _, tswa_data = pickle.load(f)
 
         # Write header for tswa
@@ -7451,6 +7525,24 @@ class Report_NSLS2U_Default:
         ws.write(row, col_offset+2, tswa_data['y']['+']['dnuy_dJy0'], nfmt)
         ws.write(row, col_offset+3, tswa_data['y']['-']['dnuy_dJy0'], nfmt)
 
+
+        img_height = 25
+        img_width = 10
+        row = 0
+        for calc_type, comment in zip(
+            self.all_nonlin_calc_types, self.all_nonlin_calc_comments):
+
+            col = 10
+            ws.write(row, col, comment, bold)
+            row += 1
+
+            #for fp in sorted(Path(self.report_folderpath).glob(f'{calc_type}_*.svg')):
+            for fp in sorted(Path(self.report_folderpath).glob(f'{calc_type}_*.png')):
+                ws.insert_image(row, col, fp)
+                col += img_width
+
+            row += img_height
+
     def set_up_lattice(self):
         """"""
 
@@ -7475,8 +7567,10 @@ class Report_NSLS2U_Default:
         self.report_folderpath = report_folderpath
         Path(report_folderpath).mkdir(exist_ok=True)
 
-        self.tswa_plot_suppl_filepath = os.path.join(
-            self.report_folderpath, f'tswa.plot_suppl.pkl')
+        self.suppl_plot_data_filepath = {}
+        for calc_type in ['xy_aper', 'tswa']:
+            self.suppl_plot_data_filepath[calc_type] = os.path.join(
+                self.report_folderpath, f'{calc_type}.plot_suppl.pkl')
 
         if conf['input_LTE'].get('load_param', False):
             gen_LTE_from_base_LTE_and_param_file()
@@ -8231,12 +8325,9 @@ class Report_NSLS2U_Default:
 
         ncf = self.conf['nonlin']
 
-        all_calc_types = ['fmap_xy', 'fmap_px', 'cmap_xy', 'cmap_px',
-                          'tswa', 'nonlin_chrom']
-
-        sel_plots = {k: False for k in all_calc_types}
+        sel_plots = {k: False for k in self.all_nonlin_calc_types}
         for k, v in ncf['include'].items():
-            assert k in all_calc_types
+            assert k in self.all_nonlin_calc_types
             sel_plots[k] = v
 
         nonlin_data_filepaths = self.get_nonlin_data_filepaths()
@@ -8297,8 +8388,7 @@ class Report_NSLS2U_Default:
 
         suffix_list = []
         data_file_key_list = []
-        for calc_type in [
-            'fmap_xy', 'fmap_px', 'cmap_xy', 'cmap_px', 'tswa', 'nonlin_chrom']:
+        for calc_type in self.all_nonlin_calc_types:
 
             if not ncf['include'].get(calc_type, False):
                 continue
@@ -8307,7 +8397,11 @@ class Report_NSLS2U_Default:
             grid_name = calc_opts['grid_name']
             n_turns = calc_opts['n_turns']
 
-            if calc_type.startswith(('fmap', 'cmap')):
+            if calc_type == 'xy_aper':
+                suffix_list.append(
+                    f'_xy_aper_{grid_name}_n{n_turns}.{output_filetype}')
+                data_file_key_list.append(calc_type)
+            elif calc_type.startswith(('fmap', 'cmap')):
                 suffix_list.append(
                     f'_{calc_type[:4]}_{grid_name}_n{n_turns}.{output_filetype}')
                 data_file_key_list.append(calc_type)
@@ -8336,8 +8430,6 @@ class Report_NSLS2U_Default:
     def calc_nonlin_props(self, do_calc):
         """"""
 
-        LTE_filepath = self.input_LTE_filepath
-        E_MeV = self.conf['E_MeV']
         ncf = self.conf['nonlin']
 
         nonlin_data_filepaths = self.get_nonlin_data_filepaths()
@@ -8346,37 +8438,50 @@ class Report_NSLS2U_Default:
 
         common_remote_opts = ncf['common_remote_opts']
 
+        calc_type = 'xy_aper'
+        if (calc_type in nonlin_data_filepaths) and \
+           (do_calc[calc_type] or
+            (not os.path.exists(nonlin_data_filepaths[calc_type]))):
+
+            print(f'\n*** Starting compuation for "{calc_type}" ***\n')
+            self.calc_xy_aper(
+                use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts)
+
         calc_type = 'fmap_xy'
         if (calc_type in nonlin_data_filepaths) and \
            (do_calc[calc_type] or
             (not os.path.exists(nonlin_data_filepaths[calc_type]))):
 
-            calc_fmap_xy(LTE_filepath, E_MeV, ncf, use_beamline, N_KICKS,
-                         nonlin_data_filepaths, common_remote_opts)
+            print(f'\n*** Starting compuation for "{calc_type}" ***\n')
+            self.calc_fmap_xy(
+                use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts)
 
         calc_type = 'fmap_px'
         if (calc_type in nonlin_data_filepaths) and \
            (do_calc[calc_type] or
             (not os.path.exists(nonlin_data_filepaths[calc_type]))):
 
-            calc_fmap_px(LTE_filepath, E_MeV, ncf, use_beamline, N_KICKS,
-                         nonlin_data_filepaths, common_remote_opts)
+            print(f'\n*** Starting compuation for "{calc_type}" ***\n')
+            self.calc_fmap_px(
+                use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts)
 
         calc_type = 'cmap_xy'
         if (calc_type in nonlin_data_filepaths) and \
            (do_calc[calc_type] or
             (not os.path.exists(nonlin_data_filepaths[calc_type]))):
 
-            calc_cmap_xy(LTE_filepath, E_MeV, ncf, use_beamline, N_KICKS,
-                         nonlin_data_filepaths, common_remote_opts)
+            print(f'\n*** Starting compuation for "{calc_type}" ***\n')
+            self.calc_cmap_xy(
+                use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts)
 
         calc_type = 'cmap_px'
         if (calc_type in nonlin_data_filepaths) and \
            (do_calc[calc_type] or
             (not os.path.exists(nonlin_data_filepaths[calc_type]))):
 
-            calc_cmap_px(LTE_filepath, E_MeV, ncf, use_beamline, N_KICKS,
-                         nonlin_data_filepaths, common_remote_opts)
+            print(f'\n*** Starting compuation for "{calc_type}" ***\n')
+            self.calc_cmap_px(
+                use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts)
 
         if ('tswa_xplus' in nonlin_data_filepaths) and \
            (do_calc['tswa'] or
@@ -8386,28 +8491,303 @@ class Report_NSLS2U_Default:
             (not os.path.exists(nonlin_data_filepaths['tswa_yminus']))
             ):
 
-            calc_tswa(LTE_filepath, E_MeV, ncf, use_beamline, N_KICKS,
-                      nonlin_data_filepaths, common_remote_opts)
+            print(f'\n*** Starting compuation for "tswa" ***\n')
+            self.calc_tswa(
+                use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts)
 
         calc_type = 'nonlin_chrom'
         if (calc_type in nonlin_data_filepaths) and \
            (do_calc[calc_type] or
             (not os.path.exists(nonlin_data_filepaths[calc_type]))):
 
-            calc_nonlin_chrom(LTE_filepath, E_MeV, ncf, use_beamline, N_KICKS,
-                              nonlin_data_filepaths, common_remote_opts)
+            print(f'\n*** Starting compuation for "{calc_type}" ***\n')
+            self.calc_nonlin_chrom(
+                use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts)
 
         return nonlin_data_filepaths
 
+    def calc_xy_aper(
+        self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
+        """"""
+
+        LTE_filepath = self.input_LTE_filepath
+        E_MeV = self.conf['E_MeV']
+        ncf = self.conf['nonlin']
+
+        calc_type = 'xy_aper'
+
+        output_filepath = nonlin_data_filepaths[calc_type]
+
+        calc_opts = ncf[f'{calc_type}_calc_opts']
+
+        n_turns = calc_opts['n_turns']
+
+        g = ncf['xy_aper_grids'][calc_opts['grid_name']]
+        xmax = g['abs_xmax']
+        ymax = g['abs_ymax']
+        ini_ndiv = g['ini_ndiv']
+        n_lines = g['n_lines']
+        neg_y_search = g.get('neg_y_search', False)
+
+        remote_opts = dict(
+            use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
+            job_name=calc_type)
+        remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
+        remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
+
+        pe.nonlin.calc_find_aper_nlines(
+            output_filepath, LTE_filepath, E_MeV, xmax=xmax, ymax=ymax,
+            ini_ndiv=ini_ndiv, n_lines=n_lines, neg_y_search=neg_y_search,
+            n_turns=n_turns, use_beamline=use_beamline, N_KICKS=N_KICKS,
+            del_tmp_files=True, run_local=False, remote_opts=remote_opts)
+
+    def _calc_map_xy(
+        self, map_type, use_beamline, N_KICKS, nonlin_data_filepaths,
+        common_remote_opts):
+        """"""
+
+        if map_type not in ('c', 'f'):
+            raise ValueError(f'Invalid "map_type": {map_type}')
+
+        LTE_filepath = self.input_LTE_filepath
+        E_MeV = self.conf['E_MeV']
+        ncf = self.conf['nonlin']
+
+        calc_type = f'{map_type}map_xy'
+
+        output_filepath = nonlin_data_filepaths[calc_type]
+
+        calc_opts = ncf[f'{calc_type}_calc_opts']
+
+        n_turns = calc_opts['n_turns']
+
+        g = ncf['xy_grids'][calc_opts['grid_name']]
+        nx, ny = g['nx'], g['ny']
+        x_offset = g.get('x_offset', 1e-6)
+        y_offset = g.get('y_offset', 1e-6)
+        delta_offset = g.get('delta_offset', 0.0)
+        xmin = g['xmin'] + x_offset
+        xmax = g['xmax'] + x_offset
+        ymin = g['ymin'] + y_offset
+        ymax = g['ymax'] + y_offset
+
+        remote_opts = dict(
+            use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
+            job_name=calc_type)
+        remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
+        remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
+
+        if calc_type == 'fmap_xy':
+            kwargs = dict(quadratic_spacing=False, full_grid_output=False)
+            func = pe.nonlin.calc_fma_xy
+        elif calc_type == 'cmap_xy':
+            kwargs = dict(forward_backward=True)
+            func = pe.nonlin.calc_cmap_xy
+        else:
+            raise ValueError
+
+        func(
+            output_filepath, LTE_filepath, E_MeV, xmin, xmax, ymin, ymax, nx, ny,
+            use_beamline=use_beamline, N_KICKS=N_KICKS,
+            n_turns=n_turns, delta_offset=delta_offset,
+            del_tmp_files=True, run_local=False, remote_opts=remote_opts,
+            **kwargs)
+
+    def calc_fmap_xy(
+        self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
+        """"""
+
+        self._calc_map_xy('f', use_beamline, N_KICKS, nonlin_data_filepaths,
+                          common_remote_opts)
+
+    def calc_cmap_xy(
+        self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
+        """"""
+
+        self._calc_map_xy('c', use_beamline, N_KICKS, nonlin_data_filepaths,
+                          common_remote_opts)
+
+    def _calc_map_px(
+        self, map_type, use_beamline, N_KICKS, nonlin_data_filepaths,
+        common_remote_opts):
+        """"""
+
+        if map_type not in ('c', 'f'):
+            raise ValueError(f'Invalid "map_type": {map_type}')
+
+        LTE_filepath = self.input_LTE_filepath
+        E_MeV = self.conf['E_MeV']
+        ncf = self.conf['nonlin']
+
+        calc_type = f'{map_type}map_px'
+
+        output_filepath = nonlin_data_filepaths[calc_type]
+
+        calc_opts = ncf[f'{calc_type}_calc_opts']
+
+        n_turns = calc_opts['n_turns']
+
+        g = ncf['px_grids'][calc_opts['grid_name']]
+        ndelta, nx = g['ndelta'], g['nx']
+        x_offset = g.get('x_offset', 1e-6)
+        y_offset = g.get('y_offset', 1e-6)
+        delta_offset = g.get('delta_offset', 0.0)
+        delta_min = g['delta_min'] + delta_offset
+        delta_max = g['delta_max'] + delta_offset
+        xmin = g['xmin'] + x_offset
+        xmax = g['xmax'] + x_offset
+
+        remote_opts = dict(
+            use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
+            job_name=calc_type)
+        remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
+        remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
+
+        if calc_type == 'fmap_px':
+            kwargs = dict(quadratic_spacing=False, full_grid_output=False)
+            func = pe.nonlin.calc_fma_px
+        elif calc_type == 'cmap_px':
+            kwargs = dict(forward_backward=True)
+            func = pe.nonlin.calc_cmap_px
+        else:
+            raise ValueError
+
+        func(output_filepath, LTE_filepath, E_MeV, delta_min, delta_max,
+             xmin, xmax, ndelta, nx, use_beamline=use_beamline, N_KICKS=N_KICKS,
+             n_turns=n_turns, y_offset=y_offset,
+             del_tmp_files=True, run_local=False, remote_opts=remote_opts,
+             **kwargs)
+
+    def calc_fmap_px(
+        self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
+        """"""
+
+        self._calc_map_px('f', use_beamline, N_KICKS, nonlin_data_filepaths,
+                          common_remote_opts)
+
+    def calc_cmap_px(
+        self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
+        """"""
+
+        self._calc_map_px('c', use_beamline, N_KICKS, nonlin_data_filepaths,
+                          common_remote_opts)
+
+    def calc_tswa(
+        self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
+        """"""
+
+        LTE_filepath = self.input_LTE_filepath
+        E_MeV = self.conf['E_MeV']
+        ncf = self.conf['nonlin']
+
+        calc_type = 'tswa'
+
+        calc_opts = ncf[f'{calc_type}_calc_opts']
+
+        n_turns = calc_opts['n_turns']
+
+        save_fft = calc_opts.get('save_fft', False)
+
+        g = ncf['tswa_grids'][calc_opts['grid_name']]
+        nx, ny = g['nx'], g['ny']
+        x_offset = g.get('x_offset', 1e-6)
+        y_offset = g.get('y_offset', 1e-6)
+        abs_xmax = g['abs_xmax']
+        abs_ymax = g['abs_ymax']
+
+        remote_opts = dict(job_name=calc_type)
+        remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
+        remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
+
+        for plane in ['x', 'y']:
+
+            if plane == 'x':
+                func = pe.nonlin.calc_tswa_x
+                kwargs = dict(y0_offset=y_offset)
+                abs_max = abs_xmax
+                n = nx
+            else:
+                func = pe.nonlin.calc_tswa_y
+                kwargs = dict(x0_offset=x_offset)
+                abs_max = abs_ymax
+                n = ny
+
+            plane_specific_remote_opts = pe.util.deepcopy_dict(remote_opts)
+            plane_specific_remote_opts['ntasks'] = min([remote_opts['ntasks'], n])
+
+            for sign, sign_symbol in [('plus', '+'), ('minus', '-')]:
+
+                output_filepath = nonlin_data_filepaths[f'{calc_type}_{plane}{sign}']
+
+                mod_kwargs = pe.util.deepcopy_dict(kwargs)
+                mod_kwargs[f'{plane}sign'] = sign_symbol
+
+                func(output_filepath, LTE_filepath, E_MeV, abs_max, n,
+                     courant_snyder=True, return_fft_spec=save_fft, save_tbt=False,
+                     n_turns=n_turns, N_KICKS=N_KICKS,
+                     del_tmp_files=True, run_local=False,
+                     remote_opts=plane_specific_remote_opts, **mod_kwargs)
+
+    def calc_nonlin_chrom(
+        self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
+        """"""
+
+        LTE_filepath = self.input_LTE_filepath
+        E_MeV = self.conf['E_MeV']
+        ncf = self.conf['nonlin']
+
+        calc_type = 'nonlin_chrom'
+
+        output_filepath = nonlin_data_filepaths[calc_type]
+
+        calc_opts = ncf[f'{calc_type}_calc_opts']
+
+        n_turns = calc_opts['n_turns']
+
+        save_fft = calc_opts.get('save_fft', False)
+
+        g = ncf['nonlin_chrom_grids'][calc_opts['grid_name']]
+        ndelta = g['ndelta']
+        x_offset = g.get('x_offset', 1e-6)
+        y_offset = g.get('y_offset', 1e-6)
+        delta_offset = g.get('delta_offset', 0.0)
+        delta_min = g['delta_min'] + delta_offset
+        delta_max = g['delta_max'] + delta_offset
+
+        remote_opts = dict(job_name=calc_type)
+        remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
+        remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
+        #
+        remote_opts['ntasks'] = min([remote_opts['ntasks'], ndelta])
+
+        pe.nonlin.calc_chrom_track(
+            output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, ndelta,
+            courant_snyder=True, return_fft_spec=save_fft, save_tbt=False,
+            use_beamline=use_beamline, N_KICKS=N_KICKS,
+            n_turns=n_turns, x0_offset=x_offset, y0_offset=y_offset,
+            del_tmp_files=True, run_local=False, remote_opts=remote_opts)
+
+    def calc_mom_aper(self):
+        """"""
 
     def _save_nonlin_plots_to_pdf(self, calc_type, existing_fignums):
         """"""
 
-        pp = PdfPages(os.path.join(self.report_folderpath, f'{calc_type}.pdf'))
+        pdf_filepath = os.path.join(self.report_folderpath, f'{calc_type}.pdf')
+        #svg_filepath_template = os.path.join(
+            #self.report_folderpath, f'{calc_type}_{{page:d}}.svg')
+        png_filepath_template = os.path.join(
+            self.report_folderpath, f'{calc_type}_{{page:d}}.png')
 
+        pp = PdfPages(pdf_filepath)
+
+        page = 0
         for fignum in [fignum for fignum in plt.get_fignums()
                        if fignum not in existing_fignums]:
             pp.savefig(figure=fignum)
+            #plt.savefig(svg_filepath_template.format(page=page))
+            plt.savefig(png_filepath_template.format(page=page), dpi=200)
+            page += 1
             plt.close(fignum)
 
         pp.close()
@@ -8420,6 +8800,16 @@ class Report_NSLS2U_Default:
         nonlin_data_filepaths = self.get_nonlin_data_filepaths()
 
         existing_fignums = plt.get_fignums()
+
+        calc_type = 'xy_aper'
+        if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
+            xy_aper_data = pe.nonlin.plot_find_aper_nlines(
+                nonlin_data_filepaths[calc_type], title='', xlim=None, ylim=None)
+
+            self._save_nonlin_plots_to_pdf(calc_type, existing_fignums)
+
+            with open(self.suppl_plot_data_filepath['xy_aper'], 'wb') as f:
+                pickle.dump(xy_aper_data, f)
 
         calc_type = 'fmap_xy'
         if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
@@ -8603,7 +8993,7 @@ class Report_NSLS2U_Default:
                 page = i + 1
                 tswa_page_caption_list.append((page, tswa_captions[i]))
 
-            with open(self.tswa_plot_suppl_filepath, 'wb') as f:
+            with open(self.suppl_plot_data_filepath['tswa'], 'wb') as f:
                 pickle.dump([tswa_page_caption_list, tswa_data], f)
 
         calc_type = 'nonlin_chrom'
@@ -9189,12 +9579,8 @@ class Report_NSLS2U_Default:
         _yaml_append_map(conf, 'nonlin', com_map(), before_comment='\n')
         d = conf['nonlin']
 
-        keys = ['fmap_xy', 'fmap_px', 'cmap_xy', 'cmap_px', 'tswa', 'nonlin_chrom']
-        comments = [
-            'On-Momentum Frequency Map', 'Off-Momentum Frequency Map',
-            'On-Momentum Chaos Map', 'Off-Momentum Chaos Map',
-            'Tune Shift with Amplitude', 'Nonlinear Chromaticity',
-        ]
+        keys = self.all_nonlin_calc_types
+        comments = self.all_nonlin_calc_comments
         assert len(keys) == len(comments)
 
         m = com_map()
@@ -9283,6 +9669,31 @@ class Report_NSLS2U_Default:
                          eol_comment='REQUIRED')
         d['cmap_n_turns'].yaml_set_anchor('cmap_n_turns')
         anchors['cmap_n_turns'] = d['cmap_n_turns']
+
+        #---------------------------------------------------------------------------
+
+        xy1 = com_map(
+            abs_xmax = 10e-3, abs_ymax = 10e-3, ini_ndiv = 51, n_lines = 21)
+        if example:
+            _yaml_append_map(xy1, 'neg_y_search', False,
+                             before_comment='Optional (below)', before_indent=6)
+        #
+        xy_aper_grids = com_map(xy1 = xy1)
+        #
+        comment = '''
+        List of 2-D grid specs for dynamic aperture finding calculation:'''
+        _yaml_append_map(d, 'xy_aper_grids', xy_aper_grids,
+                         before_comment=comment, before_indent=2)
+
+        #---------------------------------------------------------------------------
+
+        opts = com_map(
+            grid_name = sqss('xy1'),
+            n_turns = anchors['tune_n_turns'])
+        comment = '\nOptions specific only for dynamic aperture finding calculation:'
+        _yaml_append_map(
+            d, 'xy_aper_calc_opts', opts,
+            before_comment=comment, before_indent=2)
 
         #---------------------------------------------------------------------------
 
