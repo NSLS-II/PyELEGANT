@@ -8,6 +8,7 @@ import datetime
 import hashlib
 import tempfile
 import pickle
+import fnmatch
 from types import SimpleNamespace
 import matplotlib.pylab as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -4698,6 +4699,15 @@ class Report_NSLS2U_Default:
 
             self.conf.update(self.user_conf)
 
+            # Convert ruamel's CommentedMap object into dict to throw away
+            # all the comments.
+            with tempfile.NamedTemporaryFile() as tmp:
+                yml = yaml.YAML()
+                with open(tmp.name, 'w') as f:
+                    yml.dump(self.conf, f)
+                yml = yaml.YAML(typ='safe')
+                self.conf = yml.load(Path(tmp.name).read_text())
+
             twiss_plot_captions = self.calc_plot()
 
             self.build(twiss_plot_captions)
@@ -5510,6 +5520,9 @@ class Report_NSLS2U_Default:
             self.add_pdf_L2_nonlin_chrom(plots_pdf_paths, nonlin_data_filepaths)
             new_page_required = True
 
+        if 'mom_aper' in included_types:
+            self.add_pdf_L2_mom_aper(plots_pdf_paths, nonlin_data_filepaths)
+
     def add_pdf_L2_xy_aper(self, plots_pdf_paths, nonlin_data_filepaths):
         """"""
 
@@ -6003,6 +6016,64 @@ class Report_NSLS2U_Default:
                         subfig.add_caption(caption)
                 doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
                 fig.add_caption('Nonlinear chromaticity.')
+
+    def add_pdf_L2_mom_aper(self, plots_pdf_paths, nonlin_data_filepaths):
+        """"""
+
+        doc = self.doc
+        LTE_contents = self.LTE_contents
+        input_LTE_filepath = self.input_LTE_filepath
+
+        with doc.create(plx.Section('Momentum Aperture')):
+            if os.path.exists(plots_pdf_paths['mom_aper']):
+                d = pe.util.load_pgz_file(nonlin_data_filepaths['mom_aper'])
+
+                assert os.path.basename(d['input']['LTE_filepath']) \
+                       == os.path.basename(input_LTE_filepath)
+                assert d['input']['lattice_file_contents'] == LTE_contents
+
+                n_turns = d['input']['n_turns']
+                x_initial = d['input']['x_initial']
+                y_initial = d['input']['y_initial']
+                delta_negative_start = d['input']['delta_negative_start']
+                delta_negative_limit = d['input']['delta_negative_limit']
+                delta_positive_start = d['input']['delta_positive_start']
+                delta_positive_limit = d['input']['delta_positive_limit']
+                init_delta_step_size = d['input']['init_delta_step_size']
+                s_start = d['input']['s_start']
+                s_end = d['input']['s_end']
+                include_name_pattern = d['input']['include_name_pattern']
+                para = f'''\
+                The momentum aperture was searched by tracking particles for
+                {n_turns:d} turns with initial $(x, y) =
+                ({x_initial*1e6:.1f}, {y_initial*1e6:.1f})\, [\mu\mathrm{{m}}]$
+                for the elements with the name pattern of "{include_name_pattern}"
+                in the range of $ {s_start:.3f} \le s\, [\mathrm{{m}}]\, \le
+                {s_end:.3f}$. The positive momentum aperture search started from
+                {delta_positive_start*1e2:+.3f}\% up to
+                {delta_positive_limit*1e2:+.3f}\%, while the negative momentum
+                aperture search started from {delta_negative_start*1e2:-.3f}\%
+                up to {delta_negative_limit*1e2:-.3f}\%, with the initial step
+                size of {init_delta_step_size*1e2:.6f}\%.
+                '''
+                para = self._convert_multiline_to_oneline(para)
+                doc.append(plx.NoEscape(para))
+
+                ver_sentence = f'''\
+                ELEGANT version {d["_version_ELEGANT"]} was used to compute the
+                dynamic aperture data.
+                '''
+                ver_sentence = self._convert_multiline_to_oneline(ver_sentence)
+
+                doc.append(plx.NewParagraph())
+                doc.append(plx.NoEscape(ver_sentence))
+                doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                with doc.create(plx.Figure(position='h!t')) as fig:
+                    doc.append(plx.NoEscape(r'\centering'))
+                    fig.add_image(os.path.basename(plots_pdf_paths['mom_aper']),
+                                  width=plx.utils.NoEscape(r'0.5\linewidth'))
+                    doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                    fig.add_caption('Momentum Aperture.')
 
     def add_xlsx_config(self):
         """"""
@@ -7432,6 +7503,8 @@ class Report_NSLS2U_Default:
         bold = wb_txt_fmts.bold
         italic = wb_txt_fmts.italic
         italic_sub = wb_txt_fmts.italic_sub
+        sup = wb_txt_fmts.sup
+        sub = wb_txt_fmts.sub
 
         # Write headers
         row = 0
@@ -7456,10 +7529,19 @@ class Report_NSLS2U_Default:
         Jy = [italic, 'J', italic_sub, 'y']
         Jyx = [italic, 'J', italic_sub, 'y,x']
 
-        def p_d(numerator, denominator):
+        def p_d(numerator, denominator, order=1):
             """ partial derivative """
-            return [italic, SYMBOL['partial']] + numerator + [normal, '/'] + \
-                   [italic, SYMBOL['partial']] + denominator
+            if order == 1:
+                return (
+                    [italic, SYMBOL['partial']] + numerator + [normal, '/'] +
+                    [italic, SYMBOL['partial']] + denominator)
+            elif order >= 2:
+                return (
+                    [italic, SYMBOL['partial'], sup, f'{order:d}'] + numerator +
+                    [normal, '/'] +  [italic, SYMBOL['partial']] + denominator +
+                    [sup, f'{order:d}'])
+            else:
+                raise ValueError(f'Invalid order: {order:d}')
 
         h_drv_explanation = {
             'h11001': p_d(nux, delta), 'h00111': p_d(nuy, delta),
@@ -7493,6 +7575,7 @@ class Report_NSLS2U_Default:
         col_offset = 4
         nfmt = num_txt_fmts['0.00E+00']
         #
+        ws.set_column(col_offset  , col_offset  , 11)
         ws.set_column(col_offset+1, col_offset+1, 12)
         ws.set_column(col_offset+2, col_offset+2, 12)
         ws.set_column(col_offset+3, col_offset+3, 12)
@@ -7524,6 +7607,89 @@ class Report_NSLS2U_Default:
         ws.write(row, col_offset+1, self.lin_data['dnuy_dJy'], nfmt)
         ws.write(row, col_offset+2, tswa_data['y']['+']['dnuy_dJy0'], nfmt)
         ws.write(row, col_offset+3, tswa_data['y']['-']['dnuy_dJy0'], nfmt)
+        row += 1
+
+        row += 1
+
+        # Retrieve nonlin_chrom data
+        with open(self.suppl_plot_data_filepath['nonlin_chrom'], 'rb') as f:
+            nonlin_chrom_data = pickle.load(f)
+
+        # Write header for nonlin_chrom
+        nfmt = num_txt_fmts['0.00E+00']
+        #
+        ws.write(row, col_offset, 'Nonlinear Chromaticity', bold)
+        row += 1
+        #
+        for iOrder, deriv_val in enumerate(
+            nonlin_chrom_data['fit_coeffs']['x'][::-1]):
+            if iOrder == 0:
+                frag = nux + [normal, ' ('] + delta + [normal, ' = 0)']
+            else:
+                frag = p_d(nux, delta, iOrder)
+            ws.write_rich_string(row, col_offset, *frag)
+            ws.write(row, col_offset+1, deriv_val, nfmt)
+            row += 1
+        for iOrder, deriv_val in enumerate(
+            nonlin_chrom_data['fit_coeffs']['y'][::-1]):
+            if iOrder == 0:
+                frag = nuy + [normal, ' ('] + delta + [normal, ' = 0)']
+            else:
+                frag = p_d(nuy, delta, iOrder)
+            ws.write_rich_string(row, col_offset, *frag)
+            ws.write(row, col_offset+1, deriv_val, nfmt)
+            row += 1
+
+        row += 1
+
+        # Retrieve xy_aper data
+        with open(self.suppl_plot_data_filepath['xy_aper'], 'rb') as f:
+            xy_aper_data = pickle.load(f)
+
+        # Write header for xy_aper
+        ws.write(row, col_offset, 'Dynamic Aperture', bold)
+        row += 1
+
+        for plane in ['x', 'y']:
+            if plane == 'x':
+                min_max_list = ['min', 'max']
+            else:
+                if xy_aper_data['neg_y_search']:
+                    min_max_list = ['min', 'max']
+                else:
+                    min_max_list = ['max']
+            for k in min_max_list:
+                frag = [italic, plane, sub, k, normal, ' (mm)']
+                ws.write_rich_string(row, col_offset, *frag)
+                ws.write(row, col_offset+1, xy_aper_data[f'{plane}_{k}'] * 1e3,
+                         num_txt_fmts['0.000'])
+                row += 1
+
+        frag = [normal, 'Area (mm', sup, '2', normal, ')']
+        ws.write_rich_string(row, col_offset, *frag)
+        ws.write(row, col_offset+1, xy_aper_data['area'] * 1e6,
+                 num_txt_fmts['0.000'])
+        row += 1
+
+        row += 1
+
+        # Retrieve mom_aper data
+        with open(self.suppl_plot_data_filepath['mom_aper'], 'rb') as f:
+            mom_aper_data = pickle.load(f)
+
+        # Write header for mom_aper
+        ws.write(row, col_offset, 'Momentum Aperture', bold)
+        row += 1
+
+        for m, sign, symb in [
+            ('min', '+', '+'), ('max', '+', '+'),
+            ('min', '-', SYMBOL['minus']), ('max', '-', SYMBOL['minus'])]:
+            frag = [normal, f'{m} '] + delta + [sub, symb, normal, ' (%)']
+            ws.write_rich_string(row, col_offset, *frag)
+            ws.write(row, col_offset+1, mom_aper_data['delta_percent'][sign][m],
+                     num_txt_fmts['0.000'])
+            row += 1
+
 
 
         img_height = 25
@@ -7568,7 +7734,7 @@ class Report_NSLS2U_Default:
         Path(report_folderpath).mkdir(exist_ok=True)
 
         self.suppl_plot_data_filepath = {}
-        for calc_type in ['xy_aper', 'tswa']:
+        for calc_type in ['xy_aper', 'tswa', 'nonlin_chrom', 'mom_aper']:
             self.suppl_plot_data_filepath[calc_type] = os.path.join(
                 self.report_folderpath, f'{calc_type}.plot_suppl.pkl')
 
@@ -8393,27 +8559,30 @@ class Report_NSLS2U_Default:
             if not ncf['include'].get(calc_type, False):
                 continue
 
-            calc_opts = ncf[f'{calc_type}_calc_opts']
-            grid_name = calc_opts['grid_name']
-            n_turns = calc_opts['n_turns']
+            opt_name = ncf['selected_calc_opt_names'][calc_type]
+            assert opt_name in ncf['calc_opts'][calc_type]
 
             if calc_type == 'xy_aper':
                 suffix_list.append(
-                    f'_xy_aper_{grid_name}_n{n_turns}.{output_filetype}')
+                    f'_xy_aper_{opt_name}.{output_filetype}')
                 data_file_key_list.append(calc_type)
             elif calc_type.startswith(('fmap', 'cmap')):
                 suffix_list.append(
-                    f'_{calc_type[:4]}_{grid_name}_n{n_turns}.{output_filetype}')
+                    f'_{calc_type}_{opt_name}.{output_filetype}')
                 data_file_key_list.append(calc_type)
             elif calc_type == 'tswa':
                 for plane in ['x', 'y']:
                     for sign in ['plus', 'minus']:
                         suffix_list.append(
-                            f'_tswa_{grid_name}_n{n_turns}_{plane}{sign}.{output_filetype}')
+                            f'_tswa_{opt_name}_{plane}{sign}.{output_filetype}')
                         data_file_key_list.append(f'tswa_{plane}{sign}')
             elif calc_type == 'nonlin_chrom':
                 suffix_list.append(
-                    f'_nonlin_chrom_{grid_name}_n{n_turns}.{output_filetype}')
+                    f'_nonlin_chrom_{opt_name}.{output_filetype}')
+                data_file_key_list.append(calc_type)
+            elif calc_type == 'mom_aper':
+                suffix_list.append(
+                    f'_mom_aper_{opt_name}.{output_filetype}')
                 data_file_key_list.append(calc_type)
             else:
                 raise ValueError
@@ -8504,6 +8673,15 @@ class Report_NSLS2U_Default:
             self.calc_nonlin_chrom(
                 use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts)
 
+        calc_type = 'mom_aper'
+        if (calc_type in nonlin_data_filepaths) and \
+           (do_calc[calc_type] or
+            (not os.path.exists(nonlin_data_filepaths[calc_type]))):
+
+            print(f'\n*** Starting compuation for "{calc_type}" ***\n')
+            self.calc_mom_aper(
+                use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts)
+
         return nonlin_data_filepaths
 
     def calc_xy_aper(
@@ -8518,16 +8696,15 @@ class Report_NSLS2U_Default:
 
         output_filepath = nonlin_data_filepaths[calc_type]
 
-        calc_opts = ncf[f'{calc_type}_calc_opts']
+        opt_name = ncf['selected_calc_opt_names'][calc_type]
+        calc_opts = ncf['calc_opts'][calc_type][opt_name]
 
         n_turns = calc_opts['n_turns']
-
-        g = ncf['xy_aper_grids'][calc_opts['grid_name']]
-        xmax = g['abs_xmax']
-        ymax = g['abs_ymax']
-        ini_ndiv = g['ini_ndiv']
-        n_lines = g['n_lines']
-        neg_y_search = g.get('neg_y_search', False)
+        xmax = calc_opts['abs_xmax']
+        ymax = calc_opts['abs_ymax']
+        ini_ndiv = calc_opts['ini_ndiv']
+        n_lines = calc_opts['n_lines']
+        neg_y_search = calc_opts.get('neg_y_search', False)
 
         remote_opts = dict(
             use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
@@ -8557,19 +8734,18 @@ class Report_NSLS2U_Default:
 
         output_filepath = nonlin_data_filepaths[calc_type]
 
-        calc_opts = ncf[f'{calc_type}_calc_opts']
+        opt_name = ncf['selected_calc_opt_names'][calc_type]
+        calc_opts = ncf['calc_opts'][calc_type][opt_name]
 
         n_turns = calc_opts['n_turns']
-
-        g = ncf['xy_grids'][calc_opts['grid_name']]
-        nx, ny = g['nx'], g['ny']
-        x_offset = g.get('x_offset', 1e-6)
-        y_offset = g.get('y_offset', 1e-6)
-        delta_offset = g.get('delta_offset', 0.0)
-        xmin = g['xmin'] + x_offset
-        xmax = g['xmax'] + x_offset
-        ymin = g['ymin'] + y_offset
-        ymax = g['ymax'] + y_offset
+        nx, ny = calc_opts['nx'], calc_opts['ny']
+        x_offset = calc_opts.get('x_offset', 1e-6)
+        y_offset = calc_opts.get('y_offset', 1e-6)
+        delta_offset = calc_opts.get('delta_offset', 0.0)
+        xmin = calc_opts['xmin'] + x_offset
+        xmax = calc_opts['xmax'] + x_offset
+        ymin = calc_opts['ymin'] + y_offset
+        ymax = calc_opts['ymax'] + y_offset
 
         remote_opts = dict(
             use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
@@ -8623,19 +8799,18 @@ class Report_NSLS2U_Default:
 
         output_filepath = nonlin_data_filepaths[calc_type]
 
-        calc_opts = ncf[f'{calc_type}_calc_opts']
+        opt_name = ncf['selected_calc_opt_names'][calc_type]
+        calc_opts = ncf['calc_opts'][calc_type][opt_name]
 
         n_turns = calc_opts['n_turns']
-
-        g = ncf['px_grids'][calc_opts['grid_name']]
-        ndelta, nx = g['ndelta'], g['nx']
-        x_offset = g.get('x_offset', 1e-6)
-        y_offset = g.get('y_offset', 1e-6)
-        delta_offset = g.get('delta_offset', 0.0)
-        delta_min = g['delta_min'] + delta_offset
-        delta_max = g['delta_max'] + delta_offset
-        xmin = g['xmin'] + x_offset
-        xmax = g['xmax'] + x_offset
+        ndelta, nx = calc_opts['ndelta'], calc_opts['nx']
+        x_offset = calc_opts.get('x_offset', 1e-6)
+        y_offset = calc_opts.get('y_offset', 1e-6)
+        delta_offset = calc_opts.get('delta_offset', 0.0)
+        delta_min = calc_opts['delta_min'] + delta_offset
+        delta_max = calc_opts['delta_max'] + delta_offset
+        xmin = calc_opts['xmin'] + x_offset
+        xmax = calc_opts['xmax'] + x_offset
 
         remote_opts = dict(
             use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
@@ -8682,18 +8857,16 @@ class Report_NSLS2U_Default:
 
         calc_type = 'tswa'
 
-        calc_opts = ncf[f'{calc_type}_calc_opts']
+        opt_name = ncf['selected_calc_opt_names'][calc_type]
+        calc_opts = ncf['calc_opts'][calc_type][opt_name]
 
         n_turns = calc_opts['n_turns']
-
         save_fft = calc_opts.get('save_fft', False)
-
-        g = ncf['tswa_grids'][calc_opts['grid_name']]
-        nx, ny = g['nx'], g['ny']
-        x_offset = g.get('x_offset', 1e-6)
-        y_offset = g.get('y_offset', 1e-6)
-        abs_xmax = g['abs_xmax']
-        abs_ymax = g['abs_ymax']
+        nx, ny = calc_opts['nx'], calc_opts['ny']
+        x_offset = calc_opts.get('x_offset', 1e-6)
+        y_offset = calc_opts.get('y_offset', 1e-6)
+        abs_xmax = calc_opts['abs_xmax']
+        abs_ymax = calc_opts['abs_ymax']
 
         remote_opts = dict(job_name=calc_type)
         remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
@@ -8740,19 +8913,17 @@ class Report_NSLS2U_Default:
 
         output_filepath = nonlin_data_filepaths[calc_type]
 
-        calc_opts = ncf[f'{calc_type}_calc_opts']
+        opt_name = ncf['selected_calc_opt_names'][calc_type]
+        calc_opts = ncf['calc_opts'][calc_type][opt_name]
 
         n_turns = calc_opts['n_turns']
-
         save_fft = calc_opts.get('save_fft', False)
-
-        g = ncf['nonlin_chrom_grids'][calc_opts['grid_name']]
-        ndelta = g['ndelta']
-        x_offset = g.get('x_offset', 1e-6)
-        y_offset = g.get('y_offset', 1e-6)
-        delta_offset = g.get('delta_offset', 0.0)
-        delta_min = g['delta_min'] + delta_offset
-        delta_max = g['delta_max'] + delta_offset
+        ndelta = calc_opts['ndelta']
+        x_offset = calc_opts.get('x_offset', 1e-6)
+        y_offset = calc_opts.get('y_offset', 1e-6)
+        delta_offset = calc_opts.get('delta_offset', 0.0)
+        delta_min = calc_opts['delta_min'] + delta_offset
+        delta_max = calc_opts['delta_max'] + delta_offset
 
         remote_opts = dict(job_name=calc_type)
         remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
@@ -8767,8 +8938,50 @@ class Report_NSLS2U_Default:
             n_turns=n_turns, x0_offset=x_offset, y0_offset=y_offset,
             del_tmp_files=True, run_local=False, remote_opts=remote_opts)
 
-    def calc_mom_aper(self):
+    def calc_mom_aper(
+        self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
         """"""
+
+        LTE_filepath = self.input_LTE_filepath
+        E_MeV = self.conf['E_MeV']
+        ncf = self.conf['nonlin']
+
+        calc_type = 'mom_aper'
+
+        output_filepath = nonlin_data_filepaths[calc_type]
+
+        opt_name = ncf['selected_calc_opt_names'][calc_type]
+        calc_opts = ncf['calc_opts'][calc_type][opt_name]
+
+        n_turns = calc_opts.pop('n_turns')
+        # Handle special specifications
+        if calc_opts['s_end'] == 'one_period':
+            calc_opts['s_end'] = float(
+                self.lin_data['circumf'] / self.lin_data['n_periods_in_ring'])
+            # Must be converted to Python float, instead of numpy's float.
+            # Otherwise, when you try to dump self.conf into YAML file, it crashes.
+
+        remote_opts = dict(
+            use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
+            job_name=calc_type)
+        remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
+        remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
+        #
+        # Warning from ELEGANT: for best parallel efficiency in output_mode=0,
+        # the number of elements divided by the number of processors should be
+        # an integer or slightly below an integer.
+        elem_names = [
+            line.split(':')[1].strip() for line in
+            self.lin_data['flat_elem_s_name_type_list'][2:]] # exclude header lines
+        n_matched = len([
+            elem_name for elem_name in elem_names
+            if fnmatch.fnmatch(elem_name, calc_opts['include_name_pattern'])])
+        remote_opts['ntasks'] = min([remote_opts['ntasks'], n_matched])
+
+        pe.nonlin.calc_mom_aper(
+            output_filepath, LTE_filepath, E_MeV, n_turns=n_turns,
+            use_beamline=use_beamline, N_KICKS=N_KICKS, del_tmp_files=True,
+            run_local=False, remote_opts=remote_opts, **calc_opts)
 
     def _save_nonlin_plots_to_pdf(self, calc_type, existing_fignums):
         """"""
@@ -9009,10 +9222,24 @@ class Report_NSLS2U_Default:
             _plot_kwargs['fit_deltalim'] = _plot_kwargs.get(
                 'fit_deltalim', [-2e-2, +2e-2])
 
-            pe.nonlin.plot_chrom(
+            nonlin_chrom_data = pe.nonlin.plot_chrom(
                 nonlin_data_filepaths[calc_type], title='', **_plot_kwargs)
 
             self._save_nonlin_plots_to_pdf(calc_type, existing_fignums)
+
+            with open(self.suppl_plot_data_filepath['nonlin_chrom'], 'wb') as f:
+                pickle.dump(nonlin_chrom_data, f)
+
+        calc_type = 'mom_aper'
+        if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
+            mom_aper_data = pe.nonlin.plot_mom_aper(
+                nonlin_data_filepaths[calc_type], title='', slim=None,
+                deltalim=None)
+
+            self._save_nonlin_plots_to_pdf(calc_type, existing_fignums)
+
+            with open(self.suppl_plot_data_filepath['mom_aper'], 'wb') as f:
+                pickle.dump(mom_aper_data, f)
 
 
     def get_default_config(self, report_version, example=False):
@@ -9035,9 +9262,6 @@ class Report_NSLS2U_Default:
         """"""
 
         report_version = '1.0'
-
-        production = True
-        #production = False
 
         com_map = yaml.comments.CommentedMap
         com_seq = yaml.comments.CommentedSeq
@@ -9643,204 +9867,199 @@ class Report_NSLS2U_Default:
 
         #---------------------------------------------------------------------------
 
-        if production:
-            xy_grid_name = 'xy1'
-            px_grid_name = 'px1'
-        else:
-            xy_grid_name = 'xyTest'
-            px_grid_name = 'pxTest'
+        selected_calc_opt_names = com_map()
 
-        _yaml_append_map(d, 'use_map_xy_grid_name', sqss(xy_grid_name),
-                         eol_comment='REQUIRED', before_comment='\n')
-        d['use_map_xy_grid_name'].yaml_set_anchor('use_map_xy_grid_name')
-        anchors['use_map_xy_grid_name'] = d['use_map_xy_grid_name']
-        _yaml_append_map(d, 'use_map_px_grid_name', sqss(px_grid_name),
-                         eol_comment='REQUIRED')
-        d['use_map_px_grid_name'].yaml_set_anchor('use_map_px_grid_name')
-        anchors['use_map_px_grid_name'] = d['use_map_px_grid_name']
+        for calc_type in self.all_nonlin_calc_types:
+            _yaml_append_map(selected_calc_opt_names, calc_type, sqss('test'))
+
+        comment = '''
+        Selected names of nonlinear calculation options
+        '''
+        _yaml_append_map(d, 'selected_calc_opt_names', selected_calc_opt_names,
+                         eol_comment='REQUIRED',
+                         before_comment=comment, before_indent=2)
 
         #---------------------------------------------------------------------------
 
-        _yaml_append_map(d, 'tune_n_turns', yaml.scalarint.ScalarInt(1024),
-                         eol_comment='REQUIRED', before_comment='\n')
-        d['tune_n_turns'].yaml_set_anchor('tune_n_turns')
-        anchors['tune_n_turns'] = d['tune_n_turns']
-        _yaml_append_map(d, 'cmap_n_turns', yaml.scalarint.ScalarInt(128),
-                         eol_comment='REQUIRED')
-        d['cmap_n_turns'].yaml_set_anchor('cmap_n_turns')
-        anchors['cmap_n_turns'] = d['cmap_n_turns']
+        calc_opts = com_map()
 
-        #---------------------------------------------------------------------------
+        # ### Option sets for "xy_aper" ###
 
-        xy1 = com_map(
-            abs_xmax = 10e-3, abs_ymax = 10e-3, ini_ndiv = 51, n_lines = 21)
+        production = com_map(
+            n_turns = 1024, abs_xmax = 10e-3, abs_ymax = 10e-3, ini_ndiv = 51,
+            n_lines = 21)
         if example:
-            _yaml_append_map(xy1, 'neg_y_search', False,
+            _yaml_append_map(production, 'neg_y_search', False,
                              before_comment='Optional (below)', before_indent=6)
         #
-        xy_aper_grids = com_map(xy1 = xy1)
+        production.yaml_set_anchor('xy_aper_production')
+        anchors['xy_aper_production'] = production
+        #
+        test = com_map(n_turns = 128)
+        #test.fa.set_flow_style()
+        test.add_yaml_merge([(0, anchors['xy_aper_production'])])
+        #
+        xy_aper = com_map(production = production, test = test)
         #
         comment = '''
-        List of 2-D grid specs for dynamic aperture finding calculation:'''
-        _yaml_append_map(d, 'xy_aper_grids', xy_aper_grids,
+        Option sets for dynamic aperture finding calculation:'''
+        _yaml_append_map(calc_opts, 'xy_aper', xy_aper,
                          before_comment=comment, before_indent=2)
 
-        #---------------------------------------------------------------------------
+        # ### Option sets for "fmap_xy" ###
 
-        opts = com_map(
-            grid_name = sqss('xy1'),
-            n_turns = anchors['tune_n_turns'])
-        comment = '\nOptions specific only for dynamic aperture finding calculation:'
-        _yaml_append_map(
-            d, 'xy_aper_calc_opts', opts,
-            before_comment=comment, before_indent=2)
-
-        #---------------------------------------------------------------------------
-
-        xy1 = com_map(xmin = -8e-3, xmax = +8e-3, ymin = 0.0, ymax = +2e-3,
-                      nx = 201, ny = 201)
+        production = com_map(
+            n_turns = 1024, xmin = -8e-3, xmax = +8e-3, ymin = 0.0, ymax = +2e-3,
+            nx = 201, ny = 201)
         if example:
-            _yaml_append_map(xy1, 'x_offset', 1e-6,
+            _yaml_append_map(production, 'x_offset', 1e-6,
                              before_comment='Optional (below)', before_indent=6)
-            _yaml_append_map(xy1, 'y_offset', 1e-6)
-            _yaml_append_map(xy1, 'delta_offset', 0.0)
-        xy1.yaml_set_anchor('map_xy1')
-        anchors['map_xy1'] = xy1
+            _yaml_append_map(production, 'y_offset', 1e-6)
+            _yaml_append_map(production, 'delta_offset', 0.0)
+        production.yaml_set_anchor('map_xy_production')
+        anchors['map_xy_production'] = production
         #
-        xyTest = com_map(nx = 21, ny = 21)
-        #xyTest.fa.set_flow_style()
-        xyTest.add_yaml_merge([(0, anchors['map_xy1'])])
+        test = com_map(nx = 21, ny = 21)
+        #test.fa.set_flow_style()
+        test.add_yaml_merge([(0, anchors['map_xy_production'])])
+        test.yaml_set_anchor('map_xy_test')
+        anchors['map_xy_test'] = test
         #
-        xy_grids = com_map(xy1 = xy1, xyTest = xyTest)
+        fmap_xy = com_map(production = production, test = test)
         #
         comment = '''
-        List of 2-D x-y grid specs for fmap & cmap calculations:'''
-        _yaml_append_map(d, 'xy_grids', xy_grids,
+        Option sets for on-momentum frequency map calculation:'''
+        _yaml_append_map(calc_opts, 'fmap_xy', fmap_xy,
                          before_comment=comment, before_indent=2)
 
-        #---------------------------------------------------------------------------
+        # ### Option sets for "fmap_px" ###
 
-        px1 = com_map(
-            delta_min = -0.05, delta_max = +0.05, xmin = -8e-3, xmax = +8e-3,
-            ndelta = 201, nx = 201)
+        production = com_map(
+            n_turns = 1024, delta_min = -0.05, delta_max = +0.05,
+            xmin = -8e-3, xmax = +8e-3, ndelta = 201, nx = 201)
         if example:
-            _yaml_append_map(px1, 'x_offset', 1e-6,
+            _yaml_append_map(production, 'x_offset', 1e-6,
                              before_comment='Optional (below)', before_indent=6)
-            _yaml_append_map(px1, 'y_offset', 1e-6)
-            _yaml_append_map(px1, 'delta_offset', 0.0)
-        px1.yaml_set_anchor('map_px1')
-        anchors['map_px1'] = px1
+            _yaml_append_map(production, 'y_offset', 1e-6)
+            _yaml_append_map(production, 'delta_offset', 0.0)
+        production.yaml_set_anchor('map_px_production')
+        anchors['map_px_production'] = production
         #
-        pxTest = com_map(ndelta = 21, nx = 21)
-        #pxTest.fa.set_flow_style()
-        pxTest.add_yaml_merge([(0, anchors['map_px1'])])
+        test = com_map(ndelta = 21, nx = 21)
+        #test.fa.set_flow_style()
+        test.add_yaml_merge([(0, anchors['map_px_production'])])
+        test.yaml_set_anchor('map_px_test')
+        anchors['map_px_test'] = test
         #
-        px_grids = com_map(px1 = px1, pxTest = pxTest)
+        fmap_px = com_map(production = production, test = test)
         #
         comment = '''
-        List of 2-D delta-x grid specs for fmap & cmap calculations:'''
-        _yaml_append_map(d, 'px_grids', px_grids,
+        Option sets for off-momentum frequency map calculation:'''
+        _yaml_append_map(calc_opts, 'fmap_px', fmap_px,
                          before_comment=comment, before_indent=2)
 
-        #---------------------------------------------------------------------------
+        # ### Option sets for "cmap_xy" ###
 
-        opts = com_map(
-            grid_name = anchors['use_map_xy_grid_name'],
-            n_turns = anchors['tune_n_turns'])
-        comment = '\nOptions specific only for on-momentum frequency map calculation'
-        _yaml_append_map(
-            d, 'fmap_xy_calc_opts', opts,
-            before_comment=comment, before_indent=2)
+        production = com_map(n_turns = 128)
+        production.add_yaml_merge([(0, anchors['map_xy_production'])])
+        #
+        test = com_map(n_turns = 128)
+        test.add_yaml_merge([(0, anchors['map_xy_test'])])
+        #
+        cmap_xy = com_map(production = production, test = test)
+        #
+        comment = '''
+        Option sets for on-momentum chaos map calculation:'''
+        _yaml_append_map(calc_opts, 'cmap_xy', cmap_xy,
+                         before_comment=comment, before_indent=2)
 
-        #---------------------------------------------------------------------------
+        # ### Option sets for "cmap_px" ###
 
-        opts = com_map(
-            grid_name = anchors['use_map_px_grid_name'],
-            n_turns = anchors['tune_n_turns'])
-        comment = '\nOptions specific only for off-momentum frequency map calculation'
-        _yaml_append_map(
-            d, 'fmap_px_calc_opts', opts,
-            before_comment=comment, before_indent=2)
+        production = com_map(n_turns = 128)
+        production.add_yaml_merge([(0, anchors['map_px_production'])])
+        #
+        test = com_map(n_turns = 128)
+        test.add_yaml_merge([(0, anchors['map_px_test'])])
+        #
+        cmap_px = com_map(production = production, test = test)
+        #
+        comment = '''
+        Option sets for off-momentum chaos map calculation:'''
+        _yaml_append_map(calc_opts, 'cmap_px', cmap_px,
+                         before_comment=comment, before_indent=2)
 
-        #---------------------------------------------------------------------------
+        # ### Option sets for "tswa" ###
 
-        opts = com_map(
-            grid_name = anchors['use_map_xy_grid_name'],
-            n_turns = anchors['cmap_n_turns'])
-        comment = '\nOptions specific only for on-momentum chaos map calculation'
-        _yaml_append_map(
-            d, 'cmap_xy_calc_opts', opts,
-            before_comment=comment, before_indent=2)
-
-        #---------------------------------------------------------------------------
-
-        opts = com_map(
-            grid_name = anchors['use_map_px_grid_name'],
-            n_turns = anchors['cmap_n_turns'])
-        comment = '\nOptions specific only for off-momentum chaos map calculation'
-        _yaml_append_map(
-            d, 'cmap_px_calc_opts', opts,
-            before_comment=comment, before_indent=2)
-
-        #---------------------------------------------------------------------------
-
-        xy1 = com_map(abs_xmax = 1e-3, nx = 50, abs_ymax = 0.5e-3, ny = 50)
+        production = com_map(
+            n_turns = 1024, abs_xmax = 1e-3, nx = 50, abs_ymax = 0.5e-3, ny = 50)
         if example:
-            _yaml_append_map(xy1, 'x_offset', 1e-6,
+            _yaml_append_map(production, 'x_offset', 1e-6,
                              before_comment='Optional (below)', before_indent=6)
-            _yaml_append_map(xy1, 'y_offset', 1e-6)
-        xy1.yaml_set_anchor('tswa_xy1')
-        anchors['tswa_xy1'] = xy1
+            _yaml_append_map(production, 'y_offset', 1e-6)
+            _yaml_append_map(production, 'save_fft', False)
+            remote_opts = com_map(partition = sqss('short'), time = sqss('30:00'))
+            _yaml_append_map(production, 'remote_opts', remote_opts)
+        production.yaml_set_anchor('tswa_production')
+        anchors['tswa_production'] = production
         #
-        tswa_grids = com_map(xy1 = xy1)
+        tswa = com_map(production = production)
         #
         comment = '''
-        List of 1-D grid specs for tune-shift-with-amplitude calculation:'''
-        _yaml_append_map(d, 'tswa_grids', tswa_grids,
+        Option sets for tune-shift-with-amplitude calculation:'''
+        _yaml_append_map(calc_opts, 'tswa', tswa,
                          before_comment=comment, before_indent=2)
 
-        #---------------------------------------------------------------------------
+        # ### Option sets for "nonlin_chrom" ###
 
-        remote_opts = com_map(time = sqss('7:00'))
-        tswa_calc_opts = com_map(
-            grid_name = sqss('xy1'), n_turns = anchors['tune_n_turns'],
-            remote_opts = remote_opts)
+        production = com_map(
+            n_turns = 1024, delta_min = -4e-2, delta_max = +3e-2, ndelta = 100)
         if example:
-            _yaml_append_map(tswa_calc_opts, 'save_fft', False)
-        #
-        comment = 'Options specific only for tune-shift-with-amplitude calculation'
-        _yaml_append_map(d, 'tswa_calc_opts', tswa_calc_opts,
-                         before_comment=comment, before_indent=2)
-
-        #---------------------------------------------------------------------------
-
-        p1 = com_map(delta_min = -4e-2, delta_max = +3e-2, ndelta = 100)
-        if example:
-            _yaml_append_map(p1, 'x_offset', 1e-6,
+            _yaml_append_map(production, 'x_offset', 1e-6,
                              before_comment='Optional (below)', before_indent=6)
-            _yaml_append_map(p1, 'y_offset', 1e-6)
-            _yaml_append_map(p1, 'delta_offset', 0.0)
-        p1.yaml_set_anchor('p1')
-        anchors['p1'] = p1
+            _yaml_append_map(production, 'y_offset', 1e-6)
+            _yaml_append_map(production, 'delta_offset', 0.0)
+            _yaml_append_map(production, 'save_fft', False)
+            remote_opts = com_map(partition = sqss('short'), time = sqss('30:00'))
+            _yaml_append_map(production, 'remote_opts', remote_opts)
+        production.yaml_set_anchor('nonlin_chrom_production')
+        anchors['nonlin_chrom_production'] = production
         #
-        nonlin_chrom_grids = com_map(p1 = p1)
+        nonlin_chrom = com_map(production = production)
         #
         comment = '''
-        List of 1-D grid specs for nonlinear chromaticity calculation:'''
-        _yaml_append_map(d, 'nonlin_chrom_grids', nonlin_chrom_grids,
+        Option sets for nonlinear chromaticity calculation:'''
+        _yaml_append_map(calc_opts, 'nonlin_chrom', nonlin_chrom,
                          before_comment=comment, before_indent=2)
 
-        #---------------------------------------------------------------------------
+        # ### Option sets for "mom_aper" ###
 
-        remote_opts = com_map(time = sqss('7:00'))
-        nonlin_chrom_calc_opts = com_map(
-            grid_name = sqss('p1'), n_turns = anchors['tune_n_turns'],
-            remote_opts = remote_opts)
-        if example:
-            _yaml_append_map(nonlin_chrom_calc_opts, 'save_fft', False)
+        production = com_map(
+            n_turns = 1024, x_initial = 10e-6, y_initial = 10e-6,
+            delta_negative_start = -0.1e-2, delta_negative_limit = -5e-2,
+            delta_positive_start = +0.1e-2, delta_positive_limit = +5e-2,
+            init_delta_step_size = 5e-3,
+            s_start = 0.0, s_end = sqss('one_period'),
+            include_name_pattern = sqss('[QSO]*'),
+        )
+        production.yaml_set_anchor('mom_aper_production')
+        anchors['mom_aper_production'] = production
         #
-        comment = 'Options specific only for nonlinear chromaticity calculation'
-        _yaml_append_map(d, 'nonlin_chrom_calc_opts', nonlin_chrom_calc_opts,
+        test = com_map(n_turns = 16, include_name_pattern = sqss('[SO]*'))
+        test.add_yaml_merge([(0, anchors['mom_aper_production'])])
+        #
+        mom_aper = com_map(production = production, test = test)
+        #
+        comment = '''
+        Option sets for momentum aperture calculation:'''
+        _yaml_append_map(calc_opts, 'mom_aper', mom_aper,
+                         before_comment=comment, before_indent=2)
+
+        # ### Finally add "calc_opts" to "nonlin" ###
+
+        comment = '''
+        '''
+        _yaml_append_map(d, 'calc_opts', calc_opts,
+                         eol_comment='REQUIRED',
                          before_comment=comment, before_indent=2)
 
         #---------------------------------------------------------------------------
