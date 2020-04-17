@@ -3010,12 +3010,12 @@ def add_N_KICKS_alter_elements_blocks(ed: EleDesigner, N_KICKS: dict) -> None:
     """
 
     if N_KICKS is None:
-        N_KICKS = dict(KQUAD=20, KSEXT=20, CSBEND=20)
+        N_KICKS = dict(CSBEND=40, KQUAD=40, KSEXT=20, KOCT=20)
 
     for k, v in N_KICKS.items():
-        if k.upper() not in ('KQUAD', 'KSEXT', 'CSBEND'):
+        if k.upper() not in ('CSBEND', 'KQUAD', 'KSEXT', 'KOCT'):
             raise ValueError(f'The key "{k}" in N_KICKS dict is invalid. '
-                             f'Must be one of KQUAD, KSEXT, or CSBEND')
+                             f'Must be one of CSBEND, KQUAD, KSEXT, or KOCT')
         ed.add_block('alter_elements',
                      name='*', type=k.upper(), item='N_KICKS', value=v,
                      allow_missing_elements=True)
@@ -3026,8 +3026,8 @@ def add_transmute_blocks(ed: EleDesigner, transmute_elements: dict) -> None:
     if transmute_elements is None:
 
         actual_transmute_elems = dict(
-            SBEN='CSBEN', RBEN='CSBEN', QUAD='KQUAD', SEXT='KSEXT',
-            RFCA='MARK', SREFFECTS='MARK')
+            SBEN='CSBEND', RBEN='CSBEND', QUAD='KQUAD', SEXT='KSEXT',
+            OCTU='KOCT', RFCA='MARK', SREFFECTS='MARK')
     else:
 
         actual_transmute_elems = {}
