@@ -1065,8 +1065,16 @@ def calc_mom_aper(
         lattice_file_contents=file_contents,
         timestamp_ini=util.get_current_local_time_str(),
     )
+    input_dict['x_initial'] = x_initial
+    input_dict['y_initial'] = y_initial
+    input_dict['delta_negative_start'] = delta_negative_start
+    input_dict['delta_negative_limit'] = delta_negative_limit
+    input_dict['delta_positive_start'] = delta_positive_start
+    input_dict['delta_positive_limit'] = delta_positive_limit
+    input_dict['init_delta_step_size'] = init_delta_step_size
     input_dict['s_start'] = s_start
     input_dict['s_end'] = s_end
+    input_dict['include_name_pattern'] = include_name_pattern
 
     output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
     input_dict['output_file_type'] = output_file_type
@@ -1198,6 +1206,8 @@ def calc_mom_aper(
 def plot_mom_aper(output_filepath, title='', slim=None, deltalim=None):
     """"""
 
+    ret = {} # variable to be returned
+
     try:
         d = util.load_pgz_file(output_filepath)
         g = d['data']['mmap']['arrays']
@@ -1220,6 +1230,13 @@ def plot_mom_aper(output_filepath, title='', slim=None, deltalim=None):
     deltaNegative = deltaNegative[sort_inds]
     deltaPositive = deltaPositive[sort_inds]
 
+    delta_percent = {
+        '+': dict(min=np.min(deltaPositive) * 1e2,
+                  max=np.max(deltaPositive) * 1e2),
+        '-': dict(min=np.min(deltaNegative) * 1e2,
+                  max=np.max(deltaNegative) * 1e2)}
+    ret['delta_percent'] = delta_percent
+
     plt.figure()
     plt.plot(s, deltaNegative * 1e2, 'b-')
     plt.plot(s, deltaPositive * 1e2, 'r-')
@@ -1231,14 +1248,16 @@ def plot_mom_aper(output_filepath, title='', slim=None, deltalim=None):
     if deltalim is not None:
         plt.ylim([v * 1e2 for v in deltalim])
     mmap_info_title = r'${},\, {}\, [\%]$'.format(
-        fr'{np.min(deltaPositive)*1e2:.2f} < \delta_{{+}} < {np.max(deltaPositive)*1e2:.2f}',
-        fr'{np.min(deltaNegative)*1e2:.2f} < \delta_{{-}} < {np.max(deltaNegative)*1e2:.2f}',
+        fr'{delta_percent["+"]["min"]:.2f} < \delta_{{+}} < {delta_percent["+"]["max"]:.2f}',
+        fr'{delta_percent["-"]["min"]:.2f} < \delta_{{-}} < {delta_percent["-"]["max"]:.2f}',
     )
     if title != '':
         plt.title('\n'.join([title, mmap_info_title]), size=font_sz)
     else:
         plt.title(mmap_info_title, size=font_sz)
     plt.tight_layout()
+
+    return ret
 
 def calc_Touschek_lifetime(
     output_filepath, LTE_filepath, E_MeV, mmap_filepath, charge_C, emit_ratio,
