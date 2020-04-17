@@ -998,7 +998,7 @@ def plot_find_aper_nlines(output_filepath, title='', xlim=None, ylim=None):
         y = g['y']
         g = d['data']['aper']['scalars']
         area = g['Area']
-        neg_y_search = d['data']['input']['neg_y_search']
+        neg_y_search = d['input']['neg_y_search']
 
     except:
         f = h5py.File(output_filepath, 'r')
