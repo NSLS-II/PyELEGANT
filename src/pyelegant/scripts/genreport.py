@@ -6266,6 +6266,11 @@ class Report_NSLS2U_Default:
                 ws.write(next_row, col, fragments[0])
             else:
                 raise ValueError()
+
+            if col_name == 'US_space':
+                ws.write_comment(next_row, col, 'US := Upstream')
+            elif col_name == 'DS_space':
+                ws.write_comment(next_row, col, 'DS := Downstream')
         next_row += 1
 
         U0_GeV = physical_constants['electron mass energy equivalent in MeV'][0] / 1e3
