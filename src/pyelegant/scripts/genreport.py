@@ -7565,6 +7565,9 @@ class Report_NSLS2U_Default:
             ws.write(row, 2, self.lin_data[k], num_txt_fmts['0.00E+00'])
             row += 1
 
+        # Start wrting other nonlinear dynamics data
+        row = 0
+        col_offset = 4
 
         if os.path.exists(self.suppl_plot_data_filepath['tswa']):
 
@@ -7573,8 +7576,6 @@ class Report_NSLS2U_Default:
                 _, tswa_data = pickle.load(f)
 
             # Write header for tswa
-            row = 0
-            col_offset = 4
             nfmt = num_txt_fmts['0.00E+00']
             #
             ws.set_column(col_offset  , col_offset  , 11)
@@ -8325,7 +8326,7 @@ class Report_NSLS2U_Default:
                                      twiss_plot_captions[lat_type]):
 
                 if not skip_plots:
-                    pe.plot_twiss(output_filepath, **opts)
+                    pe.plot_twiss(output_filepath, print_scalars=[], **opts)
 
                 caption_list.append(plx.NoEscape(caption))
 
@@ -8990,7 +8991,9 @@ class Report_NSLS2U_Default:
         n_matched = len([
             elem_name for elem_name in elem_names
             if fnmatch.fnmatch(elem_name, calc_opts['include_name_pattern'])])
+        assert n_matched >= 1
         remote_opts['ntasks'] = min([remote_opts['ntasks'], n_matched])
+        assert remote_opts['ntasks'] >= 1
 
         pe.nonlin.calc_mom_aper(
             output_filepath, LTE_filepath, E_MeV, n_turns=n_turns,
@@ -9408,14 +9411,15 @@ class Report_NSLS2U_Default:
         _yaml_append_map(d2, 'one_period', com_seq())
         d3 = d2['one_period']
         #
-        m = com_map(print_scalars = [], right_margin_adj = 0.85)
+        m = com_map(right_margin_adj = 0.85)
         m.fa.set_flow_style()
         d3.append(m)
         #
-        zoom_in = com_map(print_scalars = [], right_margin_adj = 0.85, slim = [0, 9],
-                          disp_elem_names = {
-                              'bends': True, 'quads': True, 'sexts': True,
-                              'font_size': 8, 'extra_dy_frac': 0.05})
+        zoom_in = com_map(
+            right_margin_adj = 0.85, slim = [0, 9],
+            disp_elem_names = {
+                'bends': True, 'quads': True, 'sexts': True, 'octs': True,
+                'font_size': 8, 'extra_dy_frac': 0.05})
         zoom_in.fa.set_flow_style()
         zoom_in.yaml_set_anchor('zoom_in')
         anchors['zoom_in'] = zoom_in
@@ -9471,12 +9475,12 @@ class Report_NSLS2U_Default:
         #
         name_list = com_seq(['drift_elem_name_1', 'drift_elem_name_2'])
         name_list.fa.set_flow_style()
-        spec = com_map(name_list = name_list, multiplier = 2)
+        spec = com_map(name_list = name_list, multiplier = 2.0)
         _yaml_append_map(d3, 'LS', spec, eol_comment='Length for Long Straight')
         #
         name_list = com_seq(['drift_elem_name_1', 'drift_elem_name_2'])
         name_list.fa.set_flow_style()
-        spec = com_map(name_list = name_list, multiplier = 2)
+        spec = com_map(name_list = name_list, multiplier = 2.0)
         _yaml_append_map(d3, 'SS', spec, eol_comment='Length for Short Straight')
 
         _yaml_append_map(d2, 'floor_comparison', com_map())
@@ -9555,7 +9559,8 @@ class Report_NSLS2U_Default:
                 pdf_label = sqss(
                     r'Phase Advance btw. Disp. Bumps $(\Delta\nu_x, \Delta\nu_y)$'),
                 xlsx_label = com_map(**xlsx_label),
-                elem1 = elem1, elem2 = elem2)
+                elem1 = elem1, elem2 = elem2, multiplier = 1.0,
+            )
             _yaml_append_map(d3, 'MDISP 0&1', spec)
 
 
@@ -9573,7 +9578,7 @@ class Report_NSLS2U_Default:
                 pdf_label = sqss('Length of Some Consecutive Elements'),
                 xlsx_label = xlsx_label,
                 name_list = name_list,
-                multiplier = 2,
+                multiplier = 2.0,
             )
             _yaml_append_map(d3, 'some_consecutive_elements', spec)
 
