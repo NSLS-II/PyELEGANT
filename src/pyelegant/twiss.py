@@ -81,64 +81,106 @@ def _calc_twiss(
     run_local=True, remote_opts=None):
     """"""
 
-    if output_file_type is None:
-        # Auto-detect file type from "output_filepath"
-        if output_filepath.endswith(('.hdf5', '.h5')):
-            output_file_type = 'hdf5'
-        elif output_filepath.endswith('.pgz'):
-            output_file_type = 'pgz'
-        else:
-            raise ValueError(
-                ('"output_file_type" could NOT be automatically deduced from '
-                 '"output_filepath". Please specify "output_file_type".'))
-
-    if output_file_type.lower() not in ('hdf5', 'h5', 'pgz'):
-        raise ValueError('Invalid output file type: {}'.format(output_file_type))
-
     if calc_matrix_lin_chrom:
         assert parameters is not None
 
-    ele_contents = ''
+    if higher_order_chromaticity:
+        if concat_order != 3:
+            sys.stderr(('WARNING: When computing higher-order chromaticity, '
+                        '"concat_order" should be set to 3.'))
 
-    ele_contents += elebuilder.build_block_run_setup(
-        LTE_filepath, E_MeV, use_beamline=use_beamline, rootname=rootname,
-        magnets=magnets, semaphore_file=semaphore_file, parameters=parameters,
-        element_divisions=element_divisions)
+    with open(LTE_filepath, 'r') as f:
+        file_contents = f.read()
 
-    ele_contents += '''
-&run_control &end
-'''
-
-    if alter_elements_list is not None:
-        ele_contents += elebuilder.build_block_alter_elements(alter_elements_list)
-
-    ele_contents += elebuilder.build_block_twiss_output(
-        matched, filename=twi_filepath, radiation_integrals=radiation_integrals,
+    input_dict = dict(
+        matched=matched, LTE_filepath=os.path.abspath(LTE_filepath), E_MeV=E_MeV,
+        use_beamline=use_beamline, radiation_integrals=radiation_integrals,
         compute_driving_terms=compute_driving_terms, concat_order=concat_order,
-        higher_order_chromaticity=higher_order_chromaticity,
-        beta_x=betax0, alpha_x=alphax0, eta_x=etax0, etap_x=etaxp0,
-        beta_y=betay0, alpha_y=alphay0, eta_y=etay0, etap_y=etayp0)
+        higher_order_chromaticity=higher_order_chromaticity, rootname=rootname,
+        magnets=magnets, semaphore_file=semaphore_file, parameters=parameters,
+        element_divisions=element_divisions, macros=macros,
+        alter_elements_list=alter_elements_list,
+        calc_matrix_lin_chrom=calc_matrix_lin_chrom,
+        twi_filepath=twi_filepath, ele_filepath=ele_filepath,
+        del_tmp_files=del_tmp_files, run_local=run_local,
+        remote_opts=remote_opts,
+        lattice_file_contents=file_contents,
+        timestamp_ini=util.get_current_local_time_str(),
+    )
+    if not matched:
+        input_dict['betax0'] = betax0
+        input_dict['betay0'] = betay0
+        input_dict['alphax0'] = alphax0
+        input_dict['alphay0'] = alphay0
+        input_dict['etax0'] = etax0
+        input_dict['etay0'] = etay0
+        input_dict['etaxp0'] = etaxp0
+        input_dict['etayp0'] = etayp0
 
-    ele_contents += '''
-&bunched_beam &end
+    output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
+    input_dict['output_file_type'] = output_file_type
 
-&track &end
-'''
+    if output_file_type in ('hdf5', 'h5'):
+        util.save_input_to_hdf5(output_filepath, input_dict)
 
     if ele_filepath is None:
         tmp = tempfile.NamedTemporaryFile(
             dir=os.getcwd(), delete=False, prefix='tmpCalcTwi_', suffix='.ele')
         ele_filepath = os.path.abspath(tmp.name)
+        tmp.close()
 
-    util.robust_text_file_write(ele_filepath, ele_contents, nMaxTry=1)
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
-    tmp_filepaths = dict(
-        ele=ele_filepath,
-        twi=util.get_abspath(twi_filepath, ele_filepath, rootname=rootname)
-    )
-    tmp_filepaths.update(util.get_run_setup_output_abspaths(
-        ele_filepath, rootname=rootname,
-        magnets=magnets, semaphore_file=semaphore_file, parameters=parameters))
+    ed.add_block('run_setup',
+        lattice=LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline,
+        rootname=rootname, magnets=magnets, semaphore_file=semaphore_file,
+        parameters=parameters, element_divisions=element_divisions)
+
+    ed.add_newline()
+
+    ed.add_block('run_control')
+
+    ed.add_newline()
+
+    disable_watch_elem_d = dict(
+        name='*', type='WATCH', item='DISABLE', value=True,
+        allow_missing_elements=True)
+
+    if alter_elements_list is not None:
+        alter_elements_list += [disable_watch_elem_d]
+    else:
+        alter_elements_list = [disable_watch_elem_d]
+
+    for block in alter_elements_list:
+        ed.add_block('alter_elements', **block)
+
+    ed.add_newline()
+
+    twi_kwargs = dict(matched=matched, filename=twi_filepath,
+        radiation_integrals=radiation_integrals,
+        compute_driving_terms=compute_driving_terms, concat_order=concat_order,
+        higher_order_chromaticity=higher_order_chromaticity)
+    if not matched:
+        twi_kwargs['beta_x'] = betax0
+        twi_kwargs['beta_y'] = betay0
+        twi_kwargs['alpha_x'] = alphax0
+        twi_kwargs['alpha_y'] = alphay0
+        twi_kwargs['eta_x'] = etax0
+        twi_kwargs['eta_y'] = etay0
+        twi_kwargs['etap_x'] = etaxp0
+        twi_kwargs['etap_y'] = etayp0
+    ed.add_block('twiss_output', **twi_kwargs)
+
+    ed.add_newline()
+
+    ed.add_block('bunched_beam')
+
+    ed.add_newline()
+
+    ed.add_block('track')
+
+    ed.write()
+    #print(ed.actual_output_filepath_list)
 
     # Run Elegant
     if run_local:
@@ -164,12 +206,15 @@ def _calc_twiss(
                    print_stderr=std_print_enabled['err'],
                    output_filepaths=None)
 
-    output, meta = {}, {}
-    for k, v in tmp_filepaths.items():
-        try:
-            output[k], meta[k] = sdds.sdds2dicts(v)
-        except:
-            continue
+    #tmp_filepaths = ed.actual_output_filepath_list
+    #output, meta = {}, {}
+    #for k, v in tmp_filepaths.items():
+        #try:
+            #output[k], meta[k] = sdds.sdds2dicts(v)
+        #except:
+            #continue
+    _d = ed.load_sdds_output_files()
+    output, meta = _d['data'], _d['meta']
 
     if calc_matrix_lin_chrom:
         lin_chrom_nat = _calc_matrix_elem_linear_natural_chrom(
@@ -181,11 +226,15 @@ def _calc_twiss(
             output['lin_chrom_nat']['columns'][k] = v
             meta['lin_chrom_nat']['columns'][k] = {}
 
-    output_file_type = output_file_type.lower()
+    timestamp_fin = util.get_current_local_time_str()
 
     if output_file_type in ('hdf5', 'h5'):
         util.robust_sdds_hdf5_write(
-            output_filepath, [output, meta], nMaxTry=10, sleep=10.0)
+            output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
+        f = h5py.File(output_filepath, 'a')
+        f['timestamp_fin'] = timestamp_fin
+        f.close()
+
     elif output_file_type == 'pgz':
         mod_output = {}
         for k, v in output.items():
@@ -204,18 +253,29 @@ def _calc_twiss(
         util.robust_pgz_file_write(
             output_filepath, dict(
                 data=mod_output, meta=mod_meta,
+                input=input_dict, timestamp_fin=timestamp_fin,
                 _version_PyELEGANT=__version__['PyELEGANT'],
                 _version_ELEGANT=__version__['ELEGANT']),
             nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
 
+    tmp_filepaths = {'ele': ele_filepath}
+    for sdds_fp in ed.actual_output_filepath_list:
+        if sdds_fp.startswith('/dev/'):
+            continue
+        ext = sdds_fp.split('.')[-1]
+        tmp_filepaths[ext] = sdds_fp
+
     if del_tmp_files:
-        for k, fp in tmp_filepaths.items():
-            try:
-                os.remove(fp)
-            except:
-                print(f'Failed to delete "{fp}"')
+        for fp in tmp_filepaths.values():
+            if fp.startswith('/dev'):
+                continue
+            else:
+                try:
+                    os.remove(fp)
+                except:
+                    print(f'Failed to delete "{fp}"')
 
         return
     else:
