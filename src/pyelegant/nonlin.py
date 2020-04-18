@@ -2187,6 +2187,8 @@ def plot_chrom(
         deltas = d['deltas']
         nuxs = d['nuxs']
         nuys = d['nuys']
+        nuxs = smooth_nu_int_jump(nuxs, jump_thresh=0.5)
+        nuys = smooth_nu_int_jump(nuys, jump_thresh=0.5)
         if 'nux0' in d:
             nux0 = d['nux0']
             nuy0 = d['nuy0']
@@ -2211,6 +2213,8 @@ def plot_chrom(
         deltas = f['deltas'][()]
         nuxs = f['nuxs'][()]
         nuys = f['nuys'][()]
+        nuxs = smooth_nu_int_jump(nuxs, jump_thresh=0.5)
+        nuys = smooth_nu_int_jump(nuys, jump_thresh=0.5)
         if 'nux0' in f:
             nux0 = f['nux0'][()]
             nuy0 = f['nuy0'][()]
@@ -3072,6 +3076,47 @@ def _save_tswa_data(
     else:
         raise ValueError()
 
+def smooth_nu_int_jump(nu_array, jump_thresh=0.5):
+    """"""
+
+    assert jump_thresh > 0.0
+
+    nu_array = nu_array.copy()
+
+    for _ in range(nu_array.size):
+        nu_diffs = np.diff(nu_array)
+
+        nan_inds = np.isnan(nu_diffs)
+        nonnan_inds = ~nan_inds
+        nonnan_numinds = np.where(nonnan_inds)[0]
+
+        jumped_plus = np.zeros(nu_array.shape).astype(bool)
+        jumped_minus = np.zeros(nu_array.shape).astype(bool)
+
+        jumped_plus [nonnan_numinds+1] = (nu_diffs[nonnan_inds] > jump_thresh)
+        jumped_minus[nonnan_numinds+1] = (nu_diffs[nonnan_inds] < -jump_thresh)
+
+        jumped_plus = np.where(jumped_plus)[0]
+        jumped_minus = np.where(jumped_minus)[0]
+        if jumped_plus.size == 0 and jumped_minus.size == 0:
+            break
+        elif jumped_plus.size != 0:
+            nu_array[jumped_plus[0]:] -= 1.0
+        elif jumped_minus.size != 0:
+            nu_array[jumped_minus[0]:] += 1.0
+        else:
+            if jumped_plus[0] < jumped_minus[0]:
+                nu_array[jumped_plus[0]:] -= 1.0
+            elif jumped_plus[0] > jumped_minus[0]:
+                nu_array[jumped_minus[0]:] += 1.0
+            else:
+                raise RuntimeError('This should not happen. Check algorithm.')
+    else:
+        raise RuntimeError(
+            'Max # of shifting exceeded. This should not happen. Check algorithm.')
+
+    return nu_array
+
 def plot_tswa(
     output_filepath, title='', fit_abs_xmax=None, fit_abs_ymax=None,
     plot_xy0=True, x0lim=None, y0lim=None,
@@ -3138,6 +3183,9 @@ def plot_tswa(
         else:
             fft_d = None
         f.close()
+
+    nuxs = smooth_nu_int_jump(nuxs, jump_thresh=0.5)
+    nuys = smooth_nu_int_jump(nuys, jump_thresh=0.5)
 
     if use_time_domain_amplitude:
         Axs = time_domain_Axs
@@ -3733,6 +3781,10 @@ def plot_tswa_both_sides(
 
     if fft_d == {}:
         fft_d = None
+
+    for side in ['+', '-']:
+        nuxs[side] = smooth_nu_int_jump(nuxs[side], jump_thresh=0.5)
+        nuys[side] = smooth_nu_int_jump(nuys[side], jump_thresh=0.5)
 
     # Check consistency between the positive and negative results (i.e.,
     # see if the results are likley from the same lattice)
