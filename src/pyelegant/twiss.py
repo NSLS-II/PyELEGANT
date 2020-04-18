@@ -479,6 +479,7 @@ def plot_twiss(
         prof_center_y = - extra_dy * 0.6
         quad_height = extra_dy / 5.0
         sext_height = quad_height * 1.5
+        oct_height = quad_height * 1.75
         bend_half_height = quad_height/3.0
     ax1.axhline(0.0, color='k', linestyle='-.')
     ax2 = ax1.twinx()
@@ -577,6 +578,35 @@ def plot_twiss(
                 p = patches.Polygon(xy, closed=True, fill=True, color=c)
                 ax.add_patch(p)
 
+            elif elem_type in ('OCTU', 'KOCT'):
+
+                K3 = _get_param_val('K3', parameters, elem_name, elem_occur)
+                c = 'g'
+                if K3 >= 0.0: # Focusing Octupole
+                    bottom, mid_h, top = 0.0, oct_height / 2, oct_height
+                else: # Defocusing Octupole
+                    bottom, mid_h, top = -oct_height, -oct_height / 2, 0.0
+
+                # Shift vertically
+                bottom += prof_center_y
+                mid_h += prof_center_y
+                top += prof_center_y
+
+                mid_s = (prev_s + cur_s) / 2
+
+                if K3 >= 0.0: # Focusing Octupole
+                    xy = np.array([
+                        [prev_s, bottom], [prev_s, mid_h], [mid_s, top],
+                        [cur_s, mid_h], [cur_s, bottom]
+                    ])
+                else:
+                    xy = np.array([
+                        [prev_s, top], [prev_s, mid_h], [mid_s, bottom],
+                        [cur_s, mid_h], [cur_s, top]
+                    ])
+                p = patches.Polygon(xy, closed=True, fill=True, color=c)
+                ax.add_patch(p)
+
             elif elem_type in ('RBEND', 'SBEND', 'SBEN', 'CSBEND'):
                 bottom, top = -bend_half_height, bend_half_height
 
@@ -601,6 +631,13 @@ def plot_twiss(
         vis_s = twi_ar['s'][_vis]
 
         elem_names_to_show = disp_elem_names.get('elem_names', [])
+        if disp_elem_names.get('bends', False):
+            inds = np.where(vis_elem_types == 'RBEND')[0].tolist()
+            inds += np.where(vis_elem_types == 'RBEN')[0].tolist()
+            inds += np.where(vis_elem_types == 'SBEND')[0].tolist()
+            inds += np.where(vis_elem_types == 'SBEN')[0].tolist()
+            inds += np.where(vis_elem_types == 'CSBEND')[0].tolist()
+            elem_names_to_show += vis_elem_names[inds].tolist()
         if disp_elem_names.get('quads', False):
             inds = np.where(vis_elem_types == 'QUAD')[0].tolist()
             inds += np.where(vis_elem_types == 'KQUAD')[0].tolist()
@@ -609,12 +646,9 @@ def plot_twiss(
             inds = np.where(vis_elem_types == 'SEXT')[0].tolist()
             inds += np.where(vis_elem_types == 'KSEXT')[0].tolist()
             elem_names_to_show += vis_elem_names[inds].tolist()
-        if disp_elem_names.get('bends', False):
-            inds = np.where(vis_elem_types == 'RBEND')[0].tolist()
-            inds += np.where(vis_elem_types == 'RBEN')[0].tolist()
-            inds += np.where(vis_elem_types == 'SBEND')[0].tolist()
-            inds += np.where(vis_elem_types == 'SBEN')[0].tolist()
-            inds += np.where(vis_elem_types == 'CSBEND')[0].tolist()
+        if disp_elem_names.get('octs', False):
+            inds = np.where(vis_elem_types == 'OCTU')[0].tolist()
+            inds += np.where(vis_elem_types == 'KOCT')[0].tolist()
             elem_names_to_show += vis_elem_names[inds].tolist()
         elem_names_to_show = np.unique(elem_names_to_show).tolist()
 
