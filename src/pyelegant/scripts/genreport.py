@@ -7566,129 +7566,137 @@ class Report_NSLS2U_Default:
             row += 1
 
 
-        # Retrieve tracking-based tswa data
-        with open(self.suppl_plot_data_filepath['tswa'], 'rb') as f:
-            _, tswa_data = pickle.load(f)
+        if os.path.exists(self.suppl_plot_data_filepath['tswa']):
 
-        # Write header for tswa
-        row = 0
-        col_offset = 4
-        nfmt = num_txt_fmts['0.00E+00']
-        #
-        ws.set_column(col_offset  , col_offset  , 11)
-        ws.set_column(col_offset+1, col_offset+1, 12)
-        ws.set_column(col_offset+2, col_offset+2, 12)
-        ws.set_column(col_offset+3, col_offset+3, 12)
-        #
-        ws.write(row, col_offset, 'Tune Shift with Amplitude', bold)
-        row += 1
-        ws.write(row, col_offset+1, '&twiss_output', normal)
-        ws.write(row, col_offset+2, 'tracking (+)', normal)
-        ws.write(row, col_offset+3, f'tracking ({SYMBOL["minus"]})', normal)
-        row += 1
-        #
-        ws.write_rich_string(row, col_offset, *p_d(nux, Jx))
-        ws.write(row, col_offset+1, self.lin_data['dnux_dJx'], nfmt)
-        ws.write(row, col_offset+2, tswa_data['x']['+']['dnux_dJx0'], nfmt)
-        ws.write(row, col_offset+3, tswa_data['x']['-']['dnux_dJx0'], nfmt)
-        row += 1
-        ws.write_rich_string(row, col_offset, *p_d(nuy, Jx))
-        ws.write(row, col_offset+1, self.lin_data['dnux_dJy'], nfmt)
-        # ^ Note there is no "dnuy_dJx", so re-using self.lin_data['dnux_dJy'].
-        ws.write(row, col_offset+2, tswa_data['x']['+']['dnuy_dJx0'], nfmt)
-        ws.write(row, col_offset+3, tswa_data['x']['-']['dnuy_dJx0'], nfmt)
-        row += 1
-        ws.write_rich_string(row, col_offset, *p_d(nux, Jy))
-        ws.write(row, col_offset+1, self.lin_data['dnux_dJy'], nfmt)
-        ws.write(row, col_offset+2, tswa_data['y']['+']['dnux_dJy0'], nfmt)
-        ws.write(row, col_offset+3, tswa_data['y']['-']['dnux_dJy0'], nfmt)
-        row += 1
-        ws.write_rich_string(row, col_offset, *p_d(nuy, Jy))
-        ws.write(row, col_offset+1, self.lin_data['dnuy_dJy'], nfmt)
-        ws.write(row, col_offset+2, tswa_data['y']['+']['dnuy_dJy0'], nfmt)
-        ws.write(row, col_offset+3, tswa_data['y']['-']['dnuy_dJy0'], nfmt)
-        row += 1
+            # Retrieve tracking-based tswa data
+            with open(self.suppl_plot_data_filepath['tswa'], 'rb') as f:
+                _, tswa_data = pickle.load(f)
 
-        row += 1
-
-        # Retrieve nonlin_chrom data
-        with open(self.suppl_plot_data_filepath['nonlin_chrom'], 'rb') as f:
-            nonlin_chrom_data = pickle.load(f)
-
-        # Write header for nonlin_chrom
-        nfmt = num_txt_fmts['0.00E+00']
-        #
-        ws.write(row, col_offset, 'Nonlinear Chromaticity', bold)
-        row += 1
-        #
-        for iOrder, deriv_val in enumerate(
-            nonlin_chrom_data['fit_coeffs']['x'][::-1]):
-            if iOrder == 0:
-                frag = nux + [normal, ' ('] + delta + [normal, ' = 0)']
-            else:
-                frag = p_d(nux, delta, iOrder)
-            ws.write_rich_string(row, col_offset, *frag)
-            ws.write(row, col_offset+1, deriv_val, nfmt)
+            # Write header for tswa
+            row = 0
+            col_offset = 4
+            nfmt = num_txt_fmts['0.00E+00']
+            #
+            ws.set_column(col_offset  , col_offset  , 11)
+            ws.set_column(col_offset+1, col_offset+1, 12)
+            ws.set_column(col_offset+2, col_offset+2, 12)
+            ws.set_column(col_offset+3, col_offset+3, 12)
+            #
+            ws.write(row, col_offset, 'Tune Shift with Amplitude', bold)
             row += 1
-        for iOrder, deriv_val in enumerate(
-            nonlin_chrom_data['fit_coeffs']['y'][::-1]):
-            if iOrder == 0:
-                frag = nuy + [normal, ' ('] + delta + [normal, ' = 0)']
-            else:
-                frag = p_d(nuy, delta, iOrder)
-            ws.write_rich_string(row, col_offset, *frag)
-            ws.write(row, col_offset+1, deriv_val, nfmt)
+            ws.write(row, col_offset+1, '&twiss_output', normal)
+            ws.write(row, col_offset+2, 'tracking (+)', normal)
+            ws.write(row, col_offset+3, f'tracking ({SYMBOL["minus"]})', normal)
+            row += 1
+            #
+            ws.write_rich_string(row, col_offset, *p_d(nux, Jx))
+            ws.write(row, col_offset+1, self.lin_data['dnux_dJx'], nfmt)
+            ws.write(row, col_offset+2, tswa_data['x']['+']['dnux_dJx0'], nfmt)
+            ws.write(row, col_offset+3, tswa_data['x']['-']['dnux_dJx0'], nfmt)
+            row += 1
+            ws.write_rich_string(row, col_offset, *p_d(nuy, Jx))
+            ws.write(row, col_offset+1, self.lin_data['dnux_dJy'], nfmt)
+            # ^ Note there is no "dnuy_dJx", so re-using self.lin_data['dnux_dJy'].
+            ws.write(row, col_offset+2, tswa_data['x']['+']['dnuy_dJx0'], nfmt)
+            ws.write(row, col_offset+3, tswa_data['x']['-']['dnuy_dJx0'], nfmt)
+            row += 1
+            ws.write_rich_string(row, col_offset, *p_d(nux, Jy))
+            ws.write(row, col_offset+1, self.lin_data['dnux_dJy'], nfmt)
+            ws.write(row, col_offset+2, tswa_data['y']['+']['dnux_dJy0'], nfmt)
+            ws.write(row, col_offset+3, tswa_data['y']['-']['dnux_dJy0'], nfmt)
+            row += 1
+            ws.write_rich_string(row, col_offset, *p_d(nuy, Jy))
+            ws.write(row, col_offset+1, self.lin_data['dnuy_dJy'], nfmt)
+            ws.write(row, col_offset+2, tswa_data['y']['+']['dnuy_dJy0'], nfmt)
+            ws.write(row, col_offset+3, tswa_data['y']['-']['dnuy_dJy0'], nfmt)
             row += 1
 
-        row += 1
+            row += 1
 
-        # Retrieve xy_aper data
-        with open(self.suppl_plot_data_filepath['xy_aper'], 'rb') as f:
-            xy_aper_data = pickle.load(f)
+        if os.path.exists(self.suppl_plot_data_filepath['nonlin_chrom']):
 
-        # Write header for xy_aper
-        ws.write(row, col_offset, 'Dynamic Aperture', bold)
-        row += 1
+            # Retrieve nonlin_chrom data
+            with open(self.suppl_plot_data_filepath['nonlin_chrom'], 'rb') as f:
+                nonlin_chrom_data = pickle.load(f)
 
-        for plane in ['x', 'y']:
-            if plane == 'x':
-                min_max_list = ['min', 'max']
-            else:
-                if xy_aper_data['neg_y_search']:
-                    min_max_list = ['min', 'max']
+            # Write header for nonlin_chrom
+            nfmt = num_txt_fmts['0.00E+00']
+            #
+            ws.write(row, col_offset, 'Nonlinear Chromaticity', bold)
+            row += 1
+            #
+            for iOrder, deriv_val in enumerate(
+                nonlin_chrom_data['fit_coeffs']['x'][::-1]):
+                if iOrder == 0:
+                    frag = nux + [normal, ' ('] + delta + [normal, ' = 0)']
                 else:
-                    min_max_list = ['max']
-            for k in min_max_list:
-                frag = [italic, plane, sub, k, normal, ' (mm)']
+                    frag = p_d(nux, delta, iOrder)
                 ws.write_rich_string(row, col_offset, *frag)
-                ws.write(row, col_offset+1, xy_aper_data[f'{plane}_{k}'] * 1e3,
-                         num_txt_fmts['0.000'])
+                ws.write(row, col_offset+1, deriv_val, nfmt)
+                row += 1
+            for iOrder, deriv_val in enumerate(
+                nonlin_chrom_data['fit_coeffs']['y'][::-1]):
+                if iOrder == 0:
+                    frag = nuy + [normal, ' ('] + delta + [normal, ' = 0)']
+                else:
+                    frag = p_d(nuy, delta, iOrder)
+                ws.write_rich_string(row, col_offset, *frag)
+                ws.write(row, col_offset+1, deriv_val, nfmt)
                 row += 1
 
-        frag = [normal, 'Area (mm', sup, '2', normal, ')']
-        ws.write_rich_string(row, col_offset, *frag)
-        ws.write(row, col_offset+1, xy_aper_data['area'] * 1e6,
-                 num_txt_fmts['0.000'])
-        row += 1
+            row += 1
 
-        row += 1
+        if os.path.exists(self.suppl_plot_data_filepath['xy_aper']):
 
-        # Retrieve mom_aper data
-        with open(self.suppl_plot_data_filepath['mom_aper'], 'rb') as f:
-            mom_aper_data = pickle.load(f)
+            # Retrieve xy_aper data
+            with open(self.suppl_plot_data_filepath['xy_aper'], 'rb') as f:
+                xy_aper_data = pickle.load(f)
 
-        # Write header for mom_aper
-        ws.write(row, col_offset, 'Momentum Aperture', bold)
-        row += 1
+            # Write header for xy_aper
+            ws.write(row, col_offset, 'Dynamic Aperture', bold)
+            row += 1
 
-        for m, sign, symb in [
-            ('min', '+', '+'), ('max', '+', '+'),
-            ('min', '-', SYMBOL['minus']), ('max', '-', SYMBOL['minus'])]:
-            frag = [normal, f'{m} '] + delta + [sub, symb, normal, ' (%)']
+            for plane in ['x', 'y']:
+                if plane == 'x':
+                    min_max_list = ['min', 'max']
+                else:
+                    if xy_aper_data['neg_y_search']:
+                        min_max_list = ['min', 'max']
+                    else:
+                        min_max_list = ['max']
+                for k in min_max_list:
+                    frag = [italic, plane, sub, k, normal, ' (mm)']
+                    ws.write_rich_string(row, col_offset, *frag)
+                    ws.write(row, col_offset+1, xy_aper_data[f'{plane}_{k}'] * 1e3,
+                             num_txt_fmts['0.000'])
+                    row += 1
+
+            frag = [normal, 'Area (mm', sup, '2', normal, ')']
             ws.write_rich_string(row, col_offset, *frag)
-            ws.write(row, col_offset+1, mom_aper_data['delta_percent'][sign][m],
+            ws.write(row, col_offset+1, xy_aper_data['area'] * 1e6,
                      num_txt_fmts['0.000'])
             row += 1
+
+            row += 1
+
+        if os.path.exists(self.suppl_plot_data_filepath['mom_aper']):
+
+            # Retrieve mom_aper data
+            with open(self.suppl_plot_data_filepath['mom_aper'], 'rb') as f:
+                mom_aper_data = pickle.load(f)
+
+            # Write header for mom_aper
+            ws.write(row, col_offset, 'Momentum Aperture', bold)
+            row += 1
+
+            for m, sign, symb in [
+                ('min', '+', '+'), ('max', '+', '+'),
+                ('min', '-', SYMBOL['minus']), ('max', '-', SYMBOL['minus'])]:
+                frag = [normal, f'{m} '] + delta + [sub, symb, normal, ' (%)']
+                ws.write_rich_string(row, col_offset, *frag)
+                ws.write(row, col_offset+1, mom_aper_data['delta_percent'][sign][m],
+                         num_txt_fmts['0.000'])
+                row += 1
 
 
 
@@ -7778,8 +7786,12 @@ class Report_NSLS2U_Default:
             input_LTE_filename.replace('.lte', '_ZeroSexts.lte'))
 
         if (not os.path.exists(zeroSexts_LTE_filepath)) or regenerate:
-            alter_elements = dict(name='*', type='KSEXT', item='K2', value = 0.0)
-            alter_elements = dict(name='*', type='KOCT', item='K3', value = 0.0)
+            alter_elements = [
+                dict(name='*', type='KSEXT', item='K2', value = 0.0,
+                     allow_missing_elements=True),
+                dict(name='*', type='KOCT', item='K3', value = 0.0,
+                     allow_missing_elements=True)
+            ]
             pe.eleutil.save_lattice_after_alter_elements(
                 input_LTE_filepath, zeroSexts_LTE_filepath, alter_elements)
 
@@ -7955,6 +7967,8 @@ class Report_NSLS2U_Default:
                     elem_name_2 = elem_d['elem2']['name'].upper()
                     occur_2 = elem_d['elem2']['occur']
 
+                    multiplier = elem_d.get('multiplier', 1.0)
+
                     index_1 = np.where(
                         interm_array_data['elem_names_ring'] ==
                         elem_name_1)[0][occur_1]
@@ -7962,9 +7976,9 @@ class Report_NSLS2U_Default:
                         interm_array_data['elem_names_ring'] ==
                         elem_name_2)[0][occur_2]
                     _d[k2] = dict(
-                        x=(interm_array_data['psix_ring'][index_2] -
+                        x=multiplier * (interm_array_data['psix_ring'][index_2] -
                            interm_array_data['psix_ring'][index_1]) / (2 * np.pi),
-                        y=(interm_array_data['psiy_ring'][index_2] -
+                        y=multiplier * (interm_array_data['psiy_ring'][index_2] -
                            interm_array_data['psiy_ring'][index_1]) / (2 * np.pi),
                         pdf_label=elem_d['pdf_label'],
                         xlsx_label=elem_d['xlsx_label']
