@@ -4675,7 +4675,7 @@ def gen_report_obsolete(args):
 class Report_NSLS2U_Default:
     """"""
 
-    def __init__(self, user_conf=None, example_args=None):
+    def __init__(self, config_filepath, user_conf=None, example_args=None):
         """Constructor"""
 
         self.all_nonlin_calc_types = [
@@ -4692,6 +4692,7 @@ class Report_NSLS2U_Default:
 
         if user_conf:
 
+            self.config_filepath = config_filepath
             self.user_conf = user_conf
 
             report_version = self.user_conf.get('report_version', None)
@@ -4713,7 +4714,7 @@ class Report_NSLS2U_Default:
             self.build(twiss_plot_captions)
 
         else:
-            config_filepath, full_or_min, example_report_version = example_args
+            full_or_min, example_report_version = example_args
 
             if full_or_min == 'full':
                 conf = self.get_default_config(example_report_version, example=True)
@@ -7735,7 +7736,12 @@ class Report_NSLS2U_Default:
 
         self.LTE_contents = Path(input_LTE_filepath).read_text()
 
-        rootname = os.path.basename(input_LTE_filepath).replace('.lte', '')
+        if self.config_filepath.endswith('.yml'):
+            rootname = os.path.basename(self.config_filepath)[:(-len('.yml'))]
+        elif self.config_filepath.endswith('.yaml'):
+            rootname = os.path.basename(self.config_filepath)[:(-len('.yaml'))]
+        else:
+            raise ValueError('Config file name must end with ".yml" or ".yaml".')
         self.rootname = rootname
 
         report_folderpath = f'report_{rootname}'
@@ -10216,6 +10222,8 @@ def gen_report(args):
 
     config_filepath = args.config_filepath
 
+    assert config_filepath.endswith(('.yml', '.yaml'))
+
     if args.full_example_config or args.min_example_config:
         if args.full_example_config:
             report_class = args.full_example_config
@@ -10224,11 +10232,10 @@ def gen_report(args):
             report_class = args.min_example_config
             example_type = 'min'
 
-        example_args = [
-            config_filepath, example_type, args.example_report_version]
+        example_args = [example_type, args.example_report_version]
 
         if report_class == 'nsls2u_default':
-            Report_NSLS2U_Default(example_args=example_args)
+            Report_NSLS2U_Default(config_filepath, example_args=example_args)
         else:
             raise ValueError(f'Invalid "report_class": {report_class}')
 
@@ -10241,7 +10248,7 @@ def gen_report(args):
         user_conf = yml.load(Path(config_filepath).read_text())
 
         if user_conf['report_class'] == 'nsls2u_default':
-            Report_NSLS2U_Default(user_conf)
+            Report_NSLS2U_Default(config_filepath, user_conf=user_conf)
         else:
             print('\n# Available names for "report_class":')
             for name in ['nsls2u_default']:
