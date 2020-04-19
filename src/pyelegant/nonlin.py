@@ -176,14 +176,15 @@ def _calc_cmap(
     else:
         if remote_opts is None:
             remote_opts = dict(
-                use_sbatch=False, pelegant=True, job_name='cmap',
+                use_sbatch=True, pelegant=True, job_name='cmap',
                 output='cmap.%J.out', error='cmap.%J.err',
                 partition='normal', ntasks=50)
 
-        remote.run(remote_opts, ele_filepath, print_cmd=True,
-                   print_stdout=std_print_enabled['out'],
-                   print_stderr=std_print_enabled['err'],
-                   output_filepaths=None)
+        sbatch_info = remote.run(
+            remote_opts, ele_filepath, print_cmd=True,
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'],
+            output_filepaths=None)
 
     tmp_filepaths = dict(cmap=cmap_output_filepath)
     output, meta = {}, {}
@@ -200,6 +201,11 @@ def _calc_cmap(
             output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
         f = h5py.File(output_filepath, 'a')
         f['timestamp_fin'] = timestamp_fin
+        if sbatch_info is not None:
+            f['dt_total'] = sbatch_info['total']
+            f['dt_running'] = sbatch_info['running']
+            f['sbatch_nodes'] = sbatch_info['nodes']
+            f['ncores'] = sbatch_info['ncores']
         f.close()
 
     elif output_file_type == 'pgz':
@@ -217,14 +223,21 @@ def _calc_cmap(
                 mod_meta[k]['scalars'] = v['params']
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
+
+        output_dict = dict(
+            data=mod_output, meta=mod_meta,
+            input=input_dict, timestamp_fin=timestamp_fin,
+            _version_PyELEGANT=__version__['PyELEGANT'],
+            _version_ELEGANT=__version__['ELEGANT'],
+        )
+        if sbatch_info is not None:
+            output_dict['dt_total'] = sbatch_info['total']
+            output_dict['dt_running'] = sbatch_info['running']
+            output_dict['sbatch_nodes'] = sbatch_info['nodes']
+            output_dict['ncores'] = sbatch_info['ncores']
+
         util.robust_pgz_file_write(
-            output_filepath, dict(
-                data=mod_output, meta=mod_meta,
-                input=input_dict, timestamp_fin=timestamp_fin,
-                _version_PyELEGANT=__version__['PyELEGANT'],
-                _version_ELEGANT=__version__['ELEGANT'],
-                ),
-            nMaxTry=10, sleep=10.0)
+            output_filepath, output_dict, nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
 
@@ -576,14 +589,15 @@ def _calc_fma(
     else:
         if remote_opts is None:
             remote_opts = dict(
-                use_sbatch=False, pelegant=True, job_name='fma',
+                use_sbatch=True, pelegant=True, job_name='fma',
                 output='fma.%J.out', error='fma.%J.err',
                 partition='normal', ntasks=50)
 
-        remote.run(remote_opts, ele_filepath, print_cmd=True,
-                   print_stdout=std_print_enabled['out'],
-                   print_stderr=std_print_enabled['err'],
-                   output_filepaths=None)
+        sbatch_info = remote.run(
+            remote_opts, ele_filepath, print_cmd=True,
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'],
+            output_filepaths=None)
 
     tmp_filepaths = dict(fma=fma_output_filepath)
     output, meta = {}, {}
@@ -600,6 +614,11 @@ def _calc_fma(
             output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
         f = h5py.File(output_filepath, 'a')
         f['timestamp_fin'] = timestamp_fin
+        if sbatch_info is not None:
+            f['dt_total'] = sbatch_info['total']
+            f['dt_running'] = sbatch_info['running']
+            f['sbatch_nodes'] = sbatch_info['nodes']
+            f['ncores'] = sbatch_info['ncores']
         f.close()
 
     elif output_file_type == 'pgz':
@@ -617,14 +636,21 @@ def _calc_fma(
                 mod_meta[k]['scalars'] = v['params']
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
+
+        output_dict = dict(
+            data=mod_output, meta=mod_meta,
+            input=input_dict, timestamp_fin=timestamp_fin,
+            _version_PyELEGANT=__version__['PyELEGANT'],
+            _version_ELEGANT=__version__['ELEGANT'],
+        )
+        if sbatch_info is not None:
+            output_dict['dt_total'] = sbatch_info['total']
+            output_dict['dt_running'] = sbatch_info['running']
+            output_dict['sbatch_nodes'] = sbatch_info['nodes']
+            output_dict['ncores'] = sbatch_info['ncores']
+
         util.robust_pgz_file_write(
-            output_filepath, dict(
-                data=mod_output, meta=mod_meta,
-                input=input_dict, timestamp_fin=timestamp_fin,
-                _version_PyELEGANT=__version__['PyELEGANT'],
-                _version_ELEGANT=__version__['ELEGANT'],
-                ),
-            nMaxTry=10, sleep=10.0)
+            output_filepath, output_dict, nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
 
@@ -923,14 +949,15 @@ def calc_find_aper_nlines(
     else:
         if remote_opts is None:
             remote_opts = dict(
-                use_sbatch=False, pelegant=True, job_name='findaper',
+                use_sbatch=True, pelegant=True, job_name='findaper',
                 output='findaper.%J.out', error='findaper.%J.err',
                 partition='normal', ntasks=np.min([50, n_lines]))
 
-        remote.run(remote_opts, ele_filepath, print_cmd=True,
-                   print_stdout=std_print_enabled['out'],
-                   print_stderr=std_print_enabled['err'],
-                   output_filepaths=None)
+        sbatch_info = remote.run(
+            remote_opts, ele_filepath, print_cmd=True,
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'],
+            output_filepaths=None)
 
     tmp_filepaths = dict(aper=aper_output_filepath)
     output, meta = {}, {}
@@ -947,6 +974,11 @@ def calc_find_aper_nlines(
             output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
         f = h5py.File(output_filepath, 'a')
         f['timestamp_fin'] = timestamp_fin
+        if sbatch_info is not None:
+            f['dt_total'] = sbatch_info['total']
+            f['dt_running'] = sbatch_info['running']
+            f['sbatch_nodes'] = sbatch_info['nodes']
+            f['ncores'] = sbatch_info['ncores']
         f.close()
 
     elif output_file_type == 'pgz':
@@ -964,14 +996,21 @@ def calc_find_aper_nlines(
                 mod_meta[k]['scalars'] = v['params']
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
+
+        output_dict = dict(
+            data=mod_output, meta=mod_meta,
+            input=input_dict, timestamp_fin=timestamp_fin,
+            _version_PyELEGANT=__version__['PyELEGANT'],
+            _version_ELEGANT=__version__['ELEGANT'],
+        )
+        if sbatch_info is not None:
+            output_dict['dt_total'] = sbatch_info['total']
+            output_dict['dt_running'] = sbatch_info['running']
+            output_dict['sbatch_nodes'] = sbatch_info['nodes']
+            output_dict['ncores'] = sbatch_info['ncores']
+
         util.robust_pgz_file_write(
-            output_filepath, dict(
-                data=mod_output, meta=mod_meta,
-                input=input_dict, timestamp_fin=timestamp_fin,
-                _version_PyELEGANT=__version__['PyELEGANT'],
-                _version_ELEGANT=__version__['ELEGANT'],
-                ),
-            nMaxTry=10, sleep=10.0)
+            output_filepath, output_dict, nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
 
@@ -1139,14 +1178,15 @@ def calc_mom_aper(
     else:
         if remote_opts is None:
             remote_opts = dict(
-                use_sbatch=False, pelegant=True, job_name='momaper',
+                use_sbatch=True, pelegant=True, job_name='momaper',
                 output='momaper.%J.out', error='momaper.%J.err',
                 partition='normal', ntasks=50)
 
-        remote.run(remote_opts, ele_filepath, print_cmd=True,
-                   print_stdout=std_print_enabled['out'],
-                   print_stderr=std_print_enabled['err'],
-                   output_filepaths=None)
+        sbatch_info = remote.run(
+            remote_opts, ele_filepath, print_cmd=True,
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'],
+            output_filepaths=None)
 
     tmp_filepaths = dict(mmap=mmap_output_filepath)
     output, meta = {}, {}
@@ -1163,6 +1203,11 @@ def calc_mom_aper(
             output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
         f = h5py.File(output_filepath, 'a')
         f['timestamp_fin'] = timestamp_fin
+        if sbatch_info is not None:
+            f['dt_total'] = sbatch_info['total']
+            f['dt_running'] = sbatch_info['running']
+            f['sbatch_nodes'] = sbatch_info['nodes']
+            f['ncores'] = sbatch_info['ncores']
         f.close()
 
     elif output_file_type == 'pgz':
@@ -1180,14 +1225,21 @@ def calc_mom_aper(
                 mod_meta[k]['scalars'] = v['params']
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
+
+        output_dict = dict(
+            data=mod_output, meta=mod_meta,
+            input=input_dict, timestamp_fin=timestamp_fin,
+            _version_PyELEGANT=__version__['PyELEGANT'],
+            _version_ELEGANT=__version__['ELEGANT'],
+        )
+        if sbatch_info is not None:
+            output_dict['dt_total'] = sbatch_info['total']
+            output_dict['dt_running'] = sbatch_info['running']
+            output_dict['sbatch_nodes'] = sbatch_info['nodes']
+            output_dict['ncores'] = sbatch_info['ncores']
+
         util.robust_pgz_file_write(
-            output_filepath, dict(
-                data=mod_output, meta=mod_meta,
-                input=input_dict, timestamp_fin=timestamp_fin,
-                _version_PyELEGANT=__version__['PyELEGANT'],
-                _version_ELEGANT=__version__['ELEGANT'],
-                ),
-            nMaxTry=10, sleep=10.0)
+            output_filepath, output_dict, nMaxTry=10, sleep=10.0)
     else:
         raise ValueError()
 
@@ -4521,7 +4573,7 @@ def track(
     else:
 
         if remote_opts is None:
-            remote_opts = dict(use_sbatch=False)
+            remote_opts = dict(use_sbatch=True)
 
         if ('pelegant' in remote_opts) and (remote_opts['pelegant'] is not False):
             print('"pelegant" option in `remote_opts` must be False for nonlin.track()')
@@ -4533,10 +4585,11 @@ def track(
         # ^ If this is more than 1, you will likely see an error like "Unable to
         #   access file /.../tmp*.twi--file is locked (SDDS_InitializeOutput)"
 
-        remote.run(remote_opts, ele_filepath, print_cmd=print_cmd,
-                   print_stdout=std_print_enabled['out'],
-                   print_stderr=std_print_enabled['err'],
-                   output_filepaths=None)
+        sbatch_info = remote.run(
+            remote_opts, ele_filepath, print_cmd=print_cmd,
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'],
+            output_filepaths=None)
     #
     output, _ = sdds.sdds2dicts(watch_pathobj)
     #
@@ -4565,6 +4618,11 @@ def track(
         for coord in output_coordinates:
             f.create_dataset(coord, data=tbt[coord], **_kwargs)
         f['timestamp_fin'] = timestamp_fin
+        if sbatch_info is not None:
+            f['dt_total'] = sbatch_info['total']
+            f['dt_running'] = sbatch_info['running']
+            f['sbatch_nodes'] = sbatch_info['nodes']
+            f['ncores'] = sbatch_info['ncores']
         f.close()
 
     elif output_file_type == 'pgz':
@@ -4572,6 +4630,12 @@ def track(
                  _version_PyELEGANT=__version__['PyELEGANT'],
                  _version_ELEGANT=__version__['ELEGANT'],
                  )
+        if sbatch_info is not None:
+            d['dt_total'] = sbatch_info['total']
+            d['dt_running'] = sbatch_info['running']
+            d['sbatch_nodes'] = sbatch_info['nodes']
+            d['ncores'] = sbatch_info['ncores']
+
         for coord in output_coordinates:
             try:
                 d[coord] = tbt[coord]

@@ -282,9 +282,9 @@ def run(
                 remote_opts['exit_right_after_sbatch']
                 if 'exit_right_after_sbatch' in remote_opts else False)
 
-            job_ID_str, slurm_out_filepath, slurm_err_filepath = _sbatch(
-                sbatch_sh_filepath, job_name,
-                exit_right_after_submission=exit_right_after_sbatch)
+            (job_ID_str, slurm_out_filepath, slurm_err_filepath, sbatch_info
+             ) = _sbatch(sbatch_sh_filepath, job_name,
+                         exit_right_after_submission=exit_right_after_sbatch)
 
             if exit_right_after_sbatch:
                 output = dict(
@@ -292,6 +292,8 @@ def run(
                     slurm_out_filepath=slurm_out_filepath,
                     slurm_err_filepath=slurm_err_filepath)
                 return output
+            else:
+                output = sbatch_info
 
             if 'sbatch_err_check_tree' not in remote_opts:
                 # Will NOT check whether Elegant/Pelegant finished its run
@@ -415,6 +417,7 @@ def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False):
 
     sys.stdout.flush()
 
+    sbatch_info = None
     if not exit_right_after_submission:
 
         status_check_interval = 5.0 #10.0
@@ -423,16 +426,15 @@ def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False):
             interval=60.0, func=check_unable_to_open_mode_w_File_exists,
             job_name=job_name)
 
-        used_nodes = wait_for_completion(
+        sbatch_info = wait_for_completion(
             job_ID_str, status_check_interval, err_log_check=err_log_check)
-        #print('Used Nodes: {0}'.format(used_nodes))
 
     slurm_out_filepath = '{job_name}.{job_ID_str}.out'.format(
         job_name=job_name, job_ID_str=job_ID_str)
     slurm_err_filepath = '{job_name}.{job_ID_str}.err'.format(
         job_name=job_name, job_ID_str=job_ID_str)
 
-    return job_ID_str, slurm_out_filepath, slurm_err_filepath
+    return job_ID_str, slurm_out_filepath, slurm_err_filepath, sbatch_info
 
 def _update_sbatch_err_check_tree_kwargs(
     check_tree, output_filepaths_in_ele, slurm_err_filepath, abort_info):
@@ -633,6 +635,9 @@ def wait_for_completion(
 
     t0 = t_err_log = time.time()
 
+    dt_not_running = 0.0
+    not_running_t0 = None
+
     if timelimit_action is not None:
         assert callable(timelimit_action['abort_func'])
         timelimit_sec = \
@@ -643,15 +648,20 @@ def wait_for_completion(
 
     err_counter = 0
 
+    cmd = f'squeue --noheader --job={job_ID_str} -o "%.{len(job_ID_str)+1}i %.3t %.4C %R"'
+    num_cores = float('nan')
+    used_nodes = 'unknown'
     while True:
-        p = Popen('squeue -o "%.12i %R"',
-                  stdout=PIPE, stderr=PIPE, shell=True)
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
         out, err = p.communicate()
-        out = out.decode('utf-8')
-        err = err.decode('utf-8')
+        out, err = out.strip(), err.strip()
 
         if err:
             err_counter += 1
+
+            if err == 'slurm_load_jobs error: Invalid job id specified':
+                # The job is finished.
+                break
 
             if err_counter >= 10:
                 print(err)
@@ -665,45 +675,76 @@ def wait_for_completion(
         else:
             err_counter = 0
 
-        job_ID_res_list = [
-            L.split() for L in out.split('\n')[1:] if L.strip() != '']
-        if job_ID_res_list == []: # Job is finished
+        if out == '':
+            # The job is finished.
             break
+
+        L = out.splitlines()
+        assert len(L) == 1
+        _, state, num_cores, used_nodes = L[0].split()
+
+        if state == 'R':
+            if not_running_t0 is not None:
+                dt_not_running += time.time() - not_running_t0
+                not_running_t0 = None
         else:
-            job_ID_list, resource_list = zip(*job_ID_res_list)
+            if not_running_t0 is None:
+                not_running_t0 = time.time()
 
-        if job_ID_str not in job_ID_list: # Job is finished
-            break
-        else:
-            used_nodes = resource_list[job_ID_list.index(job_ID_str)]
+        if timelimit_sec is not None:
 
-            if timelimit_sec is not None:
+            dt = time.time() - t0
 
-                dt = time.time() - t0
+            if dt >= timelimit_sec:
 
-                if dt >= timelimit_sec:
+                print('Time limit of selected partition is nearing, '
+                      'so performing a graceful abort task now.')
+                timelimit_action['abort_func'](
+                    *timelimit_action.get('abort_func_args', ()))
 
-                    print('Time limit of selected partition is nearing, '
-                          'so performing a graceful abort task now.')
-                    timelimit_action['abort_func'](
-                        *timelimit_action.get('abort_func_args', ()))
+                break
 
+        if err_log_check is not None:
+
+            dt = time.time() - t_err_log
+
+            if dt >= err_log_check['interval']:
+                if err_log_check['func']('{}.{}.err'.format(
+                    err_log_check['job_name'], job_ID_str)):
                     break
 
-            if err_log_check is not None:
+                t_err_log = time.time()
 
-                dt = time.time() - t_err_log
+        time.sleep(status_check_interval)
 
-                if dt >= err_log_check['interval']:
-                    if err_log_check['func']('{}.{}.err'.format(
-                        err_log_check['job_name'], job_ID_str)):
-                        break
+    last_timestamp = time.time()
+    dt_total = last_timestamp - t0
+    if not_running_t0 is not None:
+        dt_not_running += last_timestamp - not_running_t0
+    dt_running = dt_total - dt_not_running
 
-                    t_err_log = time.time()
+    h_dt_total = get_human_friendly_time_duration_str(dt_total, fmt='.2f')
+    h_dt_running = get_human_friendly_time_duration_str(dt_running, fmt='.2f')
+    print(f'Elapsed: Total = {h_dt_total}; Running = {h_dt_running}')
 
-            time.sleep(status_check_interval)
+    ret = dict(
+        total=dt_total, running=dt_running, nodes=used_nodes, ncores=num_cores)
 
-    print('Total Elapsed [s]: {0:.1f}'.format(time.time() - t0))
+    return ret
+
+def get_human_friendly_time_duration_str(dt, fmt='.2f'):
+    """"""
+
+    template = f'{{val:{fmt}}} [{{unit}}]'
+
+    if dt < 60:
+        return template.format(val=dt, unit='s')
+    elif dt < 60 * 60:
+        return template.format(val=dt/60, unit='min')
+    elif dt < 60 * 60 * 24:
+        return template.format(val=dt/60/60, unit='hr')
+    else:
+        return template.format(val=dt/60/60/24, unit='day')
 
 #----------------------------------------------------------------------
 def get_cluster_time_limits():
