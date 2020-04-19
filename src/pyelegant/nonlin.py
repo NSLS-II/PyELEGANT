@@ -3667,7 +3667,7 @@ def plot_tswa(
     else:
         _, ax = plt.subplots()
     #sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=As * 1e3, marker='o', cmap='jet')
-    sc_obj = ax.scatter(_nuxs, _nuys, s=3, c=xy0s * 1e3, marker='o', cmap='jet')
+    sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=xy0s * 1e3, marker='o', cmap='jet')
     ax.set_xlim(footprint_nuxlim)
     ax.set_ylim(footprint_nuylim)
     ax.set_xlabel(r'$\nu_x$', size=font_sz)
@@ -4357,7 +4357,7 @@ def plot_tswa_both_sides(
     else:
         _, ax = plt.subplots()
     #sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=As * 1e3, marker='o', cmap='jet')
-    sc_obj = ax.scatter(_nuxs, _nuys, s=3, c=xy0s * 1e3, marker='o', cmap='jet')
+    sc_obj = ax.scatter(_nuxs, _nuys, s=10, c=xy0s * 1e3, marker='o', cmap='jet')
     ax.set_xlim(footprint_nuxlim)
     ax.set_ylim(footprint_nuylim)
     ax.set_xlabel(r'$\nu_x$', size=font_sz)
