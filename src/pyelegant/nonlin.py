@@ -2288,6 +2288,27 @@ def plot_chrom(
             fft_d = None
         f.close()
 
+    # Correct nuxs if smoothing shifted from nux0 by ~1
+    for i in np.argsort(np.abs(deltas)):
+        if np.isnan(nuxs[i]):
+            continue
+        else:
+            if nuxs[i] > nux0 + 0.5:
+                nuxs -= 1
+            elif nuxs[i] < nux0 - 0.5:
+                nuxs += 1
+            break
+    # Correct nuys if smoothing shifted from nuy0 by ~1
+    for i in np.argsort(np.abs(deltas)):
+        if np.isnan(nuys[i]):
+            continue
+        else:
+            if nuys[i] > nuy0 + 0.5:
+                nuys -= 1
+            elif nuys[i] < nuy0 - 0.5:
+                nuys += 1
+            break
+
     if deltalim is not None:
         delta_incl = np.logical_and(deltas >= np.min(deltalim),
                                     deltas <= np.max(deltalim))
@@ -3249,6 +3270,33 @@ def plot_tswa(
     nuxs += nux0_int
     nuys += nuy0_int
 
+    if scan_plane == 'x':
+        v0s = x0s
+    elif scan_plane == 'y':
+        v0s = y0s
+    else:
+        raise ValueError
+    # Correct nuxs if smoothing shifted from nux0 by ~1
+    for i in np.argsort(np.abs(v0s)):
+        if np.isnan(nuxs[i]):
+            continue
+        else:
+            if nuxs[i] > nux0 + 0.5:
+                nuxs -= 1
+            elif nuxs[i] < nux0 - 0.5:
+                nuxs += 1
+            break
+    # Correct nuys if smoothing shifted from nuy0 by ~1
+    for i in np.argsort(np.abs(v0s)):
+        if np.isnan(nuys[i]):
+            continue
+        else:
+            if nuys[i] > nuy0 + 0.5:
+                nuys -= 1
+            elif nuys[i] < nuy0 - 0.5:
+                nuys += 1
+            break
+
     twoJxs = Axs**2 / betax
     twoJys = Ays**2 / betay
     Jxs = twoJxs / 2
@@ -3834,10 +3882,6 @@ def plot_tswa_both_sides(
     if fft_d == {}:
         fft_d = None
 
-    for side in ['+', '-']:
-        nuxs[side] = smooth_nu_int_jump(nuxs[side], jump_thresh=0.5)
-        nuys[side] = smooth_nu_int_jump(nuys[side], jump_thresh=0.5)
-
     # Check consistency between the positive and negative results (i.e.,
     # see if the results are likley from the same lattice)
     assert scan_plane['+'] == scan_plane['-']
@@ -3857,6 +3901,10 @@ def plot_tswa_both_sides(
         assert np.all(y0s['-'] <= 0.0)
     else:
         raise ValueError
+
+    for side in ['+', '-']:
+        nuxs[side] = smooth_nu_int_jump(nuxs[side], jump_thresh=0.5)
+        nuys[side] = smooth_nu_int_jump(nuys[side], jump_thresh=0.5)
 
     if use_time_domain_amplitude:
         Axs = time_domain_Axs
@@ -3883,6 +3931,33 @@ def plot_tswa_both_sides(
 
         nuxs[side] += nux0_int
         nuys[side] += nuy0_int
+
+        if scan_plane == 'x':
+            v0s = x0s[side]
+        elif scan_plane == 'y':
+            v0s = y0s[side]
+        else:
+            raise ValueError
+        # Correct nuxs if smoothing shifted from nux0 by ~1
+        for i in np.argsort(np.abs(v0s)):
+            if np.isnan(nuxs[side][i]):
+                continue
+            else:
+                if nuxs[side][i] > nux0 + 0.5:
+                    nuxs[side] -= 1
+                elif nuxs[side][i] < nux0 - 0.5:
+                    nuxs[side] += 1
+                break
+        # Correct nuys if smoothing shifted from nuy0 by ~1
+        for i in np.argsort(np.abs(v0s)):
+            if np.isnan(nuys[side][i]):
+                continue
+            else:
+                if nuys[side][i] > nuy0 + 0.5:
+                    nuys[side] -= 1
+                elif nuys[side][i] < nuy0 - 0.5:
+                    nuys[side] += 1
+                break
 
         twoJxs[side] = Axs[side]**2 / betax
         twoJys[side] = Ays[side]**2 / betay
