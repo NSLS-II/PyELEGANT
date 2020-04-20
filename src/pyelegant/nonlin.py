@@ -3507,7 +3507,7 @@ def plot_tswa(
             if nuxlim:
                 ax1.set_ylim(nuxlim)
             else:
-                nuxlim = ax1.get_ylim()
+                nuxlim = np.array(ax1.get_ylim())
             interp_roi = x0_fit <= fit_abs_xmax
             fit_lines1 = ax1.plot(
                 x0_fit[interp_roi] * 1e3,
@@ -3522,7 +3522,7 @@ def plot_tswa(
             if nuylim:
                 ax2.set_ylim(nuylim)
             else:
-                nuylim = ax2.get_ylim()
+                nuylim = np.array(ax2.get_ylim())
             fit_lines2 = ax2.plot(
                 x0_fit[interp_roi] * 1e3,
                 nuy_fit0(Jx0_fit[interp_roi]) - offset0['fit_nuy'][interp_roi],
@@ -3539,7 +3539,7 @@ def plot_tswa(
             if nuxlim:
                 ax1.set_ylim(nuxlim)
             else:
-                nuxlim = ax1.get_ylim()
+                nuxlim = np.array(ax1.get_ylim())
             interp_roi = y0_fit <= fit_abs_ymax
             fit_lines1 = ax1.plot(
                 y0_fit[interp_roi] * 1e3,
@@ -3554,7 +3554,7 @@ def plot_tswa(
             if nuylim:
                 ax2.set_ylim(nuylim)
             else:
-                nuylim = ax2.get_ylim()
+                nuylim = np.array(ax2.get_ylim())
             fit_lines2 = ax2.plot(
                 y0_fit[interp_roi] * 1e3,
                 nuy_fit0(Jy0_fit[interp_roi]) - offset0['fit_nuy'][interp_roi],
@@ -3568,9 +3568,15 @@ def plot_tswa(
                 ax1.set_xlim([v * 1e3 for v in y0lim])
         ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
         ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
-        # Reset nux/nuy limits, which may have been changed by adding fitted lines
+        # Reset nux/nuy limits, which may have been changed by adding fitted
+        # lines. Also, the fitted lines for nux & nuy will often overlap each
+        # other with default ylim. So, here nux and nuy ranges are slided up
+        # and down, respectively.
+        nuxlim[0] -= (nuxlim[1] - nuxlim[0]) * 0.1
+        nuylim[1] += (nuylim[1] - nuylim[0]) * 0.1
         ax1.set_ylim(nuxlim)
         ax2.set_ylim(nuylim)
+        #
         if title != '':
             ax1.set_title(title, size=font_sz, pad=60)
         combined_lines = fit_lines1 + fit_lines2
@@ -3592,7 +3598,7 @@ def plot_tswa(
             if nuxlim:
                 ax1.set_ylim(nuxlim)
             else:
-                nuxlim = ax1.get_ylim()
+                nuxlim = np.array(ax1.get_ylim())
             interp_roi = Ax_fit <= fit_abs_xmax
             fit_lines1 = ax1.plot(
                 Ax_fit[interp_roi] * 1e3,
@@ -3607,7 +3613,7 @@ def plot_tswa(
             if nuylim:
                 ax2.set_ylim(nuylim)
             else:
-                nuylim = ax2.get_ylim()
+                nuylim = np.array(ax2.get_ylim())
             fit_lines2 = ax2.plot(
                 Ax_fit[interp_roi] * 1e3,
                 nuy_fit(Jx_fit[interp_roi]) - offset['fit_nuy'][interp_roi],
@@ -3624,7 +3630,7 @@ def plot_tswa(
             if nuxlim:
                 ax1.set_ylim(nuxlim)
             else:
-                nuxlim = ax1.get_ylim()
+                nuxlim = np.array(ax1.get_ylim())
             interp_roi = Ay_fit <= fit_abs_ymax
             fit_lines1 = ax1.plot(
                 Ay_fit[interp_roi] * 1e3,
@@ -3639,7 +3645,7 @@ def plot_tswa(
             if nuylim:
                 ax2.set_ylim(nuylim)
             else:
-                nuylim = ax2.get_ylim()
+                nuylim = np.array(ax2.get_ylim())
             fit_lines2 = ax2.plot(
                 Ay_fit[interp_roi] * 1e3,
                 nuy_fit(Jy_fit[interp_roi]) - offset['fit_nuy'][interp_roi],
@@ -3653,7 +3659,12 @@ def plot_tswa(
                 ax1.set_xlim([v * 1e3 for v in Aylim])
         ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
         ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
-        # Reset nux/nuy limits, which may have been changed by adding fitted lines
+        # Reset nux/nuy limits, which may have been changed by adding fitted
+        # lines. Also, the fitted lines for nux & nuy will often overlap each
+        # other with default ylim. So, here nux and nuy ranges are slided up
+        # and down, respectively.
+        nuxlim[0] -= (nuxlim[1] - nuxlim[0]) * 0.1
+        nuylim[1] += (nuylim[1] - nuylim[0]) * 0.1
         ax1.set_ylim(nuxlim)
         ax2.set_ylim(nuylim)
         if title != '':
@@ -4169,7 +4180,7 @@ def plot_tswa_both_sides(
             if nuxlim:
                 ax1.set_ylim(nuxlim)
             else:
-                nuxlim = ax1.get_ylim()
+                nuxlim = np.array(ax1.get_ylim())
             interp_roi = np.logical_and(
                 fit_xmin <= x0_fit_combo, x0_fit_combo <= fit_xmax)
             fit_lines1 = ax1.plot(
@@ -4187,7 +4198,7 @@ def plot_tswa_both_sides(
             if nuylim:
                 ax2.set_ylim(nuylim)
             else:
-                nuylim = ax2.get_ylim()
+                nuylim = np.array(ax2.get_ylim())
             fit_lines2 = ax2.plot(
                 x0_fit_combo[interp_roi] * 1e3,
                 nuy_fit0_combo[interp_roi] - offset0_combo['fit_nuy'][interp_roi],
@@ -4208,7 +4219,7 @@ def plot_tswa_both_sides(
             if nuxlim:
                 ax1.set_ylim(nuxlim)
             else:
-                nuxlim = ax1.get_ylim()
+                nuxlim = np.array(ax1.get_ylim())
             interp_roi = np.logical_and(
                 fit_ymin <= y0_fit_combo, y0_fit_combo <= fit_ymax)
             fit_lines1 = ax1.plot(
@@ -4226,7 +4237,7 @@ def plot_tswa_both_sides(
             if nuylim:
                 ax2.set_ylim(nuylim)
             else:
-                nuylim = ax2.get_ylim()
+                nuylim = np.array(ax2.get_ylim())
             fit_lines2 = ax2.plot(
                 y0_fit_combo[interp_roi] * 1e3,
                 nuy_fit0_combo[interp_roi] - offset0_combo['fit_nuy'][interp_roi],
@@ -4241,9 +4252,15 @@ def plot_tswa_both_sides(
                 ax1.set_xlim([v * 1e3 for v in y0lim])
         ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
         ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
-        # Reset nux/nuy limits, which may have been changed by adding fitted lines
+        # Reset nux/nuy limits, which may have been changed by adding fitted
+        # lines. Also, the fitted lines for nux & nuy will often overlap each
+        # other with default ylim. So, here nux and nuy ranges are slided up
+        # and down, respectively.
+        nuxlim[0] -= (nuxlim[1] - nuxlim[0]) * 0.1
+        nuylim[1] += (nuylim[1] - nuylim[0]) * 0.1
         ax1.set_ylim(nuxlim)
         ax2.set_ylim(nuylim)
+        #
         if title != '':
             ax1.set_title(title, size=font_sz, pad=60)
         combined_lines = fit_lines1 + fit_lines2
@@ -4296,7 +4313,7 @@ def plot_tswa_both_sides(
             if nuxlim:
                 ax1.set_ylim(nuxlim)
             else:
-                nuxlim = ax1.get_ylim()
+                nuxlim = np.array(ax1.get_ylim())
             interp_roi = np.logical_and(
                 fit_xmin <= Ax_fit_combo, Ax_fit_combo <= fit_xmax)
             fit_lines1 = ax1.plot(
@@ -4314,7 +4331,7 @@ def plot_tswa_both_sides(
             if nuylim:
                 ax2.set_ylim(nuylim)
             else:
-                nuylim = ax2.get_ylim()
+                nuylim = np.array(ax2.get_ylim())
             fit_lines2 = ax2.plot(
                 Ax_fit_combo[interp_roi] * 1e3,
                 nuy_fit_combo[interp_roi] - offset_combo['fit_nuy'][interp_roi],
@@ -4335,7 +4352,7 @@ def plot_tswa_both_sides(
             if nuxlim:
                 ax1.set_ylim(nuxlim)
             else:
-                nuxlim = ax1.get_ylim()
+                nuxlim = np.array(ax1.get_ylim())
             interp_roi = np.logical_and(
                 fit_ymin <= Ay_fit_combo, Ay_fit_combo <= fit_ymax)
             fit_lines1 = ax1.plot(
@@ -4353,7 +4370,7 @@ def plot_tswa_both_sides(
             if nuylim:
                 ax2.set_ylim(nuylim)
             else:
-                nuylim = ax2.get_ylim()
+                nuylim = np.array(ax2.get_ylim())
             fit_lines2 = ax2.plot(
                 Ay_fit_combo[interp_roi] * 1e3,
                 nuy_fit_combo[interp_roi] - offset_combo['fit_nuy'][interp_roi],
@@ -4368,9 +4385,15 @@ def plot_tswa_both_sides(
                 ax1.set_xlim([v * 1e3 for v in Aylim])
         ax1.set_ylabel(r'$\nu_x$', size=font_sz, color='b')
         ax2.set_ylabel(r'$\nu_y$', size=font_sz, color='r')
-        # Reset nux/nuy limits, which may have been changed by adding fitted lines
+        # Reset nux/nuy limits, which may have been changed by adding fitted
+        # lines. Also, the fitted lines for nux & nuy will often overlap each
+        # other with default ylim. So, here nux and nuy ranges are slided up
+        # and down, respectively.
+        nuxlim[0] -= (nuxlim[1] - nuxlim[0]) * 0.1
+        nuylim[1] += (nuylim[1] - nuylim[0]) * 0.1
         ax1.set_ylim(nuxlim)
         ax2.set_ylim(nuylim)
+        #
         if title != '':
             ax1.set_title(title, size=font_sz, pad=60)
         combined_lines = fit_lines1 + fit_lines2
