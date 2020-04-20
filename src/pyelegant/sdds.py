@@ -474,7 +474,7 @@ def dicts2sdds(
             if isinstance(v, float):
                 s = f'{v:.16g}'
                 param_type_list.append('double')
-            elif isinstance(v, (int, np.int8, np.int16, np.int32, np.int64)):
+            elif isinstance(v, (int, np.integer)):
                 s = f'{v:d}'
                 param_type_list.append('long')
             elif isinstance(v, str):
@@ -518,7 +518,7 @@ def dicts2sdds(
                         assert column_type_list[iCol] == 'double'
                     else:
                         column_type_list.append('double')
-                elif isinstance(v, int):
+                elif isinstance(v, (int, np.integer)):
                     s = f'{v:d}'
                     if iRow != 0:
                         assert column_type_list[iCol] == 'long'

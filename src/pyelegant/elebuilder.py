@@ -956,7 +956,7 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(other, (int, str)):
+        if isinstance(other, (int, np.integer, str)):
             copy.equation_repr = f'{self.equation_repr} + {other}'
         elif isinstance(other, float):
             copy.equation_repr = f'{self.equation_repr} + {other:{self.double_format}}'
@@ -994,7 +994,7 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(other, (int, str)):
+        if isinstance(other, (int, np.integer, str)):
             copy.equation_repr = f'{self.equation_repr} - ({other})'
         elif isinstance(other, float):
             copy.equation_repr = f'{self.equation_repr} - ({other:{self.double_format}})'
@@ -1013,7 +1013,7 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(left, (int, str)):
+        if isinstance(left, (int, np.integer, str)):
             copy.equation_repr = f'{left} - ({self.equation_repr})'
         elif isinstance(left, float):
             copy.equation_repr = f'{left:{self.double_format}} - ({self.equation_repr})'
@@ -1032,7 +1032,7 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(other, (int, str)):
+        if isinstance(other, (int, np.integer, str)):
             copy.equation_repr = f'({self.equation_repr}) * ({other})'
         elif isinstance(other, float):
             copy.equation_repr = f'({self.equation_repr}) * ({other:{self.double_format}})'
@@ -1051,7 +1051,7 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(left, (int, str)):
+        if isinstance(left, (int, np.integer, str)):
             copy.equation_repr = f'({left}) * ({self.equation_repr})'
         elif isinstance(left, float):
             copy.equation_repr = f'({left:{self.double_format}}) * ({self.equation_repr})'
@@ -1070,7 +1070,7 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(other, (int, str)):
+        if isinstance(other, (int, np.integer, str)):
             copy.equation_repr = f'({self.equation_repr}) / ({other})'
         elif isinstance(other, float):
             copy.equation_repr = f'({self.equation_repr}) / ({other:{self.double_format}})'
@@ -1089,7 +1089,7 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(left, (int, str)):
+        if isinstance(left, (int, np.integer, str)):
             copy.equation_repr = f'({left}) / ({self.equation_repr})'
         elif isinstance(left, float):
             copy.equation_repr = f'({left:{self.double_format}}) / ({self.equation_repr})'
@@ -1120,7 +1120,7 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(exponent, (int, str)):
+        if isinstance(exponent, (int, np.integer, str)):
             copy.equation_repr = f'({self.equation_repr})**({exponent})'
         elif isinstance(exponent, float):
             copy.equation_repr = f'({self.equation_repr})**({exponent:{self.double_format}})'
@@ -1139,7 +1139,7 @@ class InfixEquation():
 
         copy = self.copy()
 
-        if isinstance(base, (int, str)):
+        if isinstance(base, (int, np.integer, str)):
             copy.equation_repr = f'({base})**({self.equation_repr})'
         elif isinstance(base, float):
             copy.equation_repr = f'({base:{self.double_format}})**({self.equation_repr})'
@@ -2897,7 +2897,7 @@ class OptimizationTerm():
 
         if isinstance(final_val, InfixEquation):
             self._final = final_val
-        elif isinstance(final_val, (float, int)):
+        elif isinstance(final_val, (float, int, np.integer)):
             self._final = InfixEquation(str(final_val))
         elif isinstance(final_val, str):
             self._final = InfixEquation(final_val)
