@@ -1362,11 +1362,17 @@ def calc_Touschek_lifetime(
         # "mmap_filepath" is a valid SDDS file
         mmap_sdds_filepath = mmap_filepath
     except:
-        # "mmap_filepath" is NOT a valid SDDS file, and most likely an HDF5
-        # file generated from an SDDS file. Try to convert it back to a valid
-        # SDDS file.
-        d = util.load_sdds_hdf5_file(mmap_filepath)
-        mmap_d = d[0]['mmap']
+        # "mmap_filepath" is NOT a valid SDDS file. Try to see if the file is
+        # gzipped pickle file (.pgz) or HDF5 file generated from an SDDS file.
+        # Then convert it back to a valid SDDS file.
+        try:
+            # First try ".pgz"
+            d = util.load_pgz_file(mmap_filepath)
+            mmap_d = d['data']['mmap']
+        except:
+            # Then try HDF5
+            d = util.load_sdds_hdf5_file(mmap_filepath)
+            mmap_d = d[0]['mmap']
         mmap_sdds_filepath = '.'.join(twi_pgz_filepath.split('.')[:-1] + ['mmap'])
         sdds.dicts2sdds(
             mmap_sdds_filepath, params=mmap_d['scalars'],
