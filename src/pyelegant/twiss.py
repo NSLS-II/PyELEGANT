@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pylab as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.patches as patches
+import h5py
 
 from .local import run
 from .remote import remote
