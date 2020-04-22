@@ -1532,148 +1532,152 @@ class Report_NSLS2U_Default:
                     table.add_row([
                         plx.NoEscape(label_symb_unit), plx.NoEscape(val_str)])
 
-            with doc.create(plx.LongTable('l l')) as table:
-                table.add_hline()
-                table.add_row(['Voltage-independent Property', 'Value'])
-                table.add_hline()
-                table.end_table_header()
-                table.add_hline()
-                table.add_row((
-                    plx.MultiColumn(2, align='r', data='Continued onto Next Page'),))
-                table.add_hline()
-                table.end_table_footer()
-                table.add_hline()
-                table.end_table_last_footer()
+            if self.rf_dep_props is not None:
 
-                table.add_row([
-                    plx.NoEscape('Harmonic Number ()'),
-                    plx.NoEscape(f'{self.rf_dep_props["h"]:d}')])
-                table.add_row([
-                    plx.NoEscape('RF Frequency (MHz)'),
-                    plx.NoEscape(f'{self.rf_dep_props["f_rf"] / 1e6:.3f}')])
+                with doc.create(plx.LongTable('l l')) as table:
+                    table.add_hline()
+                    table.add_row(['Voltage-independent Property', 'Value'])
+                    table.add_hline()
+                    table.end_table_header()
+                    table.add_hline()
+                    table.add_row((
+                        plx.MultiColumn(2, align='r', data='Continued onto Next Page'),))
+                    table.add_hline()
+                    table.end_table_footer()
+                    table.add_hline()
+                    table.end_table_last_footer()
 
-            n_rf_volts = len(self.rf_dep_props['rf_volts'])
+                    table.add_row([
+                        plx.NoEscape('Harmonic Number ()'),
+                        plx.NoEscape(f'{self.rf_dep_props["h"]:d}')])
+                    table.add_row([
+                        plx.NoEscape('RF Frequency (MHz)'),
+                        plx.NoEscape(f'{self.rf_dep_props["f_rf"] / 1e6:.3f}')])
 
-            ncol = n_rf_volts + 1
-            with doc.create(plx.LongTable(' '.join(['l'] * ncol))) as table:
-                table.add_hline()
-                table.add_row(['Voltage-dependent Property', 'Values']
-                              + [''] * (ncol - 2))
-                table.add_hline()
-                table.end_table_header()
-                table.add_hline()
-                table.add_row((
-                    plx.MultiColumn(ncol, align='r',
-                                    data='Continued onto Next Page'),))
-                table.add_hline()
-                table.end_table_footer()
-                table.add_hline()
-                table.end_table_last_footer()
+                n_rf_volts = len(self.rf_dep_props['rf_volts'])
 
-                row_list = [plx.NoEscape('RF Voltage (MV)')]
-                for v in self.rf_dep_props['rf_volts']:
-                    row_list.append(plx.NoEscape(f'{v/1e6:.1f}'))
-                table.add_row(row_list)
+                ncol = n_rf_volts + 1
+                with doc.create(plx.LongTable(' '.join(['l'] * ncol))) as table:
+                    table.add_hline()
+                    table.add_row(['Voltage-dependent Property', 'Values']
+                                  + [''] * (ncol - 2))
+                    table.add_hline()
+                    table.end_table_header()
+                    table.add_hline()
+                    table.add_row((
+                        plx.MultiColumn(ncol, align='r',
+                                        data='Continued onto Next Page'),))
+                    table.add_hline()
+                    table.end_table_footer()
+                    table.add_hline()
+                    table.end_table_last_footer()
 
-                row_list = [plx.NoEscape('Synchrotron Tune ()')]
-                for v in self.rf_dep_props['nu_s']:
-                    row_list.append(plx.NoEscape(f'{v:.6f}'))
-                table.add_row(row_list)
-
-                row_list = [plx.NoEscape('Synchronous Phase (deg)')]
-                for v in self.rf_dep_props['synch_phases_deg']:
-                    row_list.append(plx.NoEscape(f'{v:.2f}'))
-                table.add_row(row_list)
-
-                row_list = [plx.NoEscape('RF Bucket Height (\%)')]
-                for v in self.rf_dep_props['rf_bucket_heights_percent']:
-                    row_list.append(plx.NoEscape(f'{v:.1f}'))
-                table.add_row(row_list)
-
-                row_list = [plx.NoEscape('Zero-Current RMS Bunch Length (mm)')]
-                for v in self.rf_dep_props['sigma_z_m']:
-                    row_list.append(plx.NoEscape(f'{v * 1e3:.2f}'))
-                table.add_row(row_list)
-
-                row_list = [plx.NoEscape('Zero-Current RMS Bunch Length (ps)')]
-                for v in self.rf_dep_props['sigma_z_ps']:
-                    row_list.append(plx.NoEscape(f'{v:.2f}'))
-                table.add_row(row_list)
-
-            with doc.create(plx.LongTable('l l')) as table:
-                table.add_hline()
-                table.add_row(['Beam Current Property', 'Value'])
-                table.add_hline()
-                table.end_table_header()
-                table.add_hline()
-                table.add_row((
-                    plx.MultiColumn(2, align='r', data='Continued onto Next Page'),))
-                table.add_hline()
-                table.end_table_footer()
-                table.add_hline()
-                table.end_table_last_footer()
-
-                table.add_row([
-                    plx.NoEscape('Number of Filled Bunches ()'),
-                    plx.NoEscape(f'{self.lifetime_props["num_filled_bunches"]:d}')])
-                table.add_row([
-                    plx.NoEscape('Total Beam Current (mA)'),
-                    plx.NoEscape(
-                        f'{self.lifetime_props["total_beam_current_mA"]:.0f}')])
-                table.add_row([
-                    plx.NoEscape('Beam Current per Bunch (mA)'),
-                    plx.NoEscape(f'{self.lifetime_props["beam_current_per_bunch_mA"]:.2f}')])
-                table.add_row([
-                    plx.NoEscape('Total Beam Charge ($\mu$C)'),
-                    plx.NoEscape(f'{self.lifetime_props["total_charge_uC"]:.2f}')])
-                table.add_row([
-                    plx.NoEscape('Beam Charge per Bunch (nC)'),
-                    plx.NoEscape(f'{self.lifetime_props["charge_per_bunch_nC"]:.2f}')])
-
-            ncol = n_rf_volts + 3
-            with doc.create(plx.LongTable(' '.join(['l'] * ncol))) as table:
-                table.add_hline()
-                table.add_row([
-                    plx.MultiColumn(
-                        3, align='c|',
-                        data=plx.NoEscape(r'\textbf{Beam Lifetime (hr)}')),
-                    plx.MultiColumn(
-                        ncol - 3, align='c', data = 'RF Voltage (MV)')])
-                table.add_hline(start=0, end=2)
-                table.add_row(
-                    [plx.NoEscape(r'$\epsilon_y$ (pm-rad)'),
-                     plx.NoEscape(r'$\epsilon_x$ (pm-rad)'),
-                     plx.MultiColumn(
-                         1, align='c|',
-                         data=plx.NoEscape(r'$\epsilon_y / \epsilon_x$ (\%)'))
-                     ] +
-                    [plx.NoEscape(f'{v/1e6:.1f}') for v in
-                     self.rf_dep_props['rf_volts']])
-                table.end_table_header()
-                table.add_hline()
-                table.add_row((
-                    plx.MultiColumn(ncol, align='r',
-                                    data='Continued onto Next Page'),))
-                table.add_hline()
-                table.end_table_footer()
-                table.add_hline()
-                table.end_table_last_footer()
-
-                table.add_hline()
-
-                for (eps_y, eps_x, kappa, tau_hr_array) in zip(
-                    self.lifetime_props['eps_ys'], self.lifetime_props['eps_xs'],
-                    self.lifetime_props['coupling_percent'],
-                    self.lifetime_props['tau_hrs']):
-                    row_list = [
-                        plx.NoEscape(f'{eps_y * 1e12:.1f}'),
-                        plx.NoEscape(f'{eps_x * 1e12:.1f}'),
-                        plx.MultiColumn(1, align='l|',
-                                        data=plx.NoEscape(f'{kappa:.1f}'))
-                    ]
-                    for tau_hr in tau_hr_array:
-                        row_list.append(plx.NoEscape(fr'\textbf{{{tau_hr:.2f}}}'))
+                    row_list = [plx.NoEscape('RF Voltage (MV)')]
+                    for v in self.rf_dep_props['rf_volts']:
+                        row_list.append(plx.NoEscape(f'{v/1e6:.1f}'))
                     table.add_row(row_list)
+
+                    row_list = [plx.NoEscape('Synchrotron Tune ()')]
+                    for v in self.rf_dep_props['nu_s']:
+                        row_list.append(plx.NoEscape(f'{v:.6f}'))
+                    table.add_row(row_list)
+
+                    row_list = [plx.NoEscape('Synchronous Phase (deg)')]
+                    for v in self.rf_dep_props['synch_phases_deg']:
+                        row_list.append(plx.NoEscape(f'{v:.2f}'))
+                    table.add_row(row_list)
+
+                    row_list = [plx.NoEscape('RF Bucket Height (\%)')]
+                    for v in self.rf_dep_props['rf_bucket_heights_percent']:
+                        row_list.append(plx.NoEscape(f'{v:.1f}'))
+                    table.add_row(row_list)
+
+                    row_list = [plx.NoEscape('Zero-Current RMS Bunch Length (mm)')]
+                    for v in self.rf_dep_props['sigma_z_m']:
+                        row_list.append(plx.NoEscape(f'{v * 1e3:.2f}'))
+                    table.add_row(row_list)
+
+                    row_list = [plx.NoEscape('Zero-Current RMS Bunch Length (ps)')]
+                    for v in self.rf_dep_props['sigma_z_ps']:
+                        row_list.append(plx.NoEscape(f'{v:.2f}'))
+                    table.add_row(row_list)
+
+            if self.lifetime_props is not None:
+
+                with doc.create(plx.LongTable('l l')) as table:
+                    table.add_hline()
+                    table.add_row(['Beam Current Property', 'Value'])
+                    table.add_hline()
+                    table.end_table_header()
+                    table.add_hline()
+                    table.add_row((
+                        plx.MultiColumn(2, align='r', data='Continued onto Next Page'),))
+                    table.add_hline()
+                    table.end_table_footer()
+                    table.add_hline()
+                    table.end_table_last_footer()
+
+                    table.add_row([
+                        plx.NoEscape('Number of Filled Bunches ()'),
+                        plx.NoEscape(f'{self.lifetime_props["num_filled_bunches"]:d}')])
+                    table.add_row([
+                        plx.NoEscape('Total Beam Current (mA)'),
+                        plx.NoEscape(
+                            f'{self.lifetime_props["total_beam_current_mA"]:.0f}')])
+                    table.add_row([
+                        plx.NoEscape('Beam Current per Bunch (mA)'),
+                        plx.NoEscape(f'{self.lifetime_props["beam_current_per_bunch_mA"]:.2f}')])
+                    table.add_row([
+                        plx.NoEscape('Total Beam Charge ($\mu$C)'),
+                        plx.NoEscape(f'{self.lifetime_props["total_charge_uC"]:.2f}')])
+                    table.add_row([
+                        plx.NoEscape('Beam Charge per Bunch (nC)'),
+                        plx.NoEscape(f'{self.lifetime_props["charge_per_bunch_nC"]:.2f}')])
+
+                ncol = n_rf_volts + 3
+                with doc.create(plx.LongTable(' '.join(['l'] * ncol))) as table:
+                    table.add_hline()
+                    table.add_row([
+                        plx.MultiColumn(
+                            3, align='c|',
+                            data=plx.NoEscape(r'\textbf{Beam Lifetime (hr)}')),
+                        plx.MultiColumn(
+                            ncol - 3, align='c', data = 'RF Voltage (MV)')])
+                    table.add_hline(start=0, end=2)
+                    table.add_row(
+                        [plx.NoEscape(r'$\epsilon_y$ (pm-rad)'),
+                         plx.NoEscape(r'$\epsilon_x$ (pm-rad)'),
+                         plx.MultiColumn(
+                             1, align='c|',
+                             data=plx.NoEscape(r'$\epsilon_y / \epsilon_x$ (\%)'))
+                         ] +
+                        [plx.NoEscape(f'{v/1e6:.1f}') for v in
+                         self.rf_dep_props['rf_volts']])
+                    table.end_table_header()
+                    table.add_hline()
+                    table.add_row((
+                        plx.MultiColumn(ncol, align='r',
+                                        data='Continued onto Next Page'),))
+                    table.add_hline()
+                    table.end_table_footer()
+                    table.add_hline()
+                    table.end_table_last_footer()
+
+                    table.add_hline()
+
+                    for (eps_y, eps_x, kappa, tau_hr_array) in zip(
+                        self.lifetime_props['eps_ys'], self.lifetime_props['eps_xs'],
+                        self.lifetime_props['coupling_percent'],
+                        self.lifetime_props['tau_hrs']):
+                        row_list = [
+                            plx.NoEscape(f'{eps_y * 1e12:.1f}'),
+                            plx.NoEscape(f'{eps_x * 1e12:.1f}'),
+                            plx.MultiColumn(1, align='l|',
+                                            data=plx.NoEscape(f'{kappa:.1f}'))
+                        ]
+                        for tau_hr in tau_hr_array:
+                            row_list.append(plx.NoEscape(fr'\textbf{{{tau_hr:.2f}}}'))
+                        table.add_row(row_list)
 
 
     def add_xlsx_config(self):
