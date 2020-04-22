@@ -176,7 +176,7 @@ def extract_slurm_opts(remote_opts):
                 slurm_opts[k] = '--{}={}'.format(k, ','.join(v))
 
         elif k in ('use_sbatch', 'exit_right_after_sbatch', 'pelegant',
-                   'sbatch_err_check_tree',):
+                   'sbatch_err_check_tree', 'diag_mode'):
             pass
         else:
             raise ValueError(f'Unknown slurm option keyword: {k}')
@@ -324,17 +324,18 @@ def run(
                     else:
                         raise ValueError('Unexpected flag: {}'.format(flag))
 
-        try:
-            os.remove(sbatch_sh_filepath)
-        except IOError:
-            print('* Failed to delete temporary sbatch shell file "{}"'.format(
-                sbatch_sh_filepath))
-
-        for fp in [slurm_out_filepath, slurm_err_filepath]:
+        if not remote_opts.get('diag_mode', False):
             try:
-                os.remove(fp)
+                os.remove(sbatch_sh_filepath)
             except IOError:
-                print(f'* Failed to delete SLURM file "{fp}"')
+                print('* Failed to delete temporary sbatch shell file "{}"'.format(
+                    sbatch_sh_filepath))
+
+            for fp in [slurm_out_filepath, slurm_err_filepath]:
+                try:
+                    os.remove(fp)
+                except IOError:
+                    print(f'* Failed to delete SLURM file "{fp}"')
 
     else:
         # "Elegant" module must be already loaded.
