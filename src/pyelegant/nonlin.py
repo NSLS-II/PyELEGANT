@@ -1086,6 +1086,7 @@ def calc_mom_aper(
     delta_negative_start=-1e-3, delta_negative_limit=-5e-2,
     delta_positive_start=+1e-3, delta_positive_limit=+5e-2,
     init_delta_step_size=5e-3, s_start=0.0, s_end=None, include_name_pattern=None,
+    steps_back=1, splits=2, split_step_divisor=10, verbosity=1,
     n_turns=1024, use_beamline=None, N_KICKS=None, transmute_elements=None,
     ele_filepath=None, output_file_type=None, del_tmp_files=True,
     run_local=False, remote_opts=None):
@@ -1114,6 +1115,10 @@ def calc_mom_aper(
     input_dict['s_start'] = s_start
     input_dict['s_end'] = s_end
     input_dict['include_name_pattern'] = include_name_pattern
+    input_dict['steps_back'] = steps_back
+    input_dict['splits'] = splits
+    input_dict['split_step_divisor'] = split_step_divisor
+    input_dict['verbosity'] = verbosity
 
     output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
     input_dict['output_file_type'] = output_file_type
@@ -1151,9 +1156,11 @@ def calc_mom_aper(
         output='%s.mmap', x_initial=x_initial, y_initial=y_initial,
         delta_negative_start=delta_negative_start, delta_negative_limit=delta_negative_limit,
         delta_positive_start=delta_positive_start, delta_positive_limit=delta_positive_limit,
-        delta_step_size=init_delta_step_size, include_name_pattern=include_name_pattern,
-        s_start=s_start, s_end=(s_end if s_end is not None else sys.float_info.max),
-        fiducialize=True, verbosity=True,
+        delta_step_size=init_delta_step_size, s_start=s_start,
+        s_end=(s_end if s_end is not None else sys.float_info.max),
+        steps_back=steps_back, splits=splits,
+        split_step_divisor=split_step_divisor,
+        fiducialize=True, verbosity=verbosity,
     )
     if include_name_pattern is not None:
         _block_opts['include_name_pattern'] = include_name_pattern
