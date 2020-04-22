@@ -5774,15 +5774,26 @@ class Report_NSLS2U_Default:
 
         production = com_map(
             n_turns = 1024, x_initial = 10e-6, y_initial = 10e-6,
-            delta_negative_start = -0.1e-2, delta_negative_limit = -5e-2,
-            delta_positive_start = +0.1e-2, delta_positive_limit = +5e-2,
+            delta_negative_start = 0.0, delta_negative_limit = -10e-2,
+            delta_positive_start = 0.0, delta_positive_limit = +10e-2,
             init_delta_step_size = 5e-3,
             include_name_pattern = sqss('[QSO]*'),
         )
+        if example:
+            _yaml_append_map(production, 'steps_back', 1,
+                             before_comment='Optional (below)', before_indent=6)
+            _yaml_append_map(production, 'splits', 2)
+            _yaml_append_map(production, 'split_step_divisor', 10)
         production.yaml_set_anchor('mom_aper_production')
         anchors['mom_aper_production'] = production
         #
-        test = com_map(n_turns = 16, include_name_pattern = sqss('[SO]*'))
+        test = com_map(
+            n_turns = 16, init_delta_step_size=2e-2,
+            include_name_pattern = sqss('S*'), splits = 1,
+            split_step_divisor = 2, verbosity = 4)
+        remote_opts = com_map(partition = sqss('short'), time = sqss('30:00'),
+                              diag_mode = False)
+        _yaml_append_map(test, 'remote_opts', remote_opts)
         test.add_yaml_merge([(0, anchors['mom_aper_production'])])
         #
         mom_aper = com_map(production = production, test = test)
