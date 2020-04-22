@@ -4512,7 +4512,7 @@ class Report_NSLS2U_Default:
             use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
             job_name=calc_type)
         remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
-        remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
+        remote_opts.update(pe.util.deepcopy_dict(calc_opts.pop('remote_opts', {})))
         #
         # Warning from ELEGANT: for best parallel efficiency in output_mode=0,
         # the number of elements divided by the number of processors should be
