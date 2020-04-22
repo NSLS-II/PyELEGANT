@@ -40,7 +40,8 @@ facility_json_filename = 'facility.json'
 version_filename = 'version.json'
 
 com_req_pakcages = [
-    'numpy', 'scipy', 'matplotlib', 'h5py', 'pylatex', 'ruamel.yaml', 'xlsxwriter']
+    'numpy', 'scipy', 'matplotlib', 'h5py', 'pylatex', 'ruamel.yaml',
+    'xlsxwriter', 'qtpy', 'pyqtgraph']
 
 if ('install' in sys.argv) or ('sdist' in sys.argv):
 
