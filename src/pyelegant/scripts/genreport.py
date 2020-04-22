@@ -5658,7 +5658,7 @@ class Report_NSLS2U_Default:
         production.yaml_set_anchor('map_xy_production')
         anchors['map_xy_production'] = production
         #
-        test = com_map(nx = 21, ny = 21)
+        test = com_map(n_turns = 256, nx = 21, ny = 21)
         #test.fa.set_flow_style()
         test.add_yaml_merge([(0, anchors['map_xy_production'])])
         test.yaml_set_anchor('map_xy_test')
@@ -5684,7 +5684,7 @@ class Report_NSLS2U_Default:
         production.yaml_set_anchor('map_px_production')
         anchors['map_px_production'] = production
         #
-        test = com_map(ndelta = 21, nx = 21)
+        test = com_map(n_turns = 256, ndelta = 21, nx = 21)
         #test.fa.set_flow_style()
         test.add_yaml_merge([(0, anchors['map_px_production'])])
         test.yaml_set_anchor('map_px_test')
