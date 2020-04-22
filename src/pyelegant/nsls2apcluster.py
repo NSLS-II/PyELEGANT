@@ -681,7 +681,10 @@ def wait_for_completion(
 
         L = out.splitlines()
         assert len(L) == 1
-        _, state, num_cores, used_nodes = L[0].split()
+        tokens = L[0].split()
+        state = tokens[1]
+        num_cores = int(tokens[2])
+        used_nodes = ' '.join(tokens[3:])
 
         if state == 'R':
             if not_running_t0 is not None:
