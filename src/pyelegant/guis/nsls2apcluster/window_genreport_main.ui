@@ -40,6 +40,9 @@
           <property name="title">
            <string>Calculation Types</string>
           </property>
+          <property name="checkable">
+           <bool>false</bool>
+          </property>
           <layout class="QHBoxLayout" name="horizontalLayout_3">
            <item>
             <widget class="QScrollArea" name="scrollArea">

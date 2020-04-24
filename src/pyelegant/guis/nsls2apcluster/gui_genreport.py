@@ -29,6 +29,156 @@ from functools import partial
         #""""""
         #return len(self.partition_list)
 
+class DialogCalcOptMap(QtWidgets.QDialog):
+    """"""
+
+    def __init__(self, xy_or_px, old_new_opt_set_names, opt_dict,
+                 *args, **kwargs):
+        """Constructor"""
+
+        if xy_or_px == 'xy':
+            self.is_xy = True
+        elif xy_or_px == 'px':
+            self.is_xy = False
+        else:
+            raise ValueError('"xy_or_px" must be either "xy" or "px"')
+
+        super().__init__(*args, **kwargs)
+        uic.loadUi(f'window_genreport_calc_opt_map_{xy_or_px}.ui', self)
+
+        self.lineEdit_opt_set_name.setText(old_new_opt_set_names['old'])
+
+        self.change_optional_settings_visibility(False)
+        self.checkBox_show_optional.clicked.connect(
+            self.change_optional_settings_visibility)
+
+        self.spinBox_n_turns.setValue(opt_dict['n_turns'])
+        self.lineEdit_xmin.setText(f'{opt_dict["xmin"]:.6g}')
+        self.lineEdit_xmax.setText(f'{opt_dict["xmax"]:.6g}')
+        self.spinBox_nx.setValue(opt_dict['nx'])
+        if self.is_xy:
+            self.lineEdit_ymin.setText(f'{opt_dict["ymin"]:.6g}')
+            self.lineEdit_ymax.setText(f'{opt_dict["ymax"]:.6g}')
+            self.spinBox_ny.setValue(opt_dict['ny'])
+        else:
+            self.lineEdit_delta_min.setText(f'{opt_dict["delta_min"] * 1e2:.6g}')
+            self.lineEdit_delta_max.setText(f'{opt_dict["delta_max"] * 1e2:.6g}')
+            self.spinBox_ndelta.setValue(opt_dict['ndelta'])
+
+        self.lineEdit_x_offset.setText(f'{opt_dict["x_offset"]:.6g}')
+        self.lineEdit_y_offset.setText(f'{opt_dict["y_offset"]:.6g}')
+        self.lineEdit_delta_offset.setText(f'{opt_dict["delta_offset"]:.6g}')
+
+        if 'remote_opts' in opt_dict:
+            self.groupBox_remote_opts.setChecked(True)
+            self.change_remote_opts_visibility(True)
+
+            remote_opts = opt_dict['remote_opts']
+            if 'partition' in remote_opts:
+                self.checkBox_partition.setChecked(True)
+                i = self.comboBox_partition.findText(remote_opts['partition'])
+                self.comboBox_partition.setCurrentIndex(i)
+            else:
+                self.checkBox_partition.setChecked(False)
+            if 'ntasks' in remote_opts:
+                self.checkBox_ntasks.setChecked(True)
+                self.spinBox_ntasks.setValue(remote_opts['ntasks'])
+            else:
+                self.checkBox_ntasks.setChecked(False)
+            if 'time' in remote_opts:
+                self.checkBox_time.setChecked(True)
+                self.lineEdit_time.setText(remote_opts['time'])
+            else:
+                self.checkBox_time.setChecked(False)
+            if 'diag_mode' in remote_opts:
+                self.checkBox_diag_mode.setChecked(True)
+                i = self.comboBox_diag_mode.findText(str(remote_opts['diag_mode']))
+                self.comboBox_diag_mode.setCurrentIndex(i)
+            else:
+                self.checkBox_diag_mode.setChecked(False)
+        else:
+            self.groupBox_remote_opts.setChecked(False)
+            self.change_remote_opts_visibility(False)
+
+        self.old_new_opt_set_names = old_new_opt_set_names
+        self.opt_dict = opt_dict
+
+        self.accepted.connect(self.update_opt_dict)
+
+        self.groupBox_remote_opts.clicked.connect(
+            self.change_remote_opts_visibility)
+
+    def change_remote_opts_visibility(self, visible):
+        """"""
+
+        obj_list_in_remote_opts = [
+            self.checkBox_partition, self.comboBox_partition,
+            self.checkBox_ntasks, self.spinBox_ntasks,
+            self.checkBox_time, self.lineEdit_time,
+            self.checkBox_diag_mode, self.comboBox_diag_mode,
+        ]
+
+        for obj in obj_list_in_remote_opts:
+            obj.setEnabled(visible)
+
+    def update_opt_dict(self):
+        """"""
+
+        self.old_new_opt_set_names['new'] = self.lineEdit_opt_set_name.text()
+
+        self.opt_dict['n_turns'] = self.spinBox_n_turns.value()
+        self.opt_dict['xmin'] = float(self.lineEdit_xmin.text())
+        self.opt_dict['xmax'] = float(self.lineEdit_xmax.text())
+        self.opt_dict['nx'] = self.spinBox_nx.value()
+        if self.is_xy:
+            self.opt_dict['ymin'] = float(self.lineEdit_ymin.text())
+            self.opt_dict['ymax'] = float(self.lineEdit_ymax.text())
+            self.opt_dict['ny'] = self.spinBox_ny.value()
+        else:
+            self.opt_dict['delta_min'] = float(
+                self.lineEdit_delta_min.text()) * 1e-2
+            self.opt_dict['delta_max'] = float(
+                self.lineEdit_delta_max.text()) * 1e-2
+            self.opt_dict['ndelta'] = self.spinBox_ndelta.value()
+
+        self.opt_dict['x_offset'] = float(self.lineEdit_x_offset.text())
+        self.opt_dict['y_offset'] = float(self.lineEdit_y_offset.text())
+        self.opt_dict['delta_offset'] = float(self.lineEdit_delta_offset.text())
+        if self.groupBox_remote_opts.isChecked():
+            remote_opts = {}
+            if self.checkBox_partition.isChecked():
+                remote_opts['partition'] = self.comboBox_partition.currentText()
+            if self.checkBox_ntasks.isChecked():
+                remote_opts['ntasks'] = self.spinBox_ntasks.value()
+            if self.checkBox_time.isChecked():
+                time_str = self.lineEdit_time.text().strip()
+                if time_str:
+                    remote_opts['time'] = time_str
+            if self.checkBox_diag_mode.isChecked():
+                remote_opts['diag_mode'] = bool(
+                    self.comboBox_diag_mode.currentText())
+            self.opt_dict['remote_opts'] = remote_opts
+        else:
+            if 'remote_opts' in self.opt_dict:
+                del self.opt_dict['remote_opts']
+
+    def change_optional_settings_visibility(self, visible):
+        """"""
+
+        obj_list = [
+            self.label_9, self.lineEdit_x_offset,
+            self.label_10, self.lineEdit_y_offset,
+            self.label_11, self.lineEdit_delta_offset,
+            self.groupBox_remote_opts,
+        ]
+
+        if visible:
+            for obj in obj_list:
+                obj.show()
+        else:
+            for obj in obj_list:
+                obj.hide()
+
 class DialogCalcOptXYAper(QtWidgets.QDialog):
     """"""
 
@@ -158,13 +308,47 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if calc_type == 'xy_aper':
             dialog = DialogCalcOptXYAper(old_new_opt_set_names, opts)
-            dialog.exec_()
-        elif calc_type == 'fmap_xy':
+        elif calc_type in ('fmap_xy', 'cmap_xy'):
+            dialog = DialogCalcOptMap('xy', old_new_opt_set_names, opts)
+        elif calc_type in ('fmap_px', 'cmap_px'):
+            dialog = DialogCalcOptMap('px', old_new_opt_set_names, opts)
+        elif calc_type == 'tswa':
+            raise NotImplementedError()
+        elif calc_type == 'nonlin_chrom':
+            raise NotImplementedError()
+        elif calc_type == 'mom_aper':
             raise NotImplementedError()
         else:
             raise ValueError('Invalid "calc_type"')
+        dialog.exec_()
 
-        print()
+        if old_new_opt_set_names['new'] is None:
+            accepted = False
+        else:
+            accepted = True
+
+        if accepted and (
+            old_new_opt_set_names['old'] != old_new_opt_set_names['new']):
+
+            self._calc_opts[calc_type][old_new_opt_set_names['new']] = \
+                self._calc_opts[calc_type][old_new_opt_set_names['old']]
+            del self._calc_opts[calc_type][old_new_opt_set_names['old']]
+
+            i = self.comboBox_nonlin_calc_opts_set_name.currentIndex()
+            self.comboBox_nonlin_calc_opts_set_name.removeItem(i)
+            self.comboBox_nonlin_calc_opts_set_name.insertItem(
+                i, old_new_opt_set_names['new'])
+            self.comboBox_nonlin_calc_opts_set_name.setCurrentIndex(i)
+
+            obj = getattr(self, f'comboBox_nonlin_{calc_type}_calc_opt_name')
+            cur_text = obj.currentText()
+            if cur_text == old_new_opt_set_names['old']:
+                cur_text = old_new_opt_set_names['new']
+            avail_set_names = list(self._calc_opts[calc_type])
+            obj.clear()
+            obj.addItems(avail_set_names)
+            new_i = obj.findText(cur_text)
+            obj.setCurrentIndex(new_i)
 
     def update_nonlin_calc_opts_set_name_selector_comboboxes(self):
         """"""
