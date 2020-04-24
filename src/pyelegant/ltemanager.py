@@ -36,8 +36,10 @@ class Lattice():
         self.LTE_text = Path(LTE_filepath).read_text()
         self.LTE_filepath = LTE_filepath
 
-        self._proc_LTE_text = '\n' + self.LTE_text
+        self.cleaned_LTE_text = '\n' + self.LTE_text
         # ^ adding "\n" at the beginning for easier search
+        self.cleaned_LTE_text = self.remove_comments(self.cleaned_LTE_text)
+        self.cleaned_LTE_text = self.delete_ampersands(self.cleaned_LTE_text)
 
         d = self.get_used_beamline_element_defs(
             used_beamline_name=used_beamline_name)
@@ -67,7 +69,9 @@ class Lattice():
         return re.sub(pattern, '', text)
 
     def get_all_elem_defs(self, LTE_text):
-        """"""
+        """
+        "LTE_text" must not contain comments and ampersands.
+        """
 
         matches = re.findall('\s+"?(\w+)"?[ \t]*:[ \t]*(\w+)[ \t]*,?(.*)',
                              ' '+LTE_text)
@@ -80,7 +84,9 @@ class Lattice():
         return elem_def
 
     def get_all_beamline_defs(self, LTE_text):
-        """"""
+        """
+        "LTE_text" must not contain comments and ampersands.
+        """
 
         matches = re.findall(
             '\s+("?\w+"?)[ \t]*:[ \t]*("?\w+"?)[ \t]*,?(.*)', LTE_text)
@@ -98,7 +104,9 @@ class Lattice():
         return beamline_def
 
     def get_used_beamline_name(self, LTE_text):
-        """"""
+        """
+        "LTE_text" must not contain comments and ampersands.
+        """
 
         matches = re.findall('\s+USE[ \t]*,[ \t"]*(\w+)[ \t\r\n"]*', LTE_text,
                              re.IGNORECASE)
@@ -170,17 +178,14 @@ class Lattice():
     def get_used_beamline_element_defs(self, used_beamline_name=''):
         """"""
 
-        self._proc_LTE_text = self.remove_comments(self._proc_LTE_text)
-        self._proc_LTE_text = self.delete_ampersands(self._proc_LTE_text)
-
-        all_elem_defs = self.get_all_elem_defs(self._proc_LTE_text)
-        all_beamline_defs = self.get_all_beamline_defs(self._proc_LTE_text)
+        all_elem_defs = self.get_all_elem_defs(self.cleaned_LTE_text)
+        all_beamline_defs = self.get_all_beamline_defs(self.cleaned_LTE_text)
 
         all_beamline_names = [name for name, _ in all_beamline_defs]
         all_elem_names     = [name for name, _, _ in all_elem_defs]
 
         if used_beamline_name == '':
-            used_beamline_name = self.get_used_beamline_name(self._proc_LTE_text)
+            used_beamline_name = self.get_used_beamline_name(self.cleaned_LTE_text)
 
         if used_beamline_name == '':
             print('Using the last defined beamline.')
