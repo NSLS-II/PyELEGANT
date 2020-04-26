@@ -1,5 +1,5 @@
 program_name = 'pyelegant'
-version = '0.4.0'
+version = '0.5.0'
 
 from setuptools import setup, find_packages
 from setuptools.command.install import install
@@ -38,6 +38,10 @@ import json
 
 facility_json_filename = 'facility.json'
 version_filename = 'version.json'
+
+package_data = {
+    'pyelegant': [facility_json_filename, version_filename]
+}
 
 com_req_pakcages = [
     'numpy', 'scipy', 'matplotlib', 'h5py', 'pylatex', 'ruamel.yaml',
@@ -79,16 +83,23 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
     if facility_name == 'nsls2apcluster':
         req_pakcages += ['mpi4py>=3', 'dill']
 
-    entry_points = dict(
-        console_scripts = [
-            'pyele_report = pyelegant.scripts.genreport:main',
-            'pyele_slurm_print_queue = pyelegant.scripts.nsls2apcluster.slurmutil:print_queue',
-            'pyele_slurm_print_load = pyelegant.scripts.nsls2apcluster.slurmutil:print_load',
-            'pyele_slurm_scancel_regex_jobname = pyelegant.scripts.nsls2apcluster.slurmutil:scancel_by_regex_jobname',
-        ]
-    )
+    entry_points = {}
     if facility_name == 'nsls2apcluster':
-        pass
+        entry_points = dict(
+            console_scripts = [
+                'pyele_report = pyelegant.scripts.genreport:main',
+                'pyele_slurm_print_queue = pyelegant.scripts.nsls2apcluster.slurmutil:print_queue',
+                'pyele_slurm_print_load = pyelegant.scripts.nsls2apcluster.slurmutil:print_load',
+                'pyele_slurm_scancel_regex_jobname = pyelegant.scripts.nsls2apcluster.slurmutil:scancel_by_regex_jobname',
+            ],
+            gui_scripts = [
+                # GUI
+                'pyele_gui_slurm = pyelegant.guis.nsls2apcluster.cluster_status.main:main',
+            ],
+        )
+
+    if facility_name == 'nsls2apcluster':
+        package_data['pyelegant.guis.nsls2apcluster.cluster_status'] = ['*.ui']
 
     other_setup_opts = dict(
         install_requires=req_pakcages,
@@ -107,9 +118,7 @@ setup(
     packages=find_packages('src'),
     package_dir={'': 'src'},
     #include_package_data = True,
-    package_data = {
-        'pyelegant': [facility_json_filename, version_filename]
-    },
+    package_data = package_data,
     zip_safe=False,
     description = 'Python Interface to ELEGANT',
     author = 'Yoshiteru Hidaka',
