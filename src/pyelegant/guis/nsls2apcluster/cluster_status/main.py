@@ -136,8 +136,10 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
 
         username = getpass.getuser()
 
-        cancel_type_ind = self.comboBox_scancel_type.currentIndex()
-        if cancel_type_ind == 0: # only selected
+        cancel_all_user_jobs = False
+
+        cancel_type = self.comboBox_scancel_type.currentText()
+        if cancel_type == 'Only Selected':
             sel_model = self.tableView_q.selectionModel()
             sel_rows = sel_model.selectedRows()
             job_ID_list = [
@@ -150,7 +152,7 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             informative_text = (f'Your {njobs_yours:d} selected jobs.')
             no_job_text = 'No jobs of yours have been selected.'
 
-        elif cancel_type_ind == 1: # all jobs shown in the table
+        elif cancel_type == 'All Shown Below': # all jobs shown in the table
             njobs = self.model_q.rowCount(0)
             job_ID_list = [
                 self.proxy_model_q.index(i, col_inds['JOBID']).data()
@@ -161,49 +163,70 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             informative_text = (
                 f'All of your {njobs_yours:d} jobs currently shown in the table.')
             no_job_text = 'No jobs of yours exist in the table.'
+
+        elif cancel_type == 'All of My Jobs':
+            cancel_all_user_jobs = True
         else:
             raise ValueError()
 
         QMessageBox = QtWidgets.QMessageBox
 
-        if njobs_yours == 0:
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Information)
-            msg.setText('No jobs to cancel.')
-            msg.setInformativeText(no_job_text)
-            msg.setWindowTitle('No jobs')
-            msg.setStyleSheet("QIcon{max-width: 100px;}")
-            msg.setStyleSheet("QLabel{min-width: 300px;}")
-            msg.exec_()
-            return
+        if cancel_all_user_jobs:
+            if self.checkBox_scancel_confirm.isChecked():
 
-        if self.checkBox_scancel_confirm.isChecked():
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Question)
+                msg.setText('Do you want to cancel all of your jobs?')
+                msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+                msg.setDefaultButton(QMessageBox.No)
+                msg.setWindowTitle('Confirm "scancel"')
+                msg.setStyleSheet("QIcon{max-width: 100px;}")
+                msg.setStyleSheet("QLabel{min-width: 300px;}")
+                reply = msg.exec_()
 
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Question)
-            msg.setText('Do you want to cancel the follwoing jobs?')
-            msg.setInformativeText(informative_text)
-            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-            msg.setDefaultButton(QMessageBox.No)
-            msg.setWindowTitle('Confirm "scancel"')
-            msg.setStyleSheet("QIcon{max-width: 100px;}")
-            msg.setStyleSheet("QLabel{min-width: 300px;}")
-            reply = msg.exec_()
+                if reply == QMessageBox.No:
+                    return
 
-            if reply == QMessageBox.No:
+            cmd = f'scancel -u {username}'
+        else:
+            if njobs_yours == 0:
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Information)
+                msg.setText('No jobs to cancel.')
+                msg.setInformativeText(no_job_text)
+                msg.setWindowTitle('No jobs')
+                msg.setStyleSheet("QIcon{max-width: 100px;}")
+                msg.setStyleSheet("QLabel{min-width: 300px;}")
+                msg.exec_()
                 return
 
-        cmd = 'scancel ' + ' '.join(job_ID_list)
+            if self.checkBox_scancel_confirm.isChecked():
+
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Question)
+                msg.setText('Do you want to cancel the follwoing jobs?')
+                msg.setInformativeText(informative_text)
+                msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+                msg.setDefaultButton(QMessageBox.No)
+                msg.setWindowTitle('Confirm "scancel"')
+                msg.setStyleSheet("QIcon{max-width: 100px;}")
+                msg.setStyleSheet("QLabel{min-width: 300px;}")
+                reply = msg.exec_()
+
+                if reply == QMessageBox.No:
+                    return
+
+            cmd = 'scancel ' + ' '.join(job_ID_list)
+
         #print(f'Executing "$ {cmd}"')
         self.statusbar.showMessage(f'Executing "$ {cmd}"')
-        if False:
+        if True:
             p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
             out, err = p.communicate()
             print(out)
             if err:
                 print('** stderr **')
                 print(err)
-
 
     def update_edit_q_cmd_suppl(self, cmd_type):
         """"""
