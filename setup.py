@@ -40,7 +40,8 @@ facility_json_filename = 'facility.json'
 version_filename = 'version.json'
 
 package_data = {
-    'pyelegant': [facility_json_filename, version_filename]
+    'pyelegant': [facility_json_filename, version_filename,
+                  'Touschek_F_interpolator.pkl']
 }
 
 com_req_pakcages = [

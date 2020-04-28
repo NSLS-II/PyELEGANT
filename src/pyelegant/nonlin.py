@@ -3,12 +3,15 @@ import os
 from pathlib import Path
 import numpy as np
 import scipy.constants as PHYSCONST
+from scipy.integrate import romberg
+from scipy.interpolate import PchipInterpolator
 import matplotlib.pylab as plt
 import tempfile
 import h5py
 import shlex
 from subprocess import Popen, PIPE
 import time
+import pickle
 
 from .local import run
 from .remote import remote
@@ -1410,7 +1413,7 @@ def calc_Touschek_lifetime(
         print('ERROR:')
         print(err)
 
-    output_tmp_filepaths = dict(life=life_filepath)
+    output_tmp_filepaths = dict(life=life_filepath, twi=tmp_filepaths['twi'])
     output, meta = {}, {}
     for k, v in output_tmp_filepaths.items():
         try:
@@ -1465,6 +1468,77 @@ def calc_Touschek_lifetime(
                     print(f'Failed to delete "{fp}"')
 
     return output_filepath
+
+def generate_Touschek_F_interpolator():
+    """"""
+
+    ndiv = 121
+    xarray = np.logspace(-3, 2, ndiv)
+    Farray = np.full(xarray.shape, np.nan)
+    for _i, x in enumerate(xarray):
+        func = lambda u, x=x: \
+            (1.0/u - np.log(1.0/u)/2.0 - 1.0) * np.exp(-x/u) if u > 0.0 else 0.0
+        Farray[_i] = romberg(
+            func, 0.0, 1.0, args=(), tol=1e-16, #tol=1e-10,
+            rtol=1e-10,
+            show=False, divmax=20, vec_func=False)
+    xasymp_array = np.logspace(-3, -2, 11)
+    #
+    plt.figure()
+    plt.loglog(xarray, Farray, 'b-')
+    Eulers_number = 0.5772
+    plt.loglog(xasymp_array, np.log(Eulers_number/xasymp_array)-3.0/2.0, 'r-')
+    plt.grid(True)
+    plt.tight_layout()
+
+    valid = (Farray > 1e-10)
+
+    interp = PchipInterpolator(
+        xarray[valid], Farray[valid], extrapolate=False)
+    #
+    plt.figure()
+    _plot_func = plt.loglog
+    #_plot_func = plt.plot
+    _plot_func(xarray, Farray, 'b-')
+    Eulers_number = 0.5772
+    _plot_func(xasymp_array,
+               np.log(Eulers_number/xasymp_array)-3.0/2.0, 'r-')
+    _plot_func(xarray, interp(xarray), 'k:')
+    if True:
+        ext_xarray = np.logspace(-6, 3, 1000)
+        F_interp = get_Touschek_F_interpolator()
+        _plot_func(ext_xarray, F_interp(ext_xarray), 'm:')
+    plt.grid(True)
+    plt.tight_layout()
+
+    d = dict(pchip_interp=interp, xmin=np.min(xarray[valid]),
+             xmax=np.max(xarray[valid]))
+    with open('Touschek_F_interpolator.pkl', 'wb') as f:
+        pickle.dump(d, f)
+
+def get_Touschek_F_interpolator():
+    """"""
+
+    with open(Path(__file__).parent.joinpath(
+        'Touschek_F_interpolator.pkl'), 'rb') as f:
+        d = pickle.load(f)
+
+    def interpolator(xarray):
+
+        xarray = np.array(xarray)
+
+        Farray = d['pchip_interp'](xarray)
+
+        Farray[xarray > d['xmax']] = 0.0
+
+        Eulers_number = 0.5772
+        asymp_range = (xarray < d['xmin'])
+        Farray[asymp_range] = np.log(
+            Eulers_number / xarray[asymp_range]) - 3 / 2
+
+        return Farray
+
+    return interpolator
 
 def plot_Touschek_lifetime(output_filepath, title='', slim=None):
     """"""
