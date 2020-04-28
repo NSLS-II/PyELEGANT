@@ -112,6 +112,8 @@ class Report_NSLS2U_Default:
 
             self.build(twiss_plot_captions)
 
+            print('\n* Finished writing a PDF/Excel report.')
+
         else:
             full_or_min, example_report_version = example_args
 
@@ -634,7 +636,7 @@ class Report_NSLS2U_Default:
                 'n_periods_in_ring', # Number of super-periods for a full ring
                 ['req_props', 'floor_comparison', 'LS'],
                 ['req_props', 'floor_comparison', 'SS'],
-                'frev' # Revolution frequency
+                'f_rev' # Revolution frequency
             ]
 
             for spec in conf['lattice_props'].get(
@@ -4918,6 +4920,12 @@ class Report_NSLS2U_Default:
                 ]
                 if False: print(cmd_list)
                 result, err, returncode = pe.util.chained_Popen(cmd_list)
+            elif False: # WRONG. This may overestimate/underestimate lifetime
+                # as "mmap" is not extended to the whole ring. It appears that
+                # the final momentum aperture value in "mmap" is simply copied
+                # over to the rest of the ring.
+                import shutil
+                shutil.copy(mmap_sdds_filepath_cell, mmap_sdds_filepath_ring)
             else:
                 # Avoid "sddscombine" & "sddsprocess". Do this mmap data
                 # extension within this Python script.
@@ -4967,6 +4975,36 @@ class Report_NSLS2U_Default:
 
             charge_C = charge_per_bunch_nC * 1e-9
 
+            mmap_ring = pe.sdds.sdds2dicts(mmap_sdds_filepath_ring)
+            spos = mmap_ring[0]['columns']['s']
+            deltaLostNegative = mmap_ring[0]['columns']['deltaLostNegative']
+            deltaLostPositive = mmap_ring[0]['columns']['deltaLostPositive']
+            if False:
+                plt.figure()
+                plt.plot(spos, deltaLostNegative, '.-')
+                plt.plot(spos, deltaLostPositive, '.-')
+            delta_accep = np.min(
+                np.vstack((np.abs(deltaLostNegative), deltaLostPositive)), axis=0)
+            if False:
+                plt.figure()
+                plt.plot(spos, delta_accep, '.-')
+
+            const = scipy.constants
+            m_e_eV = const.m_e * (const.c**2) / const.electron_volt
+            gamma = E_MeV * 1e6 / m_e_eV
+            N_e = charge_C / const.elementary_charge
+            assert const.mu_0 == 4*np.pi*1e-7
+            assert const.epsilon_0 == 1.0/((const.c**2)*const.mu_0)
+            r_e = const.elementary_charge / (4*np.pi*const.epsilon_0*m_e_eV)
+            F_interp = pe.nonlin.get_Touschek_F_interpolator()
+            #
+            touscheck_Fvals_plus, touscheck_Fvals_minus = [], []
+            touscheck_Fargs_plus, touscheck_Fargs_minus = [], []
+            touscheck_Fvals_1c_plus, touscheck_Fvals_1c_minus = [], []
+            touscheck_Fargs_1c_plus, touscheck_Fargs_1c_minus = [], []
+            tau_hrs_SLS = np.full((len(coupling), len(rf_volts)), np.nan)
+            tau_hrs_SLS_1c = np.full((len(coupling), len(rf_volts)), np.nan)
+            #
             tau_hrs = np.full((len(coupling), len(rf_volts)), np.nan)
             sdds_lifetime_data = [
                 [None for _ in range(len(rf_volts))] for _ in range(len(coupling))]
@@ -4984,6 +5022,141 @@ class Report_NSLS2U_Default:
                     sdds_lifetime_data[i][j] = d
                     tau_hrs[i][j] = d['data']['life']['scalars']['tLifetime']
 
+                    twi_a = d['data']['twi']['arrays']
+                    betax = twi_a['betax']
+                    alphax = twi_a['alphax']
+                    etax = twi_a['etax']
+                    etaxp = twi_a['etaxp']
+                    betay = twi_a['betay']
+                    etay = twi_a['etay']
+                    gammax = (1 + alphax**2) / betax
+                    curly_Hx = betax * (etaxp**2) + 2 * alphax * etax * etaxp \
+                        + gammax * (etax**2)
+                    eps_x = d['data']['life']['scalars']['emitx']
+                    eps_y = d['data']['life']['scalars']['emity']
+                    sigma_delta = d['data']['life']['scalars']['Sdelta']
+                    sigma_x = np.sqrt(eps_x * betax + (sigma_delta * etax)**2)
+                    sigma_xp = np.sqrt(eps_x * gammax + (sigma_delta * etaxp)**2)
+                    sigma_xp_1c = eps_x / sigma_x * np.sqrt(
+                        1 + curly_Hx * (sigma_delta**2) / eps_x) # Eq.(1c) of A. Streun, SLS Note 18/97
+                    sigma_y = np.sqrt(eps_y * betay + (sigma_delta * etay)**2)
+                    sigma_s = self.rf_dep_props['sigma_z_m'][j]
+
+                    rf_bucket = self.rf_dep_props['rf_bucket_heights_percent'][j] * 1e-2
+                    if False: # Just assume RF bucket height determines lifetime,
+                        # by completely ignoring local momentum apertures.
+                        delta = rf_bucket
+
+                        F_args = (delta / (gamma * sigma_xp))**2
+                        F_args_1c = (delta / (gamma * sigma_xp_1c))**2
+                        if False:
+                            plt.figure()
+                            plt.plot(twi_a['s'], F_args, '.-')
+
+                        touscheck_Fargs_minus.append(F_args)
+                        touscheck_Fargs_plus.append(F_args)
+                        touscheck_Fargs_1c_minus.append(F_args_1c)
+                        touscheck_Fargs_1c_plus.append(F_args_1c)
+                        F_vals = F_interp(F_args)
+                        touscheck_Fvals_plus.append(F_vals)
+                        touscheck_Fvals_minus.append(F_vals)
+                        F_vals_1c = F_interp(F_args_1c)
+                        touscheck_Fvals_1c_plus.append(F_vals_1c)
+                        touscheck_Fvals_1c_minus.append(F_vals_1c)
+                        touscheck_spos = twi_a['s']
+                        if False:
+                            plt.figure()
+                            plt.plot(twi_a['s'], F_vals, '.-')
+                        dtau_inv = F_vals / (sigma_x * sigma_y * sigma_xp)
+                        dtau_inv_1c = F_vals_1c / (sigma_x * sigma_y * sigma_xp_1c)
+                        if False:
+                            dtau_inv_before_delta_div = dtau_inv.copy()
+                        dtau_inv /= delta**2
+                        dtau_inv_1c /= delta**2
+                        if False:
+                            plt.figure()
+                            plt.plot(twi_a['s'], dtau_inv_before_delta_div
+                                     / np.max(dtau_inv_before_delta_div), 'b.-')
+                            plt.plot(twi_a['s'], dtau_inv / np.max(dtau_inv), 'r.-')
+                        tau_inv = np.trapz(dtau_inv, twi_a['s'])
+                        tau_inv *= N_e * (r_e**2) * const.c / circumf / (
+                            8*np.pi*(gamma**3)* sigma_s)
+                        tau_hrs_SLS[i][j] = (1/tau_inv) / 60 / 60 # Eq.(1) of A. Streun, SLS Note 18/97
+                        tau_inv_1c = np.trapz(dtau_inv_1c, twi_a['s'])
+                        tau_inv_1c *= N_e * (r_e**2) * const.c / circumf / (
+                            8*np.pi*(gamma**3)* sigma_s)
+                        tau_hrs_SLS_1c[i][j] = (1/tau_inv_1c) / 60 / 60 # Eq.(1) of A. Streun, SLS Note 18/97
+                    else:
+                        F_args_d = {'+': None, '-': None}
+                        F_vals_d = {'+': None, '-': None}
+                        tau_SLS_d = {'+': None, '-': None}
+                        F_args_1c_d = {'+': None, '-': None}
+                        F_vals_1c_d = {'+': None, '-': None}
+                        tau_SLS_1c_d = {'+': None, '-': None}
+                        for local_mom_aper, sign in [
+                            (np.abs(deltaLostNegative), '-'),
+                            (deltaLostPositive, '+')]:
+
+                            delta = np.interp(
+                                twi_a['s'], spos, local_mom_aper,
+                                left=local_mom_aper[0], right=local_mom_aper[-1])
+                            if False:
+                                plt.figure()
+                                plt.plot(twi_a['s'], delta, '.-')
+                            delta[delta > rf_bucket] = rf_bucket
+
+                            F_args = (delta / (gamma * sigma_xp))**2
+                            F_args_1c = (delta / (gamma * sigma_xp_1c))**2
+                            if False:
+                                plt.figure()
+                                plt.plot(twi_a['s'], F_args, '.-')
+
+                            F_vals = F_interp(F_args)
+                            F_vals_1c = F_interp(F_args_1c)
+                            if False:
+                                plt.figure()
+                                plt.plot(twi_a['s'], F_vals, '.-')
+
+                            F_args_d[sign] = F_args
+                            F_vals_d[sign] = F_vals
+                            F_args_1c_d[sign] = F_args_1c
+                            F_vals_1c_d[sign] = F_vals_1c
+
+                            dtau_inv = F_vals / (sigma_x * sigma_y * sigma_xp)
+                            dtau_inv_1c = F_vals_1c / (sigma_x * sigma_y * sigma_xp_1c)
+                            if False:
+                                dtau_inv_before_delta_div = dtau_inv.copy()
+                            dtau_inv /= delta**2
+                            dtau_inv_1c /= delta**2
+                            if False:
+                                plt.figure()
+                                plt.plot(twi_a['s'], dtau_inv_before_delta_div
+                                         / np.max(dtau_inv_before_delta_div), 'b.-')
+                                plt.plot(twi_a['s'], dtau_inv / np.max(dtau_inv), 'r.-')
+                            tau_inv = np.trapz(dtau_inv, twi_a['s'])
+                            tau_inv *= N_e * (r_e**2) * const.c / circumf / (
+                                8*np.pi*(gamma**3)* sigma_s)
+                            tau_SLS_d[sign] = 1 / tau_inv # [s] # Eq.(1) of A. Streun, SLS Note 18/97
+                            tau_inv_1c = np.trapz(dtau_inv_1c, twi_a['s'])
+                            tau_inv_1c *= N_e * (r_e**2) * const.c / circumf / (
+                                8*np.pi*(gamma**3)* sigma_s)
+                            tau_SLS_1c_d[sign] = 1 / tau_inv_1c # [s] # Eq.(1) of A. Streun, SLS Note 18/97
+
+                        touscheck_Fargs_plus.append(F_args_d['+'])
+                        touscheck_Fargs_minus.append(F_args_d['-'])
+                        touscheck_Fvals_plus.append(F_vals_d['+'])
+                        touscheck_Fvals_minus.append(F_vals_d['-'])
+                        touscheck_Fargs_1c_plus.append(F_args_1c_d['+'])
+                        touscheck_Fargs_1c_minus.append(F_args_1c_d['-'])
+                        touscheck_Fvals_1c_plus.append(F_vals_1c_d['+'])
+                        touscheck_Fvals_1c_minus.append(F_vals_1c_d['-'])
+                        touscheck_spos = twi_a['s']
+
+                        tau_hrs_SLS[i][j] = np.sqrt(
+                            (tau_SLS_d['+']**2 + tau_SLS_d['-']**2) / 2) / 60 / 60
+                        tau_hrs_SLS_1c[i][j] = np.sqrt(
+                            (tau_SLS_1c_d['+']**2 + tau_SLS_1c_d['-']**2) / 2) / 60 / 60
+
             self.lifetime_props = dict(
                 # Inputs
                 total_beam_current_mA=total_beam_current_mA,
@@ -4996,7 +5169,18 @@ class Report_NSLS2U_Default:
                 charge_per_bunch_nC=charge_per_bunch_nC,
                 eps_ys=eps_ys, eps_xs=eps_xs, eps_0=eps_0,
                 coupling_percent=coupling_percent, tau_hrs=tau_hrs,
-                sdds_lifetime_data=sdds_lifetime_data)
+                sdds_lifetime_data=sdds_lifetime_data,
+                tau_hrs_SLS=tau_hrs_SLS, tau_hrs_SLS_1c=tau_hrs_SLS_1c,
+                touscheck_spos=touscheck_spos,
+                touscheck_Fargs_minus=np.array(touscheck_Fargs_minus).T,
+                touscheck_Fargs_plus=np.array(touscheck_Fargs_plus).T,
+                touscheck_Fvals_minus=np.array(touscheck_Fvals_minus).T,
+                touscheck_Fvals_plus=np.array(touscheck_Fvals_plus).T,
+                touscheck_Fargs_1c_minus=np.array(touscheck_Fargs_1c_minus).T,
+                touscheck_Fargs_1c_plus=np.array(touscheck_Fargs_1c_plus).T,
+                touscheck_Fvals_1c_minus=np.array(touscheck_Fvals_1c_minus).T,
+                touscheck_Fvals_1c_plus=np.array(touscheck_Fvals_1c_plus).T,
+            )
 
             pe.util.robust_pgz_file_write(
                 output_filepath, self.lifetime_props, nMaxTry=10, sleep=10.0)
@@ -5065,6 +5249,7 @@ class Report_NSLS2U_Default:
         d = conf['input_LTE']
         #
         _yaml_append_map(d, 'filepath', sqss('?.lte'), eol_comment='REQUIRED')
+        _yaml_append_map(d, 'parent_LTE_hash', sqss(''))
         #
         if example:
             comment = '''
@@ -5233,8 +5418,9 @@ class Report_NSLS2U_Default:
         _yaml_append_map(d2, 'floor_comparison', com_map())
         d3 = d2['floor_comparison']
         #
-        _yaml_append_map(d3, 'ref_flr_filepath', sqss('?.flr'),
-                         eol_comment='REQUIRED if "floor_comparison" is specified')
+        _yaml_append_map(
+            d3, 'ref_flr_filepath', sqss('/GPFS/APC/yhidaka/common/nsls2.flr'),
+            eol_comment='REQUIRED if "floor_comparison" is specified')
         d3['ref_flr_filepath'].yaml_set_anchor('ref_flr_filepath')
         anchors['ref_flr_filepath'] = d3['ref_flr_filepath']
         #
@@ -5423,7 +5609,7 @@ class Report_NSLS2U_Default:
                 ('n_periods_in_ring', 'Number of super-periods for a full ring'),
                 (['req_props', 'floor_comparison', 'LS'], None),
                 (['req_props', 'floor_comparison', 'SS'], None),
-                ('frev', 'Revolution frequency'),
+                ('f_rev', 'Revolution frequency'),
             ]):
 
                 if isinstance(prop_name_or_list, str):
@@ -5495,7 +5681,7 @@ class Report_NSLS2U_Default:
                 ('taudelta', 'Longitudinal damping time'),
                 ('sigma_delta', 'Energy spread'),
                 ('U0', 'Energy loss per turn'),
-                ('frev', 'Revolution frequency'),
+                ('f_rev', 'Revolution frequency'),
                 (['req_props', 'beta', 'LS', 'x'],
                  'Horizontal beta at Long-Straight center'),
                 (['req_props', 'beta', 'LS', 'y'],
