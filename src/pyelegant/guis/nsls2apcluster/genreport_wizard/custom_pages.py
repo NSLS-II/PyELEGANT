@@ -21,6 +21,8 @@ Qt = QtCore.Qt
 import numpy as np
 from ruamel import yaml
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
+from ruamel.yaml.scalarstring import SingleQuotedScalarString
+from ruamel.yaml.scalarfloat import ScalarFloat
 
 import pyelegant as pe
 from pyelegant.scripts import genreport
@@ -58,26 +60,29 @@ def duplicate_yaml_conf(orig_conf):
 
     return dup_conf
 
-def update_aliased_scalar(data, parent_obj, key_or_index, val, **kwargs):
+def update_aliased_scalar(data, parent_obj, key_or_index, val):
     """
     Based on an answer on "https://stackoverflow.com/questions/55716068/how-to-change-an-anchored-scalar-in-a-sequence-without-destroying-the-anchor-in"
+
+    Critical bug fix from "https://stackoverflow.com/questions/58118589/ruamel-yaml-recurse-function-unexpectedly-updates-every-instance-of-non-string"
     """
 
-    def recurse(d, ref, nv):
+    def recurse(d, parent, key_index, ref, nv):
         if isinstance(d, dict):
             for i, k in [(idx, key) for idx, key in enumerate(d.keys()) if key is ref]:
                 d.insert(i, nv, d.pop(k))
             for k, v in d.non_merged_items():
                 if v is ref:
-                    d[k] = nv
+                    if hasattr(v, 'anchor') or (d is parent and k == key_index):
+                        d[k] = nv
                 else:
-                    recurse(v, ref, nv)
+                    recurse(v, parent, key_index, ref, nv)
         elif isinstance(d, list):
             for idx, item in enumerate(d):
                 if item is ref:
                     d[idx] = nv
                 else:
-                    recurse(item, ref, nv)
+                    recurse(item, parent, key_index, ref, nv)
 
     if isinstance(parent_obj, dict):
         key = key_or_index
@@ -92,13 +97,23 @@ def update_aliased_scalar(data, parent_obj, key_or_index, val, **kwargs):
     else:
         raise ValueError(f'Unexpected type for "parent_obj": {type(parent_obj)}')
 
-    if hasattr(obj, 'anchor'):
-        recurse(data, obj, type(obj)(val, anchor=obj.anchor.value, **kwargs))
+    if isinstance(obj, ScalarFloat):
+        kwargs = dict(prec=obj._prec, width=obj._width)
+        # ^ For some reason, "prec=-1" and "width=1" (not the default values
+        #   None for these properties) are required to be able to still
+        #   write "conf" into a YAML file.
     else:
-        recurse(data, obj, type(obj)(val, **kwargs))
+        kwargs = {}
 
-    if hasattr(obj, 'fa') and obj.fa.flow_style():
-        parent_obj[key].fa.set_flow_style()
+    if hasattr(obj, 'anchor'):
+        recurse(data, parent_obj, key_or_index, obj,
+                type(obj)(val, anchor=obj.anchor.value, **kwargs))
+    else:
+        recurse(data, parent_obj, key_or_index, obj, type(obj)(val, **kwargs))
+
+    if (hasattr(obj, 'fa') and obj.fa.flow_style()) or (
+        hasattr(val, 'fa') and val.fa.flow_style()):
+        parent_obj[key_or_index].fa.set_flow_style()
 
 class ListModelStdLogger(QtCore.QAbstractListModel):
     """"""
@@ -385,6 +400,8 @@ def generate_report(
     model_stderr._data.clear()
     model_stderr.beginResetModel()
 
+    QtWidgets.QApplication.setOverrideCursor(Qt.WaitCursor)
+
     QtWidgets.QApplication.processEvents()
 
     #model_stdout.layoutChanged.emit()
@@ -395,6 +412,8 @@ def generate_report(
 
     realtime_updated_Popen(
         cmd, view_stdout=view_stdout, view_stderr=view_stderr)
+
+    QtWidgets.QApplication.restoreOverrideCursor()
 
 def open_pdf_report(pdf_filepath):
     """"""
@@ -408,7 +427,7 @@ def open_pdf_report(pdf_filepath):
         #print('\n### stderr ###')
         #print(err)
 
-class PageGenReport(QtWidgets.QWizardPage):
+class PageStandard(QtWidgets.QWizardPage):
     """"""
 
     def __init__(self, *args, **kwargs):
@@ -417,6 +436,8 @@ class PageGenReport(QtWidgets.QWizardPage):
         super().__init__(*args, **kwargs)
 
         self._registeredFields = []
+        self.orig_conf = None
+        self.mod_conf = None
 
     def registerFieldOnFirstShow(self, name, widget, *args, **kwargs):
         """"""
@@ -425,15 +446,58 @@ class PageGenReport(QtWidgets.QWizardPage):
             self.registerField(name, widget, *args, **kwargs)
             self._registeredFields.append(name)
 
-    def initializePage(self):
+    def set_orig_conf(self, this_page_name):
         """"""
 
-        self.wizardObj = self.wizard()
+        page_name_list = self.wizardObj.page_name_list
+        this_page_index = page_name_list.index(this_page_name)
+        for page_name in page_name_list[:this_page_index][::-1]:
+            if self.wizardObj.page_links[page_name].mod_conf is not None:
+                self.orig_conf = self.wizardObj.page_links[page_name].mod_conf
+                break
+        else:
+            self.orig_conf = self.wizardObj.conf
+
+class PageGenReport(PageStandard):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+        self.all_calc_types = [
+            'xy_aper', 'fmap_xy', 'fmap_px', 'cmap_xy', 'cmap_px',
+            'tswa', 'nonlin_chrom', 'mom_aper']
+
+    def establish_connections(self):
+        """"""
+
         config_filepath = self.wizardObj.config_filepath
-        config_filename = Path(config_filepath).name
         pdf_filepath = self.wizardObj.pdf_filepath
 
-        mod_conf = self.modify_conf(self.wizardObj.conf)
+        # Establish connections
+        view_out = self.findChildren(QtWidgets.QListView,
+                                     QtCore.QRegExp('listView_stdout_.+'))[0]
+        view_err = self.findChildren(QtWidgets.QListView,
+                                     QtCore.QRegExp('listView_stderr_.+'))[0]
+        view_out.setModel(ListModelStdLogger([], view_out))
+        view_err.setModel(ListModelStdLogger([], view_err))
+
+        b = self.findChildren(QtWidgets.QPushButton,
+                              QtCore.QRegExp('pushButton_gen_.+'))[0]
+        b.clicked.connect(partial(
+            self.generate_report, config_filepath, view_out, view_err))
+        b = self.findChildren(QtWidgets.QPushButton,
+                              QtCore.QRegExp('pushButton_open_pdf_.+'))[0]
+        b.clicked.connect(partial(open_pdf_report, pdf_filepath))
+
+    def generate_report(self, config_filepath, view_stdout=None, view_stderr=None):
+        """"""
+
+        config_filename = Path(config_filepath).name
+
+        mod_conf = self.modify_conf(self.orig_conf)
 
         yml = yaml.YAML()
         yml.preserve_quotes = True
@@ -442,37 +506,14 @@ class PageGenReport(QtWidgets.QWizardPage):
         with open(config_filepath, 'w') as f:
             yml.dump(mod_conf, f)
 
-        # Establish connections
-        if False:
-            tb_out = self.findChildren(QtWidgets.QTextBrowser,
-                                       QtCore.QRegExp('textBrowser_stdout_.+'))[0]
-            tb_err = self.findChildren(QtWidgets.QTextBrowser,
-                                       QtCore.QRegExp('textBrowser_stderr_.+'))[0]
-        elif False:
-            tb_out = self.findChildren(QtWidgets.QPlainTextEdit,
-                                       QtCore.QRegExp('plainTextEdit_stdout_.+'))[0]
-            tb_err = self.findChildren(QtWidgets.QPlainTextEdit,
-                                       QtCore.QRegExp('plainTextEdit_stderr_.+'))[0]
-        else:
-            view_out = self.findChildren(QtWidgets.QListView,
-                                         QtCore.QRegExp('listView_stdout_.+'))[0]
-            view_err = self.findChildren(QtWidgets.QListView,
-                                         QtCore.QRegExp('listView_stderr_.+'))[0]
-            view_out.setModel(ListModelStdLogger([], view_out))
-            view_err.setModel(ListModelStdLogger([], view_err))
-        b = self.findChildren(QtWidgets.QPushButton,
-                              QtCore.QRegExp('pushButton_gen_.+'))[0]
-        b.clicked.connect(partial(
-            generate_report, config_filename, view_out, view_err))
-        b = self.findChildren(QtWidgets.QPushButton,
-                              QtCore.QRegExp('pushButton_open_pdf_.+'))[0]
-        b.clicked.connect(partial(open_pdf_report, pdf_filepath))
+        generate_report(config_filename, view_stdout=view_stdout,
+                        view_stderr=view_stderr)
 
     def modify_conf(self, orig_conf):
         """"""
-        return deepcopy(orig_conf)
+        return duplicate_yaml_conf(orig_conf)
 
-class PageGenReportTest1(PageGenReport):
+class PageNonlinCalcTest(PageGenReport):
     """"""
 
     def __init__(self, *args, **kwargs):
@@ -480,71 +521,176 @@ class PageGenReportTest1(PageGenReport):
 
         super().__init__(*args, **kwargs)
 
-        self._registeredFields = []
+        self.calc_type = None
+        self.test_list = None
+        self.prod_list = None
+        self.setter_getter = None
 
-    def registerFieldOnFirstShow(self, name, widget, *args, **kwargs):
+        self.converters = {
+            'spin': dict(set = lambda v: v, get = lambda v: v),
+            'edit_float': dict(set = lambda v: f'{v:.6g}',
+                               get = lambda v: float(v)),
+            'edit_%': dict(set = lambda v: f'{v * 1e2:.6g}',
+                           get = lambda v: float(v) * 1e-2),
+            'edit_str': dict(set = lambda v: str(v), get = lambda v: v),
+            'edit_str_None': dict(
+                set = lambda v: str(v) if v is not None else '',
+                get = lambda v: v if v.strip() != '' else None),
+            'check': dict(set = lambda v: v, get = lambda v: v),
+            'combo': dict(set = lambda v: v, get = lambda v: v),
+        }
+
+    def register_test_prod_option_widgets(self):
         """"""
 
-        if name not in self._registeredFields:
-            self.registerField(name, widget, *args, **kwargs)
-            self._registeredFields.append(name)
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+
+        for mode, k_wtype_list in [
+            ('test', self.test_list), ('production', self.prod_list)]:
+
+            short_mode = mode[:4]
+
+            for k, wtype in k_wtype_list:
+                w_suffix = f'{k}_{self.calc_type}_{short_mode}'
+                f_suffix = f'{k}_{self.calc_type}_{mode}'
+                if wtype == spin:
+                    w = self.findChild(spin, f'spinBox_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'spin_{f_suffix}', w)
+                elif wtype == edit:
+                    w = self.findChild(edit, f'lineEdit_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'edit_{f_suffix}', w)
+                elif wtype == check:
+                    w = self.findChild(check, f'checkBox_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'check_{f_suffix}', w)
+                elif wtype == combo:
+                    w = self.findChild(combo, f'comboBox_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'combo_{f_suffix}', w,
+                                                  property='currentText')
+                else:
+                    raise ValueError()
+
+    def set_test_prod_option_fields(self):
+        """"""
+
+        for mode in ['test', 'production']:
+            try:
+                opts = self.orig_conf['nonlin']['calc_opts'][self.calc_type][mode]
+            except:
+                opts = None
+            if opts is not None:
+                for k, v in opts.items():
+                    if k not in self.setter_getter[mode]:
+                        continue
+                    conv_type = self.setter_getter[mode][k]
+                    conv = self.converters[conv_type]['set']
+                    wtype = conv_type.split('_')[0]
+                    self.setField(f'{wtype}_{k}_{self.calc_type}_{mode}', conv(v))
+
+    def validatePage(self):
+        """"""
+
+        # Ask if the user did check/update the info on "Production" tab
+        QMessageBox = QtWidgets.QMessageBox
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Question)
+        msg.setText('Have you checked/updated the options in "Production" tab?')
+        msg.setInformativeText(
+            ('The option values in "Production" tab will override those in '
+             '"Test" tab when you run in "Production" mode later.'))
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.No)
+        msg.setWindowTitle('Confirm "Production" Options')
+        msg.setStyleSheet("QIcon{max-width: 100px;}")
+        msg.setStyleSheet("QLabel{min-width: 300px;}")
+        reply = msg.exec_()
+        if reply == QMessageBox.No:
+            return False
+
+        mod_conf = self.modify_conf(self.orig_conf)
+
+        self.mod_conf = mod_conf
+
+        return True
 
     def modify_conf(self, orig_conf):
         """"""
 
+        w = self.findChildren(QtWidgets.QTabWidget,
+                              QtCore.QRegExp('tabWidget_std_.+'))[0]
+        w.setCurrentIndex(0) # show "stdout" tab before report generation starts
+
         mod_conf = duplicate_yaml_conf(orig_conf)
 
-        f = partial(update_aliased_scalar, mod_conf)
+        #f = partial(update_aliased_scalar, mod_conf)
 
-        f(mod_conf['lattice_props'], 'recalc', True)
+        mod_conf['lattice_props']['recalc'] = False
+        mod_conf['lattice_props']['replot'] = False
 
-        if 'pdf_table_order' in mod_conf['lattice_props']:
-            del mod_conf['lattice_props']['pdf_table_order']
-        if 'xlsx_table_order' in mod_conf['lattice_props']:
-            del mod_conf['lattice_props']['xlsx_table_order']
+        ncf = mod_conf['nonlin']
 
-        d = mod_conf['lattice_props']
-        if 'opt_props' in d:
-            if 'phase_adv' in d['opt_props']:
-                if 'MDISP 0&1' in d['opt_props']['phase_adv']:
-                    Ls = [
-                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP 0&1']),
-                    ]
-                    for L in Ls: L.fa.set_flow_style()
-                    f(d, 'append_opt_props_to_pdf_table', Ls)
+        for _sel_calc_type in self.all_calc_types:
+            if _sel_calc_type == self.calc_type:
+                ncf['include'][_sel_calc_type] = True
+                ncf['recalc'][_sel_calc_type] = True
+            else:
+                ncf['include'][_sel_calc_type] = False
+                ncf['recalc'][_sel_calc_type] = False
 
-                    Ls = [
-                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP 0&1', 'x']),
-                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP 0&1', 'y']),
-                    ]
-                    for L in Ls: L.fa.set_flow_style()
-                    f(d, 'append_opt_props_to_xlsx_table', Ls)
+        if ncf['use_beamline'] is not mod_conf['use_beamline_ring']:
+            ncf['use_beamline'] = mod_conf['use_beamline_ring']
+
+        ncf['selected_calc_opt_names'][self.calc_type] = 'test'
+
+        common_remote_opts = self.wizardObj.common_remote_opts
+
+        new_calc_opts = {}
+        for mode in ['test', 'production']:
+            del ncf['calc_opts'][self.calc_type][mode]
+
+            new_calc_opts[mode] = {}
+            for k, conv_type in self.setter_getter[mode].items():
+                conv = self.converters[conv_type]['get']
+                wtype = conv_type.split('_')[0]
+                v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
+                if k in ('partition', 'ntasks', 'time'):
+                    if k in common_remote_opts:
+                        if common_remote_opts[k] == v:
+                            continue
+                        else:
+                            if 'remote_opts' not in new_calc_opts[mode]:
+                                new_calc_opts[mode]['remote_opts'] = {}
+                            new_calc_opts[mode]['remote_opts'][k] = v
+                    else:
+                        if 'remote_opts' not in new_calc_opts[mode]:
+                            new_calc_opts[mode]['remote_opts'] = {}
+                        new_calc_opts[mode]['remote_opts'][k] = v
                 else:
-                    Ls = [
-                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across LS']),
-                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across SS']),
-                    ]
-                    for L in Ls: L.fa.set_flow_style()
-                    f(d, 'append_opt_props_to_pdf_table', Ls)
+                    new_calc_opts[mode][k] = v
 
-                    Ls = [
-                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across LS', 'x']),
-                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across LS', 'y']),
-                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across SS', 'x']),
-                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across SS', 'y']),
-                    ]
-                    for L in Ls: L.fa.set_flow_style()
-                    f(d, 'append_opt_props_to_xlsx_table', Ls)
+        mode = 'test'
+        calc_opts = CommentedMap(new_calc_opts[mode])
+        if self.calc_type.startswith('cmap_'):
+            calc_opts.add_yaml_merge([
+                (0, ncf['calc_opts'][self.calc_type.replace(
+                    'cmap_', 'fmap_')][mode])])
+        calc_opts.yaml_set_anchor(f'{self.calc_type}_{mode}')
+        genreport._yaml_append_map(ncf['calc_opts'][self.calc_type], mode,
+                                   calc_opts)
+        test_calc_opts = calc_opts
 
-        for k, v in mod_conf['nonlin']['include'].items():
-            f(mod_conf['nonlin']['include'], k, False)
+        mode = 'production'
+        calc_opts = CommentedMap(new_calc_opts[mode])
+        calc_opts.add_yaml_merge([(0, test_calc_opts)])
+        calc_opts.yaml_set_anchor(f'{self.calc_type}_{mode}')
+        genreport._yaml_append_map(ncf['calc_opts'][self.calc_type], mode,
+                                   calc_opts)
 
-        for k in ['rf_dep_calc_opts', 'lifetime_calc_opts']:
-            if k in mod_conf:
-                del mod_conf[k]
+        #_check_if_yaml_writable(mod_conf)
+
+        self.mod_conf = mod_conf
 
         return mod_conf
-
 
 class PageNewSetup(QtWidgets.QWizardPage):
     """"""
@@ -711,7 +857,8 @@ class PageLoadSeedConfig(QtWidgets.QWizardPage):
 
         # TO-BE-DELETED
         self.edit_obj.setText(
-            '/GPFS/APC/yhidaka/git_repos/nsls2cb/lat_reports/20200422_VS_DCBA25pm.yaml')
+            #'/GPFS/APC/yhidaka/git_repos/nsls2cb/lat_reports/20200422_VS_DCBA25pm.yaml')
+            '/GPFS/APC/yhidaka/git_repos/pyelegant/src/pyelegant/guis/nsls2apcluster/genreport_wizard/CBA_0001.yaml')
 
         # Establish connections
 
@@ -769,7 +916,7 @@ class PageLoadSeedConfig(QtWidgets.QWizardPage):
 
         return True
 
-class PageLTE(QtWidgets.QWizardPage):
+class PageLTE(PageStandard):
     """"""
 
     def __init__(self, *args, **kwargs):
@@ -777,21 +924,12 @@ class PageLTE(QtWidgets.QWizardPage):
 
         super().__init__(*args, **kwargs)
 
-        self._registeredFields = []
-
-    def registerFieldOnFirstShow(self, name, widget, *args, **kwargs):
-        """"""
-
-        if name not in self._registeredFields:
-            self.registerField(name, widget, *args, **kwargs)
-            self._registeredFields.append(name)
-
     def initializePage(self):
         """"""
 
         self.wizardObj = self.wizard()
 
-        user_conf = self.wizardObj.conf
+        self.set_orig_conf('LTE')
 
         # Register fields
 
@@ -812,20 +950,20 @@ class PageLTE(QtWidgets.QWizardPage):
         # Set fields
 
         self.setField('edit_report_author',
-                      str(user_conf.get('report_author', '').strip()))
+                      str(self.orig_conf.get('report_author', '').strip()))
 
         self.setField(
             'edit_orig_LTE_path',
             convert_multiline_yaml_str_to_oneline_str(
-                user_conf.get('orig_LTE_filepath', '')))
+                self.orig_conf.get('orig_LTE_filepath', '')))
 
         self.setField('edit_LTE_authors',
-                      str(user_conf.get('lattice_author', '').strip()))
+                      str(self.orig_conf.get('lattice_author', '').strip()))
 
         self.setField('edit_parent_LTE_hash',
-                      str(user_conf.get('parent_LTE_hash', '').strip()))
+                      str(self.orig_conf.get('parent_LTE_hash', '').strip()))
 
-        date = user_conf.get('lattice_received_date', None)
+        date = self.orig_conf.get('lattice_received_date', None)
         if date is None:
             date = QtCore.QDateTime().currentDateTime()
         else:
@@ -833,17 +971,17 @@ class PageLTE(QtWidgets.QWizardPage):
             date = QtCore.QDateTime(datetime.date(year, month, day))
         self.setField('date_LTE_received', date)
 
-        E_GeV = user_conf.get('E_MeV', 3e3) / 1e3
+        E_GeV = self.orig_conf.get('E_MeV', 3e3) / 1e3
         self.setField('edit_E_GeV', f'{E_GeV:.3g}')
 
         self.setField('edit_use_beamline_cell',
-                      str(user_conf.get('use_beamline_cell', '').strip()))
+                      str(self.orig_conf.get('use_beamline_cell', '').strip()))
 
         self.setField('edit_use_beamline_ring',
-                      str(user_conf.get('use_beamline_ring', '').strip()))
+                      str(self.orig_conf.get('use_beamline_ring', '').strip()))
 
         self.setField('check_pyele_stdout',
-                      user_conf.get('enable_pyelegant_stdout', False))
+                      self.orig_conf.get('enable_pyelegant_stdout', False))
 
         # Establish connections
 
@@ -929,12 +1067,13 @@ class PageLTE(QtWidgets.QWizardPage):
                 showInvalidPageInputDialog(text, info_text)
                 return False
 
-        conf = self.wizardObj.conf
-        f = partial(update_aliased_scalar, conf)
+        mod_conf = duplicate_yaml_conf(self.orig_conf)
+
+        f = partial(update_aliased_scalar, mod_conf)
         #
-        f(conf, 'report_author', self.field('edit_report_author').strip())
+        f(mod_conf, 'report_author', self.field('edit_report_author').strip())
         #
-        f(conf, 'orig_LTE_filepath', orig_LTE_filepath)
+        f(mod_conf, 'orig_LTE_filepath', orig_LTE_filepath)
         #
         input_LTE_filepath = \
             self.wizardObj.pdf_filepath[:-len('_report.pdf')] + '.lte'
@@ -942,7 +1081,7 @@ class PageLTE(QtWidgets.QWizardPage):
         input_LTE_Path.parent.mkdir(parents=True, exist_ok=True)
         if not input_LTE_Path.exists():
             shutil.copy(orig_LTE_filepath, input_LTE_filepath)
-            f(conf['input_LTE'], 'regenerate_zeroSexts', True)
+            f(mod_conf['input_LTE'], 'regenerate_zeroSexts', True)
         else:
             sha = hashlib.sha1()
             sha.update(input_LTE_Path.read_text().encode('utf-8'))
@@ -954,33 +1093,29 @@ class PageLTE(QtWidgets.QWizardPage):
 
             if orig_SHA1 != existing_SHA1:
                 shutil.copy(orig_LTE_filepath, input_LTE_filepath)
-                f(conf['input_LTE'], 'regenerate_zeroSexts', True)
+                f(mod_conf['input_LTE'], 'regenerate_zeroSexts', True)
             else:
-                f(conf['input_LTE'], 'regenerate_zeroSexts', False)
-        f(conf['input_LTE'], 'filepath', input_LTE_filepath)
+                f(mod_conf['input_LTE'], 'regenerate_zeroSexts', False)
+        f(mod_conf['input_LTE'], 'filepath', input_LTE_filepath)
         #
-        f(conf['input_LTE'], 'parent_LTE_hash',
+        f(mod_conf['input_LTE'], 'parent_LTE_hash',
           self.field('edit_parent_LTE_hash').strip())
         #
-        f(conf, 'lattice_author', self.field('edit_LTE_authors').strip())
+        f(mod_conf, 'lattice_author', self.field('edit_LTE_authors').strip())
         #
-        f(conf, 'lattice_received_date',
+        f(mod_conf, 'lattice_received_date',
           self.field('date_LTE_received').toString('MM/dd/yyyy'))
         #
-        #f(conf, 'E_MeV', float(self.field('edit_E_GeV')) * 1e3)
-        f(conf, 'E_MeV', float(self.field('edit_E_GeV')) * 1e3,
-          prec=conf['E_MeV']._prec, width=conf['E_MeV']._width)
-        # ^ For some reason, "prec=-1" and "width=1" (not the default values
-        #   None for these properties) are required to be able to still
-        #   write "conf" into a YAML file.
+        f(mod_conf, 'E_MeV', float(self.field('edit_E_GeV')) * 1e3)
         if False:
-            _check_if_yaml_writable(conf)
+            _check_if_yaml_writable(mod_conf)
         #
-        f(conf, 'use_beamline_cell', use_beamline_cell)
-        f(conf, 'use_beamline_ring', use_beamline_ring)
+        f(mod_conf, 'use_beamline_cell', use_beamline_cell)
+        f(mod_conf, 'use_beamline_ring', use_beamline_ring)
         #
-        f(conf, 'enable_pyelegant_stdout', self.field('check_pyele_stdout'))
+        f(mod_conf, 'enable_pyelegant_stdout', self.field('check_pyele_stdout'))
 
+        self.mod_conf = mod_conf
 
         flat_used_elem_names = LTE.flat_used_elem_names
         all_elem_names = [name for name, _, _ in LTE.elem_defs]
@@ -1078,7 +1213,7 @@ class TableModelElemList(QtCore.QAbstractTableModel):
         if np.abs(self._spos[matched_inds[0]] - s_max / 2) > ds_thresh:
             return 'wrong M_SS#1 spos'
 
-class PageStraightCenters(QtWidgets.QWizardPage):
+class PageStraightCenters(PageStandard):
     """"""
 
     def __init__(self, *args, **kwargs):
@@ -1086,19 +1221,12 @@ class PageStraightCenters(QtWidgets.QWizardPage):
 
         super().__init__(*args, **kwargs)
 
-        self._registeredFields = []
-
-    def registerFieldOnFirstShow(self, name, widget, *args, **kwargs):
-        """"""
-
-        if name not in self._registeredFields:
-            self.registerField(name, widget, *args, **kwargs)
-            self._registeredFields.append(name)
-
     def initializePage(self):
         """"""
 
         self.wizardObj = self.wizard()
+
+        self.set_orig_conf('straight_centers')
 
         # Hook up models to views
 
@@ -1192,10 +1320,11 @@ class PageStraightCenters(QtWidgets.QWizardPage):
         else:
             raise ValueError()
 
-        conf = self.wizardObj.conf
-        f = partial(update_aliased_scalar, conf)
+        mod_conf = duplicate_yaml_conf(self.orig_conf)
+
+        f = partial(update_aliased_scalar, mod_conf)
         #
-        d = conf['lattice_props']['req_props']
+        d = mod_conf['lattice_props']['req_props']
         #
         f(d['beta']['LS'], 'name', M_LS_name)
         f(d['beta']['LS'], 'occur', 0)
@@ -1218,9 +1347,11 @@ class PageStraightCenters(QtWidgets.QWizardPage):
         f(d['floor_comparison']['SS']['cur_elem'], 'name', M_SS_name)
         f(d['floor_comparison']['SS']['cur_elem'], 'occur', 0)
 
+        self.mod_conf = mod_conf
+
         return True
 
-class PagePhaseAdv(QtWidgets.QWizardPage):
+class PagePhaseAdv(PageStandard):
     """"""
 
     def __init__(self, *args, **kwargs):
@@ -1228,19 +1359,12 @@ class PagePhaseAdv(QtWidgets.QWizardPage):
 
         super().__init__(*args, **kwargs)
 
-        self._registeredFields = []
-
-    def registerFieldOnFirstShow(self, name, widget, *args, **kwargs):
-        """"""
-
-        if name not in self._registeredFields:
-            self.registerField(name, widget, *args, **kwargs)
-            self._registeredFields.append(name)
-
     def initializePage(self):
         """"""
 
         self.wizardObj = self.wizard()
+
+        self.set_orig_conf('phase_adv')
 
         # Hook up models to views
 
@@ -1309,24 +1433,34 @@ class PagePhaseAdv(QtWidgets.QWizardPage):
             showInvalidPageInputDialog(text, info_text)
             return False
 
-        conf = self.wizardObj.conf
-        d = conf['lattice_props']['opt_props']['phase_adv']
+        mod_conf = duplicate_yaml_conf(self.orig_conf)
+
+        d = mod_conf['lattice_props']['opt_props']['phase_adv']
         #
-        f = partial(update_aliased_scalar, conf)
+        f = partial(update_aliased_scalar, mod_conf)
+
+        sqss = SingleQuotedScalarString
 
         if n_disp_bumps == 2:
             d2 = d['MDISP across LS']
             f(d2, 'pdf_label', (
                 r'Phase Advance btw. Disp. Bumps across LS '
                 r'$(\Delta\nu_x, \Delta\nu_y)$'))
-            f(d2['xlsx_label'], 'x', CommentedSeq([
-                "normal", 'Horizontal Phase Advance btw. Disp. Bumps across LS ',
-                "italic_greek", 'Delta', "italic_greek", 'nu', "italic_sub", 'x']))
-            f(d2['xlsx_label'], 'y', CommentedSeq([
-                "normal", 'Vertical Phase Advance btw. Disp. Bumps across LS ',
-                "italic_greek", 'Delta', "italic_greek", 'nu', "italic_sub", 'y']))
+            seq = CommentedSeq([
+                "normal", sqss(
+                    'Horizontal Phase Advance btw. Disp. Bumps across LS '),
+                "italic_greek", sqss('Delta'), "italic_greek", sqss('nu'),
+                "italic_sub", sqss('x')])
+            seq.fa.set_flow_style()
+            f(d2['xlsx_label'], 'x', seq)
+            seq = CommentedSeq([
+                "normal", sqss('Vertical Phase Advance btw. Disp. Bumps across LS '),
+                "italic_greek", sqss('Delta'), "italic_greek", sqss('nu'),
+                "italic_sub", sqss('y')])
+            seq.fa.set_flow_style()
+            f(d2['xlsx_label'], 'y', seq)
             f(d2['elem1'], 'name',
-              conf['lattice_props']['req_props']['beta']['LS']['name'])
+              mod_conf['lattice_props']['req_props']['beta']['LS']['name'])
             f(d2['elem1'], 'occur', 0)
             f(d2['elem2'], 'name', marker_name)
             f(d2['elem2'], 'occur', 0)
@@ -1335,12 +1469,20 @@ class PagePhaseAdv(QtWidgets.QWizardPage):
             f(d2, 'pdf_label', (
                 r'Phase Advance btw. Disp. Bumps across SS '
                 r'$(\Delta\nu_x, \Delta\nu_y)$'))
-            f(d2['xlsx_label'], 'x', CommentedSeq([
-                "normal", 'Horizontal Phase Advance btw. Disp. Bumps across SS ',
-                "italic_greek", 'Delta', "italic_greek", 'nu', "italic_sub", 'x']))
-            f(d2['xlsx_label'], 'y', CommentedSeq([
-                "normal", 'Vertical Phase Advance btw. Disp. Bumps across SS ',
-                "italic_greek", 'Delta', "italic_greek", 'nu', "italic_sub", 'y']))
+            seq = CommentedSeq([
+                "normal", sqss(
+                    'Horizontal Phase Advance btw. Disp. Bumps across SS '),
+                "italic_greek", sqss('Delta'), "italic_greek", sqss('nu'),
+                "italic_sub", sqss('x')])
+            seq.fa.set_flow_style()
+            f(d2['xlsx_label'], 'x', seq)
+            seq = CommentedSeq([
+                "normal", sqss(
+                    'Vertical Phase Advance btw. Disp. Bumps across SS '),
+                "italic_greek", sqss('Delta'), "italic_greek", sqss('nu'),
+                "italic_sub", sqss('y')])
+            seq.fa.set_flow_style()
+            f(d2['xlsx_label'], 'y', seq)
             f(d2['elem1'], 'name', marker_name)
             f(d2['elem1'], 'occur', 0)
             f(d2['elem2'], 'name', marker_name)
@@ -1351,12 +1493,18 @@ class PagePhaseAdv(QtWidgets.QWizardPage):
             f(d2, 'pdf_label', (
                 r'Phase Advance btw. Dispersion Bumps '
                 r'$(\Delta\nu_x, \Delta\nu_y)$'))
-            f(d2['xlsx_label'], 'x', CommentedSeq([
-                "normal", 'Horizontal Phase Advance btw. Disp. Bumps ',
-                "italic_greek", 'Delta', "italic_greek", 'nu', "italic_sub", 'x']))
-            f(d2['xlsx_label'], 'y', CommentedSeq([
-                "normal", 'Vertical Phase Advance btw. Disp. Bumps ',
-                "italic_greek", 'Delta', "italic_greek", 'nu', "italic_sub", 'y']))
+            seq = CommentedSeq([
+                "normal", sqss('Horizontal Phase Advance btw. Disp. Bumps '),
+                "italic_greek", sqss('Delta'), "italic_greek", sqss('nu'),
+                "italic_sub", sqss('x')])
+            seq.fa.set_flow_style()
+            f(d2['xlsx_label'], 'x', seq)
+            seq = CommentedSeq([
+                "normal", sqss('Vertical Phase Advance btw. Disp. Bumps '),
+                "italic_greek", sqss('Delta'), "italic_greek", sqss('nu'),
+                "italic_sub", sqss('y')])
+            seq.fa.set_flow_style()
+            f(d2['xlsx_label'], 'y', seq)
             f(d2['elem1'], 'name', marker_name)
             f(d2['elem1'], 'occur', 0)
             f(d2['elem2'], 'name', marker_name)
@@ -1365,9 +1513,11 @@ class PagePhaseAdv(QtWidgets.QWizardPage):
         else:
             raise ValueError()
 
+        self.mod_conf = mod_conf
+
         return True
 
-class PageStraightDrifts(QtWidgets.QWizardPage):
+class PageStraightDrifts(PageStandard):
     """"""
 
     def __init__(self, *args, **kwargs):
@@ -1375,19 +1525,12 @@ class PageStraightDrifts(QtWidgets.QWizardPage):
 
         super().__init__(*args, **kwargs)
 
-        self._registeredFields = []
-
-    def registerFieldOnFirstShow(self, name, widget, *args, **kwargs):
-        """"""
-
-        if name not in self._registeredFields:
-            self.registerField(name, widget, *args, **kwargs)
-            self._registeredFields.append(name)
-
     def initializePage(self):
         """"""
 
         self.wizardObj = self.wizard()
+
+        self.set_orig_conf('straight_length')
 
         # Hook up models to views
 
@@ -1459,9 +1602,10 @@ class PageStraightDrifts(QtWidgets.QWizardPage):
                 showInvalidPageInputDialog(text, info_text)
                 return False
 
-        conf = self.wizardObj.conf
-        d = conf['lattice_props']['req_props']
-        f = partial(update_aliased_scalar, conf)
+        mod_conf = duplicate_yaml_conf(self.orig_conf)
+
+        d = mod_conf['lattice_props']['req_props']
+        f = partial(update_aliased_scalar, mod_conf)
         #
         f(d['length']['LS'], 'name_list', half_LS_drift_name_list)
         f(d['length']['LS'], 'multiplier', 2.0)
@@ -1469,7 +1613,683 @@ class PageStraightDrifts(QtWidgets.QWizardPage):
         f(d['length']['SS'], 'name_list', half_SS_drift_name_list)
         f(d['length']['SS'], 'multiplier', 2.0)
 
-        #_check_if_yaml_writable(conf)
+        #_check_if_yaml_writable(mod_conf)
+
+        self.mod_conf = mod_conf
 
         return True
 
+class PageGenReportTest1(PageGenReport):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+
+        self.set_orig_conf('test1')
+
+        self.establish_connections()
+
+    def validatePage(self):
+        """"""
+
+        mod_conf = self.modify_conf(self.orig_conf)
+
+        self.mod_conf = mod_conf
+
+        return True
+
+    def modify_conf(self, orig_conf):
+        """"""
+
+        mod_conf = duplicate_yaml_conf(orig_conf)
+
+        f = partial(update_aliased_scalar, mod_conf)
+
+        f(mod_conf['lattice_props'], 'recalc', True)
+
+        if 'pdf_table_order' in mod_conf['lattice_props']:
+            del mod_conf['lattice_props']['pdf_table_order']
+        if 'xlsx_table_order' in mod_conf['lattice_props']:
+            del mod_conf['lattice_props']['xlsx_table_order']
+
+        d = mod_conf['lattice_props']
+        if 'opt_props' in d:
+            if 'phase_adv' in d['opt_props']:
+                if 'MDISP 0&1' in d['opt_props']['phase_adv']:
+                    Ls = [
+                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP 0&1']),
+                    ]
+                    for L in Ls: L.fa.set_flow_style()
+                    f(d, 'append_opt_props_to_pdf_table', Ls)
+
+                    Ls = [
+                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP 0&1', 'x']),
+                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP 0&1', 'y']),
+                    ]
+                    for L in Ls: L.fa.set_flow_style()
+                    f(d, 'append_opt_props_to_xlsx_table', Ls)
+                else:
+                    Ls = [
+                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across LS']),
+                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across SS']),
+                    ]
+                    for L in Ls: L.fa.set_flow_style()
+                    f(d, 'append_opt_props_to_pdf_table', Ls)
+
+                    Ls = [
+                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across LS', 'x']),
+                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across LS', 'y']),
+                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across SS', 'x']),
+                        CommentedSeq(['opt_props', 'phase_adv', 'MDISP across SS', 'y']),
+                    ]
+                    for L in Ls: L.fa.set_flow_style()
+                    f(d, 'append_opt_props_to_xlsx_table', Ls)
+
+        for k, v in mod_conf['nonlin']['include'].items():
+            f(mod_conf['nonlin']['include'], k, False)
+
+        for k in ['rf_dep_calc_opts', 'lifetime_calc_opts']:
+            if k in mod_conf:
+                del mod_conf[k]
+
+        self.mod_conf = mod_conf
+
+        return mod_conf
+
+class PageTwissPlots(PageGenReport):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+
+        self.set_orig_conf('twiss_plots')
+
+        # Hook up models to views
+
+        # Register fields
+
+        w = self.findChild(QtWidgets.QSpinBox, 'spinBox_element_divisions')
+        self.registerFieldOnFirstShow('spin_element_divisions', w)
+
+        w = self.findChild(QtWidgets.QSpinBox, 'spinBox_font_size')
+        self.registerFieldOnFirstShow('spin_font_size', w)
+
+        w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_extra_dy_frac')
+        self.registerFieldOnFirstShow('edit_extra_dy_frac', w)
+
+        w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_full_r_margin')
+        self.registerFieldOnFirstShow('edit_full_r_margin', w)
+
+        for sec in ['sec1', 'sec2', 'sec3']:
+            for suffix in ['smin', 'smax', 'r_margin']:
+                w = self.findChild(QtWidgets.QLineEdit, f'lineEdit_{sec}_{suffix}')
+                self.registerFieldOnFirstShow(f'edit_{sec}_{suffix}', w)
+
+        # Set fields
+
+        # Establish connections
+        self.establish_connections()
+
+    def validatePage(self):
+        """"""
+
+        mod_conf = self.modify_conf(self.orig_conf)
+
+        self.mod_conf = mod_conf
+
+        return True
+
+    def modify_conf(self, orig_conf):
+        """"""
+
+        mod_conf = duplicate_yaml_conf(orig_conf)
+
+        f = partial(update_aliased_scalar, mod_conf)
+
+        #f(mod_conf['lattice_props'], 'recalc', True)
+        mod_conf['lattice_props']['recalc'] = True
+
+        #f(mod_conf['lattice_props']['twiss_calc_opts']['one_period'],
+          #'element_divisions', self.field('spin_element_divisions'))
+        mod_conf['lattice_props']['twiss_calc_opts']['one_period'
+            ]['element_divisions'] = self.field('spin_element_divisions')
+
+        plot_opts = mod_conf['lattice_props']['twiss_plot_opts']
+
+        m = CommentedMap(
+            {'bends': True, 'quads': True, 'sexts': True, 'octs': True,
+             'font_size': self.field('spin_font_size'),
+             'extra_dy_frac': float(self.field('edit_extra_dy_frac'))})
+        m.fa.set_flow_style()
+        m.yaml_set_anchor('disp_elem_names')
+        disp_elem_names = m
+
+        m_list = []
+        m = CommentedMap({
+            'right_margin_adj': float(self.field('edit_full_r_margin'))})
+        m.fa.set_flow_style()
+        m_list.append(m)
+
+        smins, smaxs = {}, {}
+        for sec in ['sec1', 'sec2', 'sec3']:
+            smins[sec] = float(self.field(f'edit_{sec}_smin'))
+            smaxs[sec] = float(self.field(f'edit_{sec}_smax'))
+
+            sq = CommentedSeq([smins[sec], smaxs[sec]])
+            sq.fa.set_flow_style()
+
+            m = CommentedMap({
+                'right_margin_adj': float(self.field(f'edit_{sec}_r_margin')),
+                'slim': sq, 'disp_elem_names': disp_elem_names,
+            })
+
+            m_list.append(m)
+
+        f(plot_opts, 'one_period', CommentedSeq(m_list))
+        f(plot_opts, 'ring_natural', [])
+        f(plot_opts, 'ring', [])
+
+        #_check_if_yaml_writable(plot_opts)
+
+        plot_captions = mod_conf['lattice_props']['twiss_plot_captions']
+
+        for i, sec in enumerate(list(smins)):
+            _smin, _smax = smins[sec], smaxs[sec]
+            f(plot_captions['one_period'], i+1, SingleQuotedScalarString(
+                fr'Twiss functions $({_smin:.6g} \le s \le {_smax:.6g})$.'))
+        f(plot_captions, 'ring_natural', [])
+        f(plot_captions, 'ring', [])
+
+        #_check_if_yaml_writable(plot_captions)
+
+        #_check_if_yaml_writable(mod_conf)
+
+        self.mod_conf = mod_conf
+
+        return mod_conf
+
+class PageParagraphs(PageGenReport):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+
+        self.set_orig_conf('paragraphs')
+
+        # Adjust initial splitter ratio
+        w = self.findChild(QtWidgets.QSplitter, 'splitter_paragraphs')
+        #w.setSizes([10, 2])
+        w.setSizes([200, 90])
+
+        # Hook up models to views
+
+        # Register fields
+
+        #w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_keywords*')
+        w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_keywords') # TO-BE-DELETED
+        self.registerFieldOnFirstShow('edit_keywords', w)
+
+        w = self.findChild( QtWidgets.QPlainTextEdit,
+                            #'plainTextEdit_lattice_description*')
+                           'plainTextEdit_lattice_description') # TO-BE-DELETED
+        self.registerFieldOnFirstShow('edit_lattice_description', w, 'plainText')
+
+        w = self.findChild(QtWidgets.QPlainTextEdit,
+                           'plainTextEdit_lattice_properties')
+        self.registerFieldOnFirstShow('edit_lattice_properties', w, 'plainText')
+
+        # Set fields
+
+        try:
+            text_list = self.orig_conf['lattice_keywords']
+        except:
+            text_list = None
+        if text_list is not None:
+            self.setField('edit_keywords', ', '.join(text_list))
+
+        try:
+            text_list = self.orig_conf['report_paragraphs']['lattice_description']
+        except:
+            text_list = None
+        if text_list is not None:
+            self.setField('edit_lattice_description', '\n'.join(text_list))
+
+        try:
+            text_list = self.orig_conf['report_paragraphs']['lattice_properties']
+        except:
+            text_list = None
+        if text_list is not None:
+            self.setField('edit_lattice_properties', '\n'.join(text_list))
+
+        # Establish connections
+
+        self.establish_connections()
+
+    def validatePage(self):
+        """"""
+
+        mod_conf = self.modify_conf(self.orig_conf)
+
+        self.mod_conf = mod_conf
+
+        return True
+
+    def modify_conf(self, orig_conf):
+        """"""
+
+        mod_conf = duplicate_yaml_conf(orig_conf)
+
+        #f = partial(update_aliased_scalar, mod_conf)
+
+        keywords = CommentedSeq(
+            [s.strip() for s in self.field('edit_keywords').split(',')])
+        keywords.fa.set_flow_style()
+        mod_conf['lattice_keywords'] = keywords
+
+        mod_conf['report_paragraphs']['lattice_description'] = self.field(
+            'edit_lattice_description').splitlines()
+        mod_conf['report_paragraphs']['lattice_properties'] = self.field(
+            'edit_lattice_properties').splitlines()
+
+        mod_conf['lattice_props']['recalc'] = False
+        mod_conf['lattice_props']['replot'] = False
+
+        #_check_if_yaml_writable(mod_conf)
+
+        self.mod_conf = mod_conf
+
+        return mod_conf
+
+class PageNKicks(PageGenReport):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+
+        self.set_orig_conf('N_KICKS')
+
+        if 'common_remote_opts' in self.wizardObj.conf['nonlin']:
+            self.wizardObj.common_remote_opts.update(
+                self.wizardObj.conf['nonlin']['common_remote_opts'])
+
+        # Hook up models to views
+
+        # Register fields
+
+        for k in ['CSBEND', 'KQUAD', 'KSEXT', 'KOCT']:
+            w = self.findChild(QtWidgets.QSpinBox, f'spinBox_N_KICKS_{k}')
+            self.registerFieldOnFirstShow(f'spin_{k}', w)
+
+        # Set fields
+
+        try:
+            N_KICKS = self.orig_conf['nonlin']['N_KICKS']
+        except:
+            N_KICKS = None
+        if N_KICKS is not None:
+            for k, v in N_KICKS.items():
+                self.setField(f'spin_{k}', v)
+
+        # Establish connections
+
+    def validatePage(self):
+        """"""
+
+        mod_conf = self.modify_conf(self.orig_conf)
+
+        self.mod_conf = mod_conf
+
+        return True
+
+    def modify_conf(self, orig_conf):
+        """"""
+
+        mod_conf = duplicate_yaml_conf(orig_conf)
+
+        #f = partial(update_aliased_scalar, mod_conf)
+
+        for k in ['CSBEND', 'KQUAD', 'KSEXT', 'KOCT']:
+            mod_conf['nonlin']['N_KICKS'][k] = self.field(
+                f'spin_{k}')
+
+        #_check_if_yaml_writable(mod_conf)
+
+        self.mod_conf = mod_conf
+
+        return mod_conf
+
+class PageXYAperTest(PageNonlinCalcTest):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+
+        self.set_orig_conf('xy_aper_test')
+
+        # Hook up models to views
+
+        # Register fields
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+        self.test_list = [
+            ('n_turns', spin), ('abs_xmax', edit), ('abs_ymax', edit),
+            ('ini_ndiv', spin), ('n_lines', spin), ('neg_y_search', check),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.prod_list = [
+            ('n_turns', spin),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.setter_getter = {
+            'test': dict(
+                n_turns='spin', abs_xmax='edit_float', abs_ymax='edit_float',
+                ini_ndiv='spin', n_lines='spin', neg_y_search='check',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+            'production': dict(
+                n_turns='spin',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+        }
+
+        self.calc_type = 'xy_aper'
+        self.register_test_prod_option_widgets()
+
+        # Set fields
+        self.set_test_prod_option_fields()
+
+        # Establish connections
+        self.establish_connections()
+
+class PageFmapXYTest(PageNonlinCalcTest):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+
+        self.set_orig_conf('fmap_xy_test')
+
+        # Hook up models to views
+
+        # Register fields
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+        self.test_list = [
+            ('n_turns', spin), ('xmin', edit), ('xmax', edit),
+            ('ymin', edit), ('ymax', edit), ('nx', spin), ('ny', spin),
+            ('x_offset', edit), ('y_offset', edit), ('delta_offset', edit),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.prod_list = [
+            ('n_turns', spin), ('nx', spin), ('ny', spin),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.setter_getter = {
+            'test': dict(
+                n_turns='spin', xmin='edit_float', xmax='edit_float',
+                ymin='edit_float', ymax='edit_float', nx='spin', ny='spin',
+                x_offset='edit_float', y_offset='edit_float',
+                delta_offset='edit_float',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+            'production': dict(
+                n_turns='spin', nx='spin', ny='spin',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+        }
+
+        self.calc_type = 'fmap_xy'
+        self.register_test_prod_option_widgets()
+
+        # Set fields
+        self.set_test_prod_option_fields()
+
+        # Establish connections
+        self.establish_connections()
+
+class PageFmapPXTest(PageNonlinCalcTest):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+
+        self.set_orig_conf('fmap_px_test')
+
+        # Hook up models to views
+
+        # Register fields
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+        self.test_list = [
+            ('n_turns', spin), ('xmin', edit), ('xmax', edit),
+            ('delta_min', edit), ('delta_max', edit),
+            ('nx', spin), ('ndelta', spin),
+            ('x_offset', edit), ('y_offset', edit), ('delta_offset', edit),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.prod_list = [
+            ('n_turns', spin), ('nx', spin), ('ndelta', spin),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.setter_getter = {
+            'test': dict(
+                n_turns='spin', xmin='edit_float', xmax='edit_float',
+                delta_min='edit_float', delta_max='edit_float',
+                nx='spin', ndelta='spin',
+                x_offset='edit_float', y_offset='edit_float',
+                delta_offset='edit_float',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+            'production': dict(
+                n_turns='spin', nx='spin', ndelta='spin',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+        }
+
+        self.calc_type = 'fmap_px'
+        self.register_test_prod_option_widgets()
+
+        # Set fields
+        self.set_test_prod_option_fields()
+
+        # Establish connections
+        self.establish_connections()
+
+class PageCmapXYTest(PageNonlinCalcTest):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+
+        self.set_orig_conf('cmap_xy_test')
+
+        # Hook up models to views
+
+        # Register fields
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+        self.test_list = [
+            ('n_turns', spin),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.prod_list = [
+            ('n_turns', spin),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.setter_getter = {
+            'test': dict(
+                n_turns='spin',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+            'production': dict(
+                n_turns='spin',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+        }
+
+        self.calc_type = 'cmap_xy'
+        self.register_test_prod_option_widgets()
+
+        # Set fields
+        self.set_test_prod_option_fields()
+
+        # Establish connections
+        self.establish_connections()
+
+class PageCmapPXTest(PageNonlinCalcTest):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+
+        self.set_orig_conf('cmap_px_test')
+
+        # Hook up models to views
+
+        # Register fields
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+        self.test_list = [
+            ('n_turns', spin),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.prod_list = [
+            ('n_turns', spin),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.setter_getter = {
+            'test': dict(
+                n_turns='spin',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+            'production': dict(
+                n_turns='spin',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+        }
+
+        self.calc_type = 'cmap_px'
+        self.register_test_prod_option_widgets()
+
+        # Set fields
+        self.set_test_prod_option_fields()
+
+        # Establish connections
+        self.establish_connections()
+
+class PageMomAperTest(PageNonlinCalcTest):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+
+        self.set_orig_conf('mom_aper_test')
+
+        # Hook up models to views
+
+        # Register fields
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+        self.test_list = [
+            ('n_turns', spin), ('x_initial', edit), ('y_initial', edit),
+            ('delta_negative_start', edit), ('delta_negative_limit', edit),
+            ('delta_positive_start', edit), ('delta_positive_limit', edit),
+            ('init_delta_step_size', edit), ('include_name_pattern', edit),
+            ('steps_back', spin), ('splits', spin), ('split_step_divisor', spin),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.prod_list = [
+            ('n_turns', spin),
+            ('init_delta_step_size', edit), ('include_name_pattern', edit),
+            ('steps_back', spin), ('splits', spin), ('split_step_divisor', spin),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.setter_getter = {
+            'test': dict(
+                n_turns='spin', x_initial='edit_float', y_initial='edit_float',
+                delta_negative_start='edit_%', delta_negative_limit='edit_%',
+                delta_positive_start='edit_%', delta_positive_limit='edit_%',
+                init_delta_step_size='edit_%', include_name_pattern='edit_str',
+                steps_back='spin', splits='spin', split_step_divisor='spin',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+            'production': dict(
+                n_turns='spin',
+                init_delta_step_size='edit_%', include_name_pattern='edit_str',
+                steps_back='spin', splits='spin', split_step_divisor='spin',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+        }
+
+        self.calc_type = 'mom_aper'
+        self.register_test_prod_option_widgets()
+
+        # Set fields
+        self.set_test_prod_option_fields()
+
+        # Establish connections
+        self.establish_connections()
