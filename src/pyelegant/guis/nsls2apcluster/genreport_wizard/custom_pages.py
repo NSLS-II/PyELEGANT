@@ -439,6 +439,8 @@ class PageStandard(QtWidgets.QWizardPage):
         self.orig_conf = None
         self.mod_conf = None
 
+        self._next_id = None
+
     def registerFieldOnFirstShow(self, name, widget, *args, **kwargs):
         """"""
 
@@ -457,6 +459,19 @@ class PageStandard(QtWidgets.QWizardPage):
                 break
         else:
             self.orig_conf = self.wizardObj.conf
+
+    def setNextId(self, next_id):
+        """"""
+
+        self._next_id = next_id
+
+    def nextId(self):
+        """"""
+
+        if self._next_id is None:
+            return super().nextId()
+        else:
+            return self._next_id
 
 class PageGenReport(PageStandard):
     """"""
@@ -713,6 +728,7 @@ class PageNewSetup(QtWidgets.QWizardPage):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(False)
 
         # Register fields
 
@@ -851,6 +867,7 @@ class PageLoadSeedConfig(QtWidgets.QWizardPage):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(False)
 
         self.edit_obj = self.findChild(
             QtWidgets.QLineEdit, 'lineEdit_seed_config_filepath')
@@ -928,6 +945,7 @@ class PageLTE(PageStandard):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('LTE')
 
@@ -1225,6 +1243,7 @@ class PageStraightCenters(PageStandard):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('straight_centers')
 
@@ -1363,6 +1382,7 @@ class PagePhaseAdv(PageStandard):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('phase_adv')
 
@@ -1529,6 +1549,7 @@ class PageStraightDrifts(PageStandard):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('straight_length')
 
@@ -1631,6 +1652,7 @@ class PageGenReportTest1(PageGenReport):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('test1')
 
@@ -1715,6 +1737,7 @@ class PageTwissPlots(PageGenReport):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('twiss_plots')
 
@@ -1834,6 +1857,7 @@ class PageParagraphs(PageGenReport):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('paragraphs')
 
@@ -1933,6 +1957,7 @@ class PageNKicks(PageGenReport):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('N_KICKS')
 
@@ -1998,6 +2023,7 @@ class PageXYAperTest(PageNonlinCalcTest):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('xy_aper_test')
 
@@ -2047,6 +2073,7 @@ class PageFmapXYTest(PageNonlinCalcTest):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('fmap_xy_test')
 
@@ -2099,6 +2126,7 @@ class PageFmapPXTest(PageNonlinCalcTest):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('fmap_px_test')
 
@@ -2153,6 +2181,7 @@ class PageCmapXYTest(PageNonlinCalcTest):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('cmap_xy_test')
 
@@ -2200,6 +2229,7 @@ class PageCmapPXTest(PageNonlinCalcTest):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('cmap_px_test')
 
@@ -2247,6 +2277,7 @@ class PageMomAperTest(PageNonlinCalcTest):
         """"""
 
         self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
 
         self.set_orig_conf('mom_aper_test')
 

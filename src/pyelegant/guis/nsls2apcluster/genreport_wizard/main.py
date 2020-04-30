@@ -4,6 +4,63 @@ import sys
 from qtpy import QtCore, QtGui, QtWidgets
 from qtpy import uic
 
+class SkipPageListModel(QtCore.QAbstractListModel):
+    """"""
+
+    def __init__(self, data, view):
+        """Constructor"""
+
+        super().__init__()
+
+        self._data = data
+        self._view = view
+
+    def data(self, index, role):
+        if role == QtCore.Qt.DisplayRole:
+            return self._data[index.row()]
+
+    def rowCount(self, index):
+        # The length of the outer list.
+        return len(self._data)
+
+class SkipPageSelector(QtWidgets.QDialog):
+    """"""
+
+    def __init__(self, wizard_obj, output_dict, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+        ui_file = os.path.join(os.path.dirname(__file__), 'skip_page.ui')
+        uic.loadUi(ui_file, self)
+
+        w = wizard_obj
+        if isinstance(w, ReportWizard):
+            pass
+
+        cur_page_suffix = w.currentPage().objectName()[len('wizardPage_'):]
+        self.avail_page_suffixes = w.page_name_list[
+            w.page_name_list.index(cur_page_suffix)+1:]
+        data = [w.page_links[suffix].title()
+                for suffix in self.avail_page_suffixes]
+
+        model = SkipPageListModel(data, self.listView)
+        self.listView.setModel(model)
+
+        self.accepted.connect(self.process_selection)
+
+        self.output_dict = output_dict
+
+    def process_selection(self):
+        """"""
+
+        sel_model = self.listView.selectionModel()
+        sel_rows = sel_model.selectedRows()
+        if sel_rows:
+            sel_row_index = sel_rows[0].row()
+            self.output_dict['sel_suffix'] = self.avail_page_suffixes[sel_row_index]
+        else:
+            self.output_dict.clear()
+
 class ReportWizard(QtWidgets.QWizard):
 
     def __init__(self):
@@ -31,8 +88,38 @@ class ReportWizard(QtWidgets.QWizard):
             self.page_links[k] = self.findChild(QtWidgets.QWizardPage,
                                                 f'wizardPage_{k}')
 
+        self.page_indexes = {}
+        for i in self.pageIds():
+            obj_name = self.page(i).objectName()
+            if obj_name.startswith('wizardPage_'):
+                suffix = obj_name[len('wizardPage_'):]
+                self.page_indexes[suffix] = i
+
+        self.setButtonText(QtWidgets.QWizard.CustomButton1, 'Skip to...')
+        self.showSkipButton(False)
+        self.customButtonClicked.connect(self.skip_to)
+
         x0, y0 = 100, 300
         self.setGeometry(x0, y0, 600, 400)
+
+    def showSkipButton(self, TF):
+        """"""
+
+        self.setOption(self.HaveCustomButton1, TF)
+
+    def skip_to(self, button_index):
+        """"""
+
+        output = {}
+        dialog = SkipPageSelector(self, output)
+        dialog.exec()
+
+        if output:
+            sel_page_index = self.page_indexes[output['sel_suffix']]
+            cur_page = self.currentPage()
+            cur_page.setNextId(sel_page_index)
+            self.next() # Click "Next" button
+            cur_page.setNextId(None)
 
 if __name__ == '__main__':
 

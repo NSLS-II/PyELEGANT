@@ -17,7 +17,7 @@
    <enum>QWizard::ModernStyle</enum>
   </property>
   <property name="options">
-   <set>QWizard::NoBackButtonOnStartPage</set>
+   <set>QWizard::HaveCustomButton1|QWizard::NoBackButtonOnStartPage</set>
   </property>
   <widget class="QWizardPage" name="wizardPage1">
    <property name="title">
@@ -5692,7 +5692,7 @@ delta_offset</string>
     </item>
    </layout>
   </widget>
-  <widget class="PageMomAperTest" name="wizardPage_mom_aper_test_2">
+  <widget class="PageMomAperTest" name="wizardPage_mom_aper_test">
    <property name="title">
     <string>Local Momentum Aperture Test Runs</string>
    </property>
