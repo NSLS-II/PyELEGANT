@@ -949,14 +949,11 @@ class Report_NSLS2U_Default:
 
         doc = self.doc
         LTE_contents = self.LTE_contents
-        input_LTE_filepath = self.input_LTE_filepath
 
         with doc.create(plx.Section('Dynamic Aperture')):
             if os.path.exists(plots_pdf_paths['xy_aper']):
                 d = pe.util.load_pgz_file(nonlin_data_filepaths['xy_aper'])
 
-                assert os.path.basename(d['input']['LTE_filepath']) \
-                       == os.path.basename(input_LTE_filepath)
                 assert d['input']['lattice_file_contents'] == LTE_contents
 
                 n_turns = d['input']['n_turns']
@@ -1005,18 +1002,17 @@ class Report_NSLS2U_Default:
 
         doc = self.doc
         LTE_contents = self.LTE_contents
-        input_LTE_filepath = self.input_LTE_filepath
 
         with doc.create(plx.Section('Frequency Map')):
-            if os.path.exists(plots_pdf_paths['fmap_xy']) and \
+            if ('fmap_xy' in nonlin_data_filepaths) and \
+               ('fmap_xy' in plots_pdf_paths) and \
+               os.path.exists(plots_pdf_paths['fmap_xy']) and \
+               ('fmap_px' in nonlin_data_filepaths) and \
+               ('fmap_px' in plots_pdf_paths) and \
                os.path.exists(plots_pdf_paths['fmap_px']):
                 d_xy = pe.util.load_pgz_file(nonlin_data_filepaths['fmap_xy'])
                 d_px = pe.util.load_pgz_file(nonlin_data_filepaths['fmap_px'])
 
-                assert os.path.basename(d_xy['input']['LTE_filepath']) \
-                       == os.path.basename(input_LTE_filepath)
-                assert os.path.basename(d_px['input']['LTE_filepath']) \
-                       == os.path.basename(input_LTE_filepath)
                 assert d_xy['input']['lattice_file_contents'] == LTE_contents
                 assert d_px['input']['lattice_file_contents'] == LTE_contents
 
@@ -1107,12 +1103,16 @@ class Report_NSLS2U_Default:
                     ('fmap_xy', 'On Momentum', 'On-momentum frequency map.'),
                     ('fmap_px', 'Off Momentum', 'Off-momentum frequency map.')]:
 
+                    if k not in nonlin_data_filepaths:
+                        continue
+
                     d = pe.util.load_pgz_file(nonlin_data_filepaths[k])
                     ver_sentence = (
                         f'ELEGANT version {d["_version_ELEGANT"]} was used '
                         f'to compute the frequency map data.')
 
-                    if os.path.exists(plots_pdf_paths[k]):
+                    if (k in plots_pdf_paths) and \
+                       os.path.exists(plots_pdf_paths[k]):
                         with doc.create(plx.Subsection(subsec_title)):
                             doc.append('Description for frequency maps goes here.')
                             doc.append(plx.NewParagraph())
@@ -1130,19 +1130,19 @@ class Report_NSLS2U_Default:
 
         doc = self.doc
         LTE_contents = self.LTE_contents
-        input_LTE_filepath = self.input_LTE_filepath
 
         with doc.create(plx.Section('Chaos Map')):
 
-            if os.path.exists(plots_pdf_paths['cmap_xy']) and \
+            if ('cmap_xy' in nonlin_data_filepaths) and \
+               ('cmap_xy' in plots_pdf_paths) and \
+               os.path.exists(plots_pdf_paths['cmap_xy']) and \
+               ('cmap_px' in nonlin_data_filepaths) and \
+               ('cmap_px' in plots_pdf_paths) and \
                os.path.exists(plots_pdf_paths['cmap_px']):
+
                 d_xy = pe.util.load_pgz_file(nonlin_data_filepaths['cmap_xy'])
                 d_px = pe.util.load_pgz_file(nonlin_data_filepaths['cmap_px'])
 
-                assert os.path.basename(d_xy['input']['LTE_filepath']) \
-                       == os.path.basename(input_LTE_filepath)
-                assert os.path.basename(d_px['input']['LTE_filepath']) \
-                       == os.path.basename(input_LTE_filepath)
                 assert d_xy['input']['lattice_file_contents'] == LTE_contents
                 assert d_px['input']['lattice_file_contents'] == LTE_contents
 
@@ -1232,12 +1232,16 @@ class Report_NSLS2U_Default:
                     ('cmap_xy', 'On Momentum', 'On-momentum chaos map.'),
                     ('cmap_px', 'Off Momentum', 'Off-momentum chaos map.')]:
 
+                    if k not in nonlin_data_filepaths:
+                        continue
+
                     d = pe.util.load_pgz_file(nonlin_data_filepaths[k])
                     ver_sentence = (
                         f'ELEGANT version {d["_version_ELEGANT"]} was used '
                         f'to compute the chaos map data.')
 
-                    if os.path.exists(plots_pdf_paths[k]):
+                    if (k in plots_pdf_paths) and \
+                       os.path.exists(plots_pdf_paths[k]):
                         with doc.create(plx.Subsection(subsec_title)):
                             doc.append('Description for chaos maps goes here.')
                             doc.append(plx.NewParagraph())
@@ -1255,7 +1259,6 @@ class Report_NSLS2U_Default:
 
         doc = self.doc
         LTE_contents = self.LTE_contents
-        input_LTE_filepath = self.input_LTE_filepath
 
         with doc.create(plx.Section('Tune Shift with Amplitude')):
             d = {}
@@ -1269,8 +1272,6 @@ class Report_NSLS2U_Default:
 
                     versions.append(v['_version_ELEGANT'])
 
-                    assert os.path.basename(v['input']['LTE_filepath']) \
-                           == os.path.basename(input_LTE_filepath)
                     assert v['input']['lattice_file_contents'] == LTE_contents
 
                     n_turns_list.append(v['input']['n_turns'])
@@ -1376,7 +1377,6 @@ class Report_NSLS2U_Default:
 
         doc = self.doc
         LTE_contents = self.LTE_contents
-        input_LTE_filepath = self.input_LTE_filepath
 
         with doc.create(plx.Section('Nonlinear Chromaticity')):
             d = pe.util.load_pgz_file(nonlin_data_filepaths['nonlin_chrom'])
@@ -1384,8 +1384,6 @@ class Report_NSLS2U_Default:
                 f'ELEGANT version {d["_version_ELEGANT"]} was used '
                 f'to compute the nonlinear chromaticity data.')
 
-            assert os.path.basename(d['input']['LTE_filepath']) \
-                   == os.path.basename(input_LTE_filepath)
             assert d['input']['lattice_file_contents'] == LTE_contents
 
             n_turns = d['input']['n_turns']
@@ -1443,14 +1441,11 @@ class Report_NSLS2U_Default:
 
         doc = self.doc
         LTE_contents = self.LTE_contents
-        input_LTE_filepath = self.input_LTE_filepath
 
         with doc.create(plx.Section('Momentum Aperture')):
             if os.path.exists(plots_pdf_paths['mom_aper']):
                 d = pe.util.load_pgz_file(nonlin_data_filepaths['mom_aper'])
 
-                assert os.path.basename(d['input']['LTE_filepath']) \
-                       == os.path.basename(input_LTE_filepath)
                 assert d['input']['lattice_file_contents'] == LTE_contents
 
                 n_turns = d['input']['n_turns']
