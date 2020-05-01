@@ -5,6 +5,8 @@ import shlex
 import re
 import getpass
 
+import numpy as np
+
 from qtpy import QtCore, QtGui, QtWidgets
 Qt = QtCore.Qt
 from qtpy import uic
@@ -80,11 +82,14 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
         ui_file = os.path.join(os.path.dirname(__file__), 'cluster_status.ui')
         uic.loadUi(ui_file, self)
 
-        #q_output_format_delimiter = '|'
-        q_output_format_delimiter = '#'
+        self.partition_info = None
+
+        q_output_format_delimiter = '#' # Cannot use "|" here, as this will
+        # conflict with piping in custom commands.
         self.q_output_format_delimiter = q_output_format_delimiter
 
-        q_output_format_list = ['%i','%P','%j','%u','%t','%M','%L','%D','%C','%R']
+        q_output_format_list = [
+            '%A', '%i','%P', '%j','%u','%t','%M','%L','%D','%C','%R', '%Q']
         self.q_output_format = q_output_format_delimiter.join(q_output_format_list)
 
         header, _ = self.squeue('-u nonexistent')
@@ -245,12 +250,86 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
 
         self.q_cmd_extra_args[cmd_type] = new_text
 
+    def update_partition_info(self):
+        """"""
+
+        cmd = 'scontrol show partition'
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+        out, err = p.communicate()
+
+        parsed = {}
+        for k, v in re.findall('([\w\d]+)=([^\s]+)', out):
+            if k == 'PartitionName':
+                d = parsed[v] = {}
+            else:
+                d[k] = v
+
+        self.partition_info = parsed
+
     def update_load_table(self):
         """"""
 
         QTableWidgetItem = QtWidgets.QTableWidgetItem
 
         t = self.tableWidget_load
+        t.setHorizontalHeaderLabels([
+            'Partitions', 'Nodes', '# of Allocated / Total Cores (%)',
+            'CPU Load\n(cores)', 'Free\n(cores)', 'Free &\nSuspendable\n(cores)'])
+
+        self.update_partition_info()
+        #
+        grouped_partition_names = {}
+        for p in list(self.partition_info):
+            preempt_mode = self.partition_info[p]['PreemptMode']
+            nodes_str = self.partition_info[p]['Nodes']
+            nodes_tuple = tuple(re.findall('\w+\-[\d\-\[\],]+(?<!,)', nodes_str))
+            #print((p, preempt_mode, nodes_str, nodes_tuple))
+            k = (nodes_tuple, preempt_mode)
+            if k not in grouped_partition_names:
+                grouped_partition_names[k] = [p]
+            else:
+                grouped_partition_names[k].append(p)
+
+
+        nMaxNodeIndex = 100
+        group_summary = []
+        preempted_partitions = []
+        for (nodes_tuple, preempt_mode), partition_names in \
+            grouped_partition_names.items():
+
+            if preempt_mode != 'OFF':
+                preempted_partitions.extend(partition_names)
+
+            d = dict(
+                partition_names=partition_names, nodes_tuple=nodes_tuple,
+                node_list=[],
+            )
+            for nodes_str in nodes_tuple:
+                prefix = nodes_str.split('-')[0]
+                index_str = nodes_str[len(prefix)+1:]
+                #print((prefix, index_str))
+                if ',' in index_str:
+                    assert index_str.startswith('[') and index_str.endswith(']')
+                    tokens = index_str[1:-1].split(',')
+                    pat_list = []
+                    for tok in tokens:
+                        if '-' in tok:
+                            iStart, iEnd = tok.split('-')
+                            pat_list.extend([f'{i:03d}' for i in range(
+                                int(iStart), int(iEnd)+1)])
+                        else:
+                            pat_list.append(tok)
+                    pat = '|'.join(pat_list)
+                else:
+                    pat = index_str
+                matched_indexes = re.findall(pat, ','.join(
+                    [f'{i:03d}' for i in range(nMaxNodeIndex)]))
+                #print(matched_indexes)
+                node_list = [f'{prefix}-{s}' for s in matched_indexes]
+                #print(nodes_str)
+                #print(prefix, node_list)
+                d['node_list'].extend(node_list)
+            group_summary.append(d)
 
         cmd = 'scontrol show node'
         p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
@@ -260,36 +339,42 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             'NodeName=([\w\d\-]+)\s+[\w=\s]+CPUAlloc=(\d+)\s+CPUTot=(\d+)\s+CPULoad=([\d\.N/A]+)',
             out)
 
-        grouped_nodes = (
-            ['apcpu-[001-005]', 'apcpu-{:03d}', range(1, 5+1)],
-            ['cpu-[019-026]', 'cpu-{:03d}', range(19, 26+1)],
-            ['cpu-[002-005],[007-015]', 'cpu-{:03d}',
-             list(range(2, 5+1)) + list(range(7, 15+1))],
-        )
+        temp_tables = []
+        for p in preempted_partitions:
+            cmd = f'squeue --noheader -p {p} -o "%t#%C#%R"'
+            p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+            out, err = p.communicate()
+            table = np.array([line.split('#') for line in out.splitlines()])
+            temp_tables.append(table)
+        combined_tables = np.vstack(temp_tables)
+        running = combined_tables[:, 0] == 'R'
+        running_cpus = combined_tables[running, 1].astype(int)
+        running_nodes = combined_tables[running, 2]
+        suspendables = {}
+        for node_name in np.unique(running_nodes):
+            suspendables[node_name] = np.sum(
+                running_cpus[running_nodes == node_name])
 
-        grouped_node_names = []
-        grouped_n_alloc = []
-        grouped_n_tot = []
-        grouped_load = []
-        grouped_n_free = []
-        for combined_node_name, _template, node_num_range in grouped_nodes:
-            _nAlloc = _nTot = _cpu_load = 0
-            node_list = [_template.format(i) for i in node_num_range]
+        for d in group_summary:
+            _nAlloc = _nTot = _nSuspendable = _cpu_load = 0
+            node_list = d['node_list']
             for node_name, nAlloc, nTot, cpu_load in parsed:
                 if node_name in node_list:
                     _nAlloc += int(nAlloc)
                     _nTot += int(nTot)
+                    if node_name in suspendables:
+                        _nSuspendable += suspendables[node_name]
                     if cpu_load != 'N/A':
                         _cpu_load += float(cpu_load)
                     else:
                         _cpu_load += float('nan')
-            grouped_node_names.append(combined_node_name)
-            grouped_n_alloc.append(_nAlloc)
-            grouped_n_tot.append(_nTot)
-            grouped_load.append(_cpu_load)
-            grouped_n_free.append(_nTot - _nAlloc)
+            d['n_alloc'] = _nAlloc
+            d['n_tot'] = _nTot
+            d['load'] = _cpu_load
+            d['n_free'] = _nTot - _nAlloc
+            d['n_suspendable'] = _nSuspendable
 
-        t.setRowCount(len(grouped_nodes) + 1 + len(parsed))
+        t.setRowCount(len(group_summary) + 1 + len(parsed))
 
         #progbar_color = 'lightblue'
         #progbar_color = 'green'
@@ -309,25 +394,59 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
         }}
         """
 
-        for iRow, (node_name, n_alloc, n_tot, f_load, n_free) in enumerate(zip(
-            grouped_node_names, grouped_n_alloc, grouped_n_tot, grouped_load,
-            grouped_n_free)):
+        for iRow, d in enumerate(group_summary):
 
-            t.setItem(iRow, 0, QTableWidgetItem(node_name))
+            iCol = 0
+
+            t.setItem(iRow, iCol,
+                      QTableWidgetItem('\n'.join(d['partition_names'])))
+            iCol += 1
+
+            nMaxNodeListLen = 16
+            nodes_list = []
+            for nodes_str in d['nodes_tuple']:
+                if len(nodes_str) <= nMaxNodeListLen:
+                    nodes_list.append(nodes_str)
+                else:
+                    indent = ''
+                    s = ''
+                    for tok in nodes_str.split(','):
+                        if s == '':
+                            s = tok
+                        elif len(f'{s},{tok}') > nMaxNodeListLen:
+                            nodes_list.append(indent + s + ',')
+                            indent = ' ' * 2
+                            s = tok
+                        else:
+                            s = f'{s},{tok}'
+                    if s:
+                        nodes_list.append(indent + s)
+            t.setItem(iRow, iCol, QTableWidgetItem(
+                '\n'.join(nodes_list)))
+            iCol += 1
+
+            self.tableWidget_load.resizeRowToContents(iRow)
 
             prog = QtWidgets.QProgressBar()
-            prog.setMaximum(n_tot)
+            prog.setMaximum(d['n_tot'])
             prog.setMinimum(0)
-            prog.setValue(n_alloc)
+            prog.setValue(d['n_alloc'])
             prog.setFormat('%v / %m (%p%)')
             prog.setStyleSheet(progbar_style_sheet)
-            t.setCellWidget(iRow, 1, prog)
+            t.setCellWidget(iRow, iCol, prog)
+            iCol += 1
 
-            t.setItem(iRow, 2, QTableWidgetItem(f'{f_load:.2f}'))
+            t.setItem(iRow, iCol, QTableWidgetItem(f'{d["load"]:.2f}'))
+            iCol += 1
 
-            t.setItem(iRow, 3, QTableWidgetItem(f'{n_free:d}'))
+            t.setItem(iRow, iCol, QTableWidgetItem(f'{d["n_free"]:d}'))
+            iCol += 1
 
-        row_offset = len(grouped_nodes)
+            t.setItem(iRow, iCol, QTableWidgetItem(
+                f'{d["n_free"] + d["n_suspendable"]:d}'))
+            iCol += 1
+
+        row_offset = len(group_summary)
 
         # Change divider row's background color
         for iCol in range(t.columnCount()):
@@ -338,17 +457,22 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
 
         row_offset += 1
 
-
         for iRow, (node_name, n_alloc_str, n_tot_str, load_val_str
                    ) in enumerate(parsed):
 
             iRow += row_offset
+            iCol = 1
 
-            t.setItem(iRow, 0, QTableWidgetItem(node_name))
+            t.setItem(iRow, iCol, QTableWidgetItem(node_name))
+            iCol += 1
 
             n_alloc = int(n_alloc_str)
             n_tot = int(n_tot_str)
             n_free = n_tot - n_alloc
+            if node_name in suspendables:
+                n_suspendable = suspendables[node_name]
+            else:
+                n_suspendable = 0
 
             prog = QtWidgets.QProgressBar()
             prog.setMaximum(n_tot)
@@ -356,11 +480,17 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             prog.setValue(n_alloc)
             prog.setFormat('%v / %m (%p%)')
             prog.setStyleSheet(progbar_style_sheet)
-            t.setCellWidget(iRow, 1, prog)
+            t.setCellWidget(iRow, iCol, prog)
+            iCol += 1
 
-            t.setItem(iRow, 2, QTableWidgetItem(load_val_str))
+            t.setItem(iRow, iCol, QTableWidgetItem(load_val_str))
+            iCol += 1
 
-            t.setItem(iRow, 3, QTableWidgetItem(f'{n_free:d}'))
+            t.setItem(iRow, iCol, QTableWidgetItem(f'{n_free:d}'))
+            iCol += 1
+
+            t.setItem(iRow, iCol, QTableWidgetItem(f'{n_free + n_suspendable:d}'))
+            iCol += 1
 
         self.tableWidget_load.resizeColumnsToContents()
 
@@ -421,50 +551,6 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
         m.endResetModel()
 
         self.tableView_q.resizeColumnsToContents()
-
-    def sload(self):
-        """"""
-
-        cmd = 'scontrol show node'
-        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
-        out, err = p.communicate()
-
-        parsed = re.findall(
-            'NodeName=([\w\d\-]+)\s+[\w=\s]+CPUAlloc=(\d+)\s+CPUTot=(\d+)\s+CPULoad=([\d\.N/A]+)',
-            out)
-
-        nMaxNodeNameLen = max(
-            [len(s) for s in list(list(zip(*parsed))[0]) +
-             ['apcpu-[001-005]', 'cpu-[019-026]',
-              'cpu-[002-005],[007-015]']])
-
-        node_name = 'Node-Name'
-        print(f'#{node_name:>{nMaxNodeNameLen:d}s} :: Alloc / Tot :: CPU Load')
-        for node_name, nAlloc, nTot, cpu_load in parsed:
-            print(f'{node_name:>{nMaxNodeNameLen+1:d}s} :: {nAlloc:>5s} / {nTot:>3s} :: {cpu_load:>7s}')
-        print('###################################################')
-        for combined_node_name, _template, node_num_range in (
-            ['apcpu-[001-005]', 'apcpu-{:03d}', range(1, 5+1)],
-            ['cpu-[019-026]', 'cpu-{:03d}', range(19, 26+1)],
-            ['cpu-[002-005],[007-015]', 'cpu-{:03d}',
-             list(range(2, 5+1)) + list(range(7, 15+1))],
-            ):
-
-            _nAlloc = _nTot = _cpu_load = 0
-            node_list = [_template.format(i) for i in node_num_range]
-            for node_name, nAlloc, nTot, cpu_load in parsed:
-                if node_name in node_list:
-                    _nAlloc += int(nAlloc)
-                    _nTot += int(nTot)
-                    if cpu_load != 'N/A':
-                        _cpu_load += float(cpu_load)
-                    else:
-                        _cpu_load += float('nan')
-            nAlloc = '{:d}'.format(_nAlloc)
-            nTot = '{:d}'.format(_nTot)
-            cpu_load = '{:.2f}'.format(_cpu_load)
-            node_name = combined_node_name
-            print(f'{node_name:>{nMaxNodeNameLen+1:d}s} :: {nAlloc:>5s} / {nTot:>3s} :: {cpu_load:>7s}')
 
 def main():
     """"""
