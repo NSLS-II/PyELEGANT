@@ -4419,7 +4419,7 @@ class Report_NSLS2U_Default:
         abs_xmax = calc_opts['abs_xmax']
         abs_ymax = calc_opts['abs_ymax']
 
-        remote_opts = dict(job_name=calc_type)
+        remote_opts = {}
         remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
         remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
 
@@ -4441,6 +4441,8 @@ class Report_NSLS2U_Default:
 
             for sign, sign_symbol in [('plus', '+'), ('minus', '-')]:
 
+                plane_specific_remote_opts['job_name'] = f'{calc_type}_{plane}_{sign}'
+
                 output_filepath = nonlin_data_filepaths[f'{calc_type}_{plane}{sign}']
 
                 mod_kwargs = pe.util.deepcopy_dict(kwargs)
@@ -4451,6 +4453,9 @@ class Report_NSLS2U_Default:
                      n_turns=n_turns, N_KICKS=N_KICKS,
                      del_tmp_files=True, run_local=False,
                      remote_opts=plane_specific_remote_opts, **mod_kwargs)
+
+                sys.stdout.flush()
+                sys.stderr.flush()
 
     def calc_nonlin_chrom(
         self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
