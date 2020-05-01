@@ -79,8 +79,7 @@ class ReportWizard(QtWidgets.QWizard):
             'LTE', 'straight_centers', 'phase_adv', 'straight_length',
             'test1', 'twiss_plots', 'paragraphs', 'N_KICKS', 'xy_aper_test',
             'fmap_xy_test', 'fmap_px_test', 'cmap_xy_test', 'cmap_px_test',
-            'mom_aper_test']
-        # 'tswa_test', 'nonlin_chrom_test',
+            'mom_aper_test', 'tswa', 'nonlin_chrom']
         #, 'rf_dep_props', 'lifetime']
 
         self.page_links = {}

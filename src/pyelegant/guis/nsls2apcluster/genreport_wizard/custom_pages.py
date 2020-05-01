@@ -485,6 +485,20 @@ class PageGenReport(PageStandard):
             'xy_aper', 'fmap_xy', 'fmap_px', 'cmap_xy', 'cmap_px',
             'tswa', 'nonlin_chrom', 'mom_aper']
 
+        self.converters = {
+            'spin': dict(set = lambda v: v, get = lambda v: v),
+            'edit_float': dict(set = lambda v: f'{v:.6g}',
+                               get = lambda v: float(v)),
+            'edit_%': dict(set = lambda v: f'{v * 1e2:.6g}',
+                           get = lambda v: float(v) * 1e-2),
+            'edit_str': dict(set = lambda v: str(v), get = lambda v: v),
+            'edit_str_None': dict(
+                set = lambda v: str(v) if v is not None else '',
+                get = lambda v: v if v.strip() != '' else None),
+            'check': dict(set = lambda v: v, get = lambda v: v),
+            'combo': dict(set = lambda v: v, get = lambda v: v),
+        }
+
     def establish_connections(self):
         """"""
 
@@ -499,20 +513,40 @@ class PageGenReport(PageStandard):
         view_out.setModel(ListModelStdLogger([], view_out))
         view_err.setModel(ListModelStdLogger([], view_err))
 
-        b = self.findChildren(QtWidgets.QPushButton,
-                              QtCore.QRegExp('pushButton_gen_.+'))[0]
-        b.clicked.connect(partial(
-            self.generate_report, config_filepath, view_out, view_err))
+        gen_buttons = self.findChildren(QtWidgets.QPushButton,
+                                        QtCore.QRegExp('pushButton_gen_.+'))
+        if len(gen_buttons) == 1:
+            b = gen_buttons[0]
+            b.clicked.connect(partial(
+                self.generate_report, config_filepath, view_out, view_err, None))
+        elif len(gen_buttons) == 2:
+            for b in gen_buttons:
+                _args = [config_filepath, view_out, view_err]
+                if '_recalc_' in b.objectName():
+                    _args += ['recalc']
+                elif '_replot_' in b.objectName():
+                    _args += ['replot']
+                else:
+                    RuntimeError()
+                b.clicked.connect(partial(self.generate_report, *_args))
+        else:
+            raise RuntimeError()
         b = self.findChildren(QtWidgets.QPushButton,
                               QtCore.QRegExp('pushButton_open_pdf_.+'))[0]
         b.clicked.connect(partial(open_pdf_report, pdf_filepath))
 
-    def generate_report(self, config_filepath, view_stdout=None, view_stderr=None):
+    def generate_report(
+        self, config_filepath, view_stdout=None, view_stderr=None,
+        recalc_replot=None):
         """"""
 
         config_filename = Path(config_filepath).name
 
-        mod_conf = self.modify_conf(self.orig_conf)
+        if recalc_replot is None:
+            mod_conf = self.modify_conf(self.orig_conf)
+        else:
+            mod_conf = self.modify_conf(self.orig_conf,
+                                        recalc_replot=recalc_replot)
 
         yml = yaml.YAML()
         yml.preserve_quotes = True
@@ -524,7 +558,7 @@ class PageGenReport(PageStandard):
         generate_report(config_filename, view_stdout=view_stdout,
                         view_stderr=view_stderr)
 
-    def modify_conf(self, orig_conf):
+    def modify_conf(self, orig_conf, recalc_replot=None):
         """"""
         return duplicate_yaml_conf(orig_conf)
 
@@ -540,20 +574,6 @@ class PageNonlinCalcTest(PageGenReport):
         self.test_list = None
         self.prod_list = None
         self.setter_getter = None
-
-        self.converters = {
-            'spin': dict(set = lambda v: v, get = lambda v: v),
-            'edit_float': dict(set = lambda v: f'{v:.6g}',
-                               get = lambda v: float(v)),
-            'edit_%': dict(set = lambda v: f'{v * 1e2:.6g}',
-                           get = lambda v: float(v) * 1e-2),
-            'edit_str': dict(set = lambda v: str(v), get = lambda v: v),
-            'edit_str_None': dict(
-                set = lambda v: str(v) if v is not None else '',
-                get = lambda v: v if v.strip() != '' else None),
-            'check': dict(set = lambda v: v, get = lambda v: v),
-            'combo': dict(set = lambda v: v, get = lambda v: v),
-        }
 
     def register_test_prod_option_widgets(self):
         """"""
@@ -700,6 +720,220 @@ class PageNonlinCalcTest(PageGenReport):
         calc_opts.yaml_set_anchor(f'{self.calc_type}_{mode}')
         genreport._yaml_append_map(ncf['calc_opts'][self.calc_type], mode,
                                    calc_opts)
+
+        #_check_if_yaml_writable(mod_conf)
+
+        self.mod_conf = mod_conf
+
+        return mod_conf
+
+class PageNonlinCalcPlot(PageGenReport):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+        self.calc_type = None
+        self.calc_list = None
+        self.plot_list = None
+        self.setter_getter = None
+
+    def register_calc_plot_option_widgets(self):
+        """"""
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+
+        for mode, k_wtype_list in [
+            ('calc', self.calc_list), ('plot', self.plot_list)]:
+
+            for k, wtype in k_wtype_list:
+                w_suffix = f_suffix = f'{k}_{self.calc_type}_{mode}'
+                if wtype == spin:
+                    w = self.findChild(spin, f'spinBox_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'spin_{f_suffix}', w)
+                elif wtype == edit:
+                    w = self.findChild(edit, f'lineEdit_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'edit_{f_suffix}', w)
+                elif wtype == check:
+                    w = self.findChild(check, f'checkBox_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'check_{f_suffix}', w)
+                elif wtype == combo:
+                    w = self.findChild(combo, f'comboBox_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'combo_{f_suffix}', w,
+                                                  property='currentText')
+                else:
+                    raise ValueError()
+
+    def set_calc_plot_option_fields(self):
+        """"""
+
+        assert self.calc_type in ('tswa', 'nonlin_chrom')
+
+        ncf = self.orig_conf['nonlin']
+
+        for mode in ['calc', 'plot']:
+            try:
+                if mode == 'calc':
+                    opts = ncf['calc_opts'][self.calc_type]['production']
+                elif mode == 'plot':
+                    opts = ncf[f'{self.calc_type}_plot_opts']
+                else:
+                    raise ValueError
+            except:
+                opts = None
+            if opts is not None:
+                for k, v in opts.items():
+                    if k not in self.setter_getter[mode]:
+                        continue
+                    conv_type = self.setter_getter[mode][k]
+                    conv = self.converters[conv_type]['set']
+                    wtype = conv_type.split('_')[0]
+                    self.setField(f'{wtype}_{k}_{self.calc_type}_{mode}', conv(v))
+
+    def validatePage(self):
+        """"""
+
+        mod_conf = self.modify_conf(self.orig_conf,
+                                    recalc_replot='no_recalc_replot')
+
+        self.mod_conf = mod_conf
+
+        return True
+
+    def modify_conf(self, orig_conf, recalc_replot=None):
+        """"""
+
+        if recalc_replot is None:
+            recalc_replot = 'recalc'
+        else:
+            assert recalc_replot in ('recalc', 'replot', 'no_recalc_replot')
+
+        w = self.findChildren(QtWidgets.QTabWidget,
+                              QtCore.QRegExp('tabWidget_std_.+'))[0]
+        w.setCurrentIndex(0) # show "stdout" tab before report generation starts
+
+        mod_conf = duplicate_yaml_conf(orig_conf)
+
+        #f = partial(update_aliased_scalar, mod_conf)
+
+        mod_conf['lattice_props']['recalc'] = False
+        mod_conf['lattice_props']['replot'] = False
+
+        ncf = mod_conf['nonlin']
+
+        for _sel_calc_type in self.all_calc_types:
+            if _sel_calc_type == self.calc_type:
+                ncf['include'][_sel_calc_type] = True
+                if recalc_replot == 'recalc':
+                    ncf['recalc'][_sel_calc_type] = True
+                    ncf['replot'][_sel_calc_type] = True
+                elif recalc_replot == 'replot':
+                    ncf['recalc'][_sel_calc_type] = False
+                    ncf['replot'][_sel_calc_type] = True
+                elif recalc_replot == 'no_recalc_replot':
+                    ncf['recalc'][_sel_calc_type] = False
+                    ncf['replot'][_sel_calc_type] = False
+                else:
+                    raise ValueError('This can never be reached')
+            else:
+                ncf['include'][_sel_calc_type] = False
+                ncf['recalc'][_sel_calc_type] = False
+                ncf['replot'][_sel_calc_type] = False
+
+        if ncf['use_beamline'] is not mod_conf['use_beamline_ring']:
+            ncf['use_beamline'] = mod_conf['use_beamline_ring']
+
+        ncf['selected_calc_opt_names'][self.calc_type] = 'production'
+
+        common_remote_opts = self.wizardObj.common_remote_opts
+
+        if recalc_replot == 'recalc':
+            del ncf['calc_opts'][self.calc_type]['production']
+
+            mode = 'calc'
+
+            new_calc_opts = {}
+            for k, conv_type in self.setter_getter[mode].items():
+                conv = self.converters[conv_type]['get']
+                wtype = conv_type.split('_')[0]
+                v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
+                if k in ('partition', 'ntasks', 'time'):
+                    if k in common_remote_opts:
+                        if common_remote_opts[k] == v:
+                            continue
+                        else:
+                            if 'remote_opts' not in new_calc_opts:
+                                new_calc_opts['remote_opts'] = {}
+                            new_calc_opts['remote_opts'][k] = v
+                    else:
+                        if 'remote_opts' not in new_calc_opts:
+                            new_calc_opts['remote_opts'] = {}
+                        new_calc_opts['remote_opts'][k] = v
+                else:
+                    new_calc_opts[k] = v
+
+            genreport._yaml_append_map(
+                ncf['calc_opts'][self.calc_type], 'production',
+                CommentedMap(new_calc_opts))
+
+        if recalc_replot in ('recalc', 'replot'):
+
+            del ncf[f'{self.calc_type}_plot_opts']
+
+            mode = 'plot'
+
+            new_calc_opts = {}
+            for k, conv_type in self.setter_getter[mode].items():
+                conv = self.converters[conv_type]['get']
+                wtype = conv_type.split('_')[0]
+                v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
+                new_calc_opts[k] = v
+
+                if k.startswith('footprint_nux'):
+                    if 'footprint_nuxlim' not in new_calc_opts:
+                        new_calc_opts['footprint_nuxlim'] = [np.nan, np.nan]
+                    if k == 'footprint_nux_min':
+                        new_calc_opts['footprint_nuxlim'][0] = v
+                    elif k == 'footprint_nux_max':
+                        new_calc_opts['footprint_nuxlim'][1] = v
+                    else:
+                        raise ValueError
+                    del new_calc_opts[k]
+                elif k.startswith('footprint_nuy'):
+                    if 'footprint_nuylim' not in new_calc_opts:
+                        new_calc_opts['footprint_nuylim'] = [np.nan, np.nan]
+                    if k == 'footprint_nuy_min':
+                        new_calc_opts['footprint_nuylim'][0] = v
+                    elif k == 'footprint_nuy_max':
+                        new_calc_opts['footprint_nuylim'][1] = v
+                    else:
+                        raise ValueError
+                    del new_calc_opts[k]
+                elif k.startswith('fit_delta_'):
+                    if 'fit_deltalim' not in new_calc_opts:
+                        new_calc_opts['fit_deltalim'] = [np.nan, np.nan]
+                    if k == 'fit_delta_min':
+                        new_calc_opts['fit_deltalim'][0] = v
+                    elif k == 'fit_delta_max':
+                        new_calc_opts['fit_deltalim'][1] = v
+                    del new_calc_opts[k]
+            for plane in ['x', 'y']:
+                k = f'footprint_nu{plane}lim'
+                if k in new_calc_opts:
+                    seq = CommentedSeq(new_calc_opts[k])
+                    seq.fa.set_flow_style()
+                    new_calc_opts[k] = seq
+            k = 'fit_deltalim'
+            if k in new_calc_opts:
+                seq = CommentedSeq(new_calc_opts[k])
+                seq.fa.set_flow_style()
+                new_calc_opts[k] = seq
+
+            genreport._yaml_append_map(
+                ncf, f'{self.calc_type}_plot_opts', CommentedMap(new_calc_opts))
 
         #_check_if_yaml_writable(mod_conf)
 
@@ -2098,7 +2332,7 @@ class PageFmapXYTest(PageNonlinCalcTest):
                 n_turns='spin', xmin='edit_float', xmax='edit_float',
                 ymin='edit_float', ymax='edit_float', nx='spin', ny='spin',
                 x_offset='edit_float', y_offset='edit_float',
-                delta_offset='edit_float',
+                delta_offset='edit_%',
                 partition='combo', ntasks='spin', time='edit_str_None'),
             'production': dict(
                 n_turns='spin', nx='spin', ny='spin',
@@ -2150,10 +2384,10 @@ class PageFmapPXTest(PageNonlinCalcTest):
         self.setter_getter = {
             'test': dict(
                 n_turns='spin', xmin='edit_float', xmax='edit_float',
-                delta_min='edit_float', delta_max='edit_float',
+                delta_min='edit_%', delta_max='edit_%',
                 nx='spin', ndelta='spin',
                 x_offset='edit_float', y_offset='edit_float',
-                delta_offset='edit_float',
+                delta_offset='edit_%',
                 partition='combo', ntasks='spin', time='edit_str_None'),
             'production': dict(
                 n_turns='spin', nx='spin', ndelta='spin',
@@ -2321,6 +2555,116 @@ class PageMomAperTest(PageNonlinCalcTest):
 
         # Set fields
         self.set_test_prod_option_fields()
+
+        # Establish connections
+        self.establish_connections()
+
+class PageTswa(PageNonlinCalcPlot):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
+
+        self.set_orig_conf('tswa')
+
+        # Hook up models to views
+
+        # Register fields
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+        self.calc_list = [
+            ('n_turns', spin), ('abs_xmax', edit), ('abs_ymax', edit),
+            ('nx', spin), ('ny', spin), ('x_offset', edit), ('y_offset', edit),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.plot_list = [
+            ('fit_xmin', edit), ('fit_ymin', edit),
+            ('fit_xmax', edit), ('fit_ymax', edit),
+            ('footprint_nux_min', edit), ('footprint_nux_max', edit),
+            ('footprint_nuy_min', edit), ('footprint_nuy_max', edit),
+        ]
+        self.setter_getter = {
+            'calc': dict(
+                n_turns='spin', abs_xmax='edit_float', abs_ymax='edit_float',
+                nx='spin', ny='spin', x_offset='edit_float', y_offset='edit_float',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+            'plot': dict(
+                fit_xmin='edit_float', fit_ymin='edit_float',
+                fit_xmax='edit_float', fit_ymax='edit_float',
+                footprint_nux_min='edit_float', footprint_nux_max='edit_float',
+                footprint_nuy_min='edit_float', footprint_nuy_max='edit_float'),
+        }
+
+        self.calc_type = 'tswa'
+        self.register_calc_plot_option_widgets()
+
+        # Set fields
+        self.set_calc_plot_option_fields()
+
+        # Establish connections
+        self.establish_connections()
+
+class PageNonlinChrom(PageNonlinCalcPlot):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(True)
+
+        self.set_orig_conf('tswa')
+
+        # Hook up models to views
+
+        # Register fields
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+        self.calc_list = [
+            ('n_turns', spin), ('delta_min', edit), ('delta_max', edit),
+            ('ndelta', spin), ('x_offset', edit), ('y_offset', edit),
+            ('delta_offset', edit), ('save_fft', check),
+            ('partition', combo), ('ntasks', spin), ('time', edit)
+        ]
+        self.plot_list = [
+            ('max_chrom_order', spin), ('plot_fft', check),
+            ('fit_delta_min', edit), ('fit_delta_max', edit),
+            ('footprint_nux_min', edit), ('footprint_nux_max', edit),
+            ('footprint_nuy_min', edit), ('footprint_nuy_max', edit),
+        ]
+        self.setter_getter = {
+            'calc': dict(
+                n_turns='spin', delta_min='edit_%', delta_max='edit_%',
+                ndelta='spin', x_offset='edit_float', y_offset='edit_float',
+                delta_offset='edit_%', save_fft='check',
+                partition='combo', ntasks='spin', time='edit_str_None'),
+            'plot': dict(
+                max_chrom_order='spin', plot_fft='check',
+                fit_delta_min='edit_%', fit_delta_max='edit_%',
+                footprint_nux_min='edit_float', footprint_nux_max='edit_float',
+                footprint_nuy_min='edit_float', footprint_nuy_max='edit_float'),
+        }
+
+        self.calc_type = 'nonlin_chrom'
+        self.register_calc_plot_option_widgets()
+
+        # Set fields
+        self.set_calc_plot_option_fields()
 
         # Establish connections
         self.establish_connections()
