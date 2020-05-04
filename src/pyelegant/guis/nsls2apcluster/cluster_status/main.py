@@ -340,20 +340,24 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             out)
 
         temp_tables = []
-        for p in preempted_partitions:
-            cmd = f'squeue --noheader -p {p} -o "%t#%C#%R"'
+        for pname in preempted_partitions:
+            cmd = f'squeue --noheader -p {pname} -o "%t#%C#%R"'
             p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
             out, err = p.communicate()
-            table = np.array([line.split('#') for line in out.splitlines()])
-            temp_tables.append(table)
-        combined_tables = np.vstack(temp_tables)
-        running = combined_tables[:, 0] == 'R'
-        running_cpus = combined_tables[running, 1].astype(int)
-        running_nodes = combined_tables[running, 2]
-        suspendables = {}
-        for node_name in np.unique(running_nodes):
-            suspendables[node_name] = np.sum(
-                running_cpus[running_nodes == node_name])
+            if out.strip() != '':
+                table = np.array([line.split('#') for line in out.splitlines()])
+                temp_tables.append(table)
+        if temp_tables:
+            combined_tables = np.vstack(temp_tables)
+            running = combined_tables[:, 0] == 'R'
+            running_cpus = combined_tables[running, 1].astype(int)
+            running_nodes = combined_tables[running, 2]
+            suspendables = {}
+            for node_name in np.unique(running_nodes):
+                suspendables[node_name] = np.sum(
+                    running_cpus[running_nodes == node_name])
+        else:
+            suspendables = {}
 
         for d in group_summary:
             _nAlloc = _nTot = _nSuspendable = _cpu_load = 0
