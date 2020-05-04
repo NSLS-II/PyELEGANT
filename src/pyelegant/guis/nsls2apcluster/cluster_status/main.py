@@ -380,23 +380,48 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
 
         t.setRowCount(len(group_summary) + 1 + len(parsed))
 
-        #progbar_color = 'lightblue'
-        #progbar_color = 'green'
-        progbar_color = 'red'
 
-        progbar_style_sheet = f"""
+        nonsusp_color = 'red'
+        susp_color = 'green'
+
+        progbar_style_sheet_templates = {'0': '', '1': '', 'else': ''}
+        for k in list(progbar_style_sheet_templates):
+            progbar_style_sheet_templates[k] = '''
         QProgressBar{{
             border: 2px solid grey;
             border-radius: 5px;
             text-align: center
         }}
-
+        '''
+        k = '0'
+        progbar_style_sheet_templates[k] += '''
         QProgressBar::chunk {{
-            background-color: {progbar_color};
-            width: 10px;
+            background-color: {susp_color};
+
             margin: 0px;
-        }}
-        """
+        }}'''
+        progbar_style_sheet_templates[k] = \
+            progbar_style_sheet_templates[k].format(susp_color=susp_color)
+        k = '1'
+        progbar_style_sheet_templates[k] += '''
+        QProgressBar::chunk {{
+            background-color: {nonsusp_color};
+
+            margin: 0px;
+        }}'''
+        progbar_style_sheet_templates[k] = \
+            progbar_style_sheet_templates[k].format(nonsusp_color=nonsusp_color)
+        k = 'else'
+        progbar_style_sheet_templates[k] += '''
+        QProgressBar::chunk {{{{
+            background-color:
+            qlineargradient(
+            x1: 0, y1: 0, x2: 1, y2: 0,
+            stop: 0 {nonsusp_color}, stop: {{pbar_frac1:.5f}} {nonsusp_color},
+            stop: {{pbar_frac2:.5f}} {susp_color}, stop: 1 {susp_color});
+
+            margin: 0px;
+        }}}}'''.format(nonsusp_color=nonsusp_color, susp_color=susp_color)
 
         for iRow, d in enumerate(group_summary):
 
@@ -436,7 +461,20 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             prog.setMinimum(0)
             prog.setValue(d['n_alloc'])
             prog.setFormat('%v / %m (%p%)')
-            prog.setStyleSheet(progbar_style_sheet)
+
+            if d["n_alloc"] != 0:
+                pbar_frac = (d["n_alloc"] - d['n_suspendable']) / d["n_alloc"]
+            else:
+                pbar_frac = 1.0
+            if pbar_frac == 0.0:
+                sheet = progbar_style_sheet_templates['0']
+            elif pbar_frac == 1.0:
+                sheet = progbar_style_sheet_templates['1']
+            else:
+                sheet = progbar_style_sheet_templates['else'].format(
+                    pbar_frac1=pbar_frac, pbar_frac2=min([pbar_frac+1e-5, 1.0]))
+            prog.setStyleSheet(sheet)
+
             t.setCellWidget(iRow, iCol, prog)
             iCol += 1
 
@@ -483,7 +521,20 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             prog.setMinimum(0)
             prog.setValue(n_alloc)
             prog.setFormat('%v / %m (%p%)')
-            prog.setStyleSheet(progbar_style_sheet)
+
+            if n_alloc != 0:
+                pbar_frac = (n_alloc - n_suspendable) / n_alloc
+            else:
+                pbar_frac = 1.0
+            if pbar_frac == 0.0:
+                sheet = progbar_style_sheet_templates['0']
+            elif pbar_frac == 1.0:
+                sheet = progbar_style_sheet_templates['1']
+            else:
+                sheet = progbar_style_sheet_templates['else'].format(
+                    pbar_frac1=pbar_frac, pbar_frac2=min([pbar_frac+1e-5, 1.0]))
+            prog.setStyleSheet(sheet)
+
             t.setCellWidget(iRow, iCol, prog)
             iCol += 1
 
