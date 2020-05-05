@@ -27,6 +27,8 @@ from ruamel.yaml.scalarfloat import ScalarFloat
 import pyelegant as pe
 from pyelegant.scripts import genreport
 
+TEST_MODE = True
+
 def _check_if_yaml_writable(yaml_object):
     """"""
 
@@ -59,6 +61,34 @@ def duplicate_yaml_conf(orig_conf):
     _temp_yaml_file.close()
 
     return dup_conf
+
+def get_yaml_repr_str(yaml_commented_obj):
+    """"""
+
+    _temp_yaml_file = tempfile.NamedTemporaryFile(
+        suffix='.yaml', dir=None, delete=True)
+
+    yml = yaml.YAML()
+    yml.dump(yaml_commented_obj, _temp_yaml_file)
+
+    repr = Path(_temp_yaml_file.name).read_text().splitlines()[0]
+
+    _temp_yaml_file.close()
+
+    return repr
+
+def convert_to_ScalarFloat(float_val):
+    """
+    For ScalarFloat(), you cannot simply pass a float object, as it requires
+    many extra arguments to be still YAML dumpable. So, here we use the YAML
+    loader to correctly convert a Python float.
+    """
+
+    float_str = f'{float_val:.16g}'
+    if '.' not in float_str:
+        float_str = f'%#.{len(float_str)+1}g' % float_val
+
+    return yaml.YAML().load(float_str)
 
 def update_aliased_scalar(data, parent_obj, key_or_index, val):
     """
@@ -97,19 +127,36 @@ def update_aliased_scalar(data, parent_obj, key_or_index, val):
     else:
         raise ValueError(f'Unexpected type for "parent_obj": {type(parent_obj)}')
 
-    if isinstance(obj, ScalarFloat):
-        kwargs = dict(prec=obj._prec, width=obj._width)
-        # ^ For some reason, "prec=-1" and "width=1" (not the default values
-        #   None for these properties) are required to be able to still
-        #   write "conf" into a YAML file.
-    else:
-        kwargs = {}
-
     if hasattr(obj, 'anchor'):
-        recurse(data, parent_obj, key_or_index, obj,
-                type(obj)(val, anchor=obj.anchor.value, **kwargs))
+        if isinstance(obj, ScalarFloat):
+            if isinstance(val, ScalarFloat): # This condition must come before
+                # the condition check for "isinstance(val, float)", as
+                # ScalarFloat() is also an instance of "float"
+                new_obj = duplicate_yaml_conf(val)
+            elif isinstance(val, float):
+                new_obj = convert_to_ScalarFloat(val)
+            else:
+                raise ValueError
+            new_obj.yaml_set_anchor(obj.anchor.value)
+        else:
+            new_obj = type(obj)(val, anchor=obj.anchor.value)
+        recurse(data, parent_obj, key_or_index, obj, new_obj)
+    elif obj is None:
+        recurse(data, parent_obj, key_or_index, obj, val)
     else:
-        recurse(data, parent_obj, key_or_index, obj, type(obj)(val, **kwargs))
+        #if isinstance(obj, ScalarFloat):
+            #new_obj = convert_to_ScalarFloat(val)
+        #else:
+            #new_obj = type(obj)(val)
+        if isinstance(val, ScalarFloat): # This condition must come before
+            # the condition check for "isinstance(val, float)", as
+            # ScalarFloat() is also an instance of "float"
+            new_obj = duplicate_yaml_conf(val)
+        elif isinstance(val, float):
+            new_obj = convert_to_ScalarFloat(val)
+        else:
+            new_obj = type(obj)(val)
+        recurse(data, parent_obj, key_or_index, obj, new_obj)
 
     if (hasattr(obj, 'fa') and obj.fa.flow_style()) or (
         hasattr(val, 'fa') and val.fa.flow_style()):
@@ -485,19 +532,90 @@ class PageGenReport(PageStandard):
             'xy_aper', 'fmap_xy', 'fmap_px', 'cmap_xy', 'cmap_px',
             'tswa', 'nonlin_chrom', 'mom_aper']
 
+        YAML_OBJ = yaml.YAML()
+
         self.converters = {
             'spin': dict(set = lambda v: v, get = lambda v: v),
-            'edit_float': dict(set = lambda v: f'{v:.6g}',
-                               get = lambda v: float(v)),
-            'edit_%': dict(set = lambda v: f'{v * 1e2:.6g}',
-                           get = lambda v: float(v) * 1e-2),
+            'edit_float': dict(
+                #set = lambda v: f'{v:.6g}',
+                set = lambda v: get_yaml_repr_str(v),
+                #get = lambda v: float(v)),
+                get = lambda v: YAML_OBJ.load(
+                    (v if ('.' in v) or ('e' in v) or ('E' in v)
+                     else v + '.0'))),
+            'edit_%': dict(
+                set = lambda v: f'{v * 1e2:.6g}',
+                #get = lambda v: float(v) * 1e-2,
+                get = lambda v: YAML_OBJ.load(
+                    v + 'e-2' if float(v) != 0.0 else '0.0'),
+                ),
             'edit_str': dict(set = lambda v: str(v), get = lambda v: v),
             'edit_str_None': dict(
                 set = lambda v: str(v) if v is not None else '',
                 get = lambda v: v if v.strip() != '' else None),
             'check': dict(set = lambda v: v, get = lambda v: v),
             'combo': dict(set = lambda v: v, get = lambda v: v),
+            'edit_list_float': dict(
+                set = lambda v_list: ', '.join([f'{v:.6g}' for v in v_list]),
+                get = lambda v: [float(s.strip()) for s in v.split(',')]),
+            'combo_special': dict(set = self._set_combo_special,
+                                  get = self._get_combo_special),
+            'edit_special': dict(set = self._set_edit_special,
+                                 get = self._get_edit_special),
         }
+
+    @staticmethod
+    def _get_edit_special(name, v):
+        """"""
+
+        if name == 'coupling_list':
+            return [s.strip() for s in v.split(',')]
+        elif name == 'rf_voltages':
+            #return [float(s.strip()) * 1e6 for s in v.split(',')]
+            return [yaml.YAML().load(s.strip() + 'e6') for s in v.split(',')]
+        else:
+            raise ValueError()
+
+    @staticmethod
+    def _set_edit_special(name, v):
+        """"""
+
+        if name == 'coupling_list':
+            v_list = v
+            return ', '.join([v.strip() for v in v_list])
+        elif name == 'rf_voltages':
+            v_list = v
+            return ', '.join([f'{v/1e6:.6g}' for v in v_list])
+        else:
+            raise ValueError()
+
+    @staticmethod
+    def _get_combo_special(name, v):
+        """"""
+
+        if name == 'max_mom_aper':
+            if v == 'None':
+                return None
+            elif v == 'auto':
+                return v
+            else:
+                return float(v)
+        else:
+            raise ValueError()
+
+    @staticmethod
+    def _set_combo_special(name, v):
+        """"""
+
+        if name == 'max_mom_aper':
+            if v in (None, 'None', 'none'):
+                return 'None'
+            elif v in ('Auto', 'auto'):
+                return v
+            else:
+                return f'{v:.6g}'
+        else:
+            raise ValueError()
 
     def establish_connections(self):
         """"""
@@ -657,7 +775,7 @@ class PageNonlinCalcTest(PageGenReport):
 
         mod_conf = duplicate_yaml_conf(orig_conf)
 
-        #f = partial(update_aliased_scalar, mod_conf)
+        f = partial(update_aliased_scalar, mod_conf)
 
         mod_conf['lattice_props']['recalc'] = False
         mod_conf['lattice_props']['replot'] = False
@@ -679,47 +797,116 @@ class PageNonlinCalcTest(PageGenReport):
 
         common_remote_opts = self.wizardObj.common_remote_opts
 
-        new_calc_opts = {}
-        for mode in ['test', 'production']:
-            del ncf['calc_opts'][self.calc_type][mode]
+        if False:
+            new_calc_opts = {}
+            for mode in ['test', 'production']:
+                del ncf['calc_opts'][self.calc_type][mode]
 
-            new_calc_opts[mode] = {}
-            for k, conv_type in self.setter_getter[mode].items():
-                conv = self.converters[conv_type]['get']
-                wtype = conv_type.split('_')[0]
-                v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
-                if k in ('partition', 'ntasks', 'time'):
-                    if k in common_remote_opts:
-                        if common_remote_opts[k] == v:
-                            continue
+                new_calc_opts[mode] = {}
+                for k, conv_type in self.setter_getter[mode].items():
+                    conv = self.converters[conv_type]['get']
+                    wtype = conv_type.split('_')[0]
+                    v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
+                    if k in ('partition', 'ntasks', 'time'):
+                        if k in common_remote_opts:
+                            if common_remote_opts[k] == v:
+                                continue
+                            else:
+                                if 'remote_opts' not in new_calc_opts[mode]:
+                                    new_calc_opts[mode]['remote_opts'] = {}
+                                new_calc_opts[mode]['remote_opts'][k] = v
                         else:
                             if 'remote_opts' not in new_calc_opts[mode]:
                                 new_calc_opts[mode]['remote_opts'] = {}
                             new_calc_opts[mode]['remote_opts'][k] = v
                     else:
-                        if 'remote_opts' not in new_calc_opts[mode]:
-                            new_calc_opts[mode]['remote_opts'] = {}
-                        new_calc_opts[mode]['remote_opts'][k] = v
-                else:
-                    new_calc_opts[mode][k] = v
+                        new_calc_opts[mode][k] = v
 
-        mode = 'test'
-        calc_opts = CommentedMap(new_calc_opts[mode])
-        if self.calc_type.startswith('cmap_'):
-            calc_opts.add_yaml_merge([
-                (0, ncf['calc_opts'][self.calc_type.replace(
-                    'cmap_', 'fmap_')][mode])])
-        calc_opts.yaml_set_anchor(f'{self.calc_type}_{mode}')
-        genreport._yaml_append_map(ncf['calc_opts'][self.calc_type], mode,
-                                   calc_opts)
-        test_calc_opts = calc_opts
+            mode = 'test'
+            calc_opts = CommentedMap(new_calc_opts[mode])
+            if self.calc_type.startswith('cmap_'):
+                calc_opts.add_yaml_merge([
+                    (0, ncf['calc_opts'][self.calc_type.replace(
+                        'cmap_', 'fmap_')][mode])])
+            calc_opts.yaml_set_anchor(f'{self.calc_type}_{mode}')
+            genreport._yaml_append_map(ncf['calc_opts'][self.calc_type], mode,
+                                       calc_opts)
+            test_calc_opts = calc_opts
 
-        mode = 'production'
-        calc_opts = CommentedMap(new_calc_opts[mode])
-        calc_opts.add_yaml_merge([(0, test_calc_opts)])
-        calc_opts.yaml_set_anchor(f'{self.calc_type}_{mode}')
-        genreport._yaml_append_map(ncf['calc_opts'][self.calc_type], mode,
-                                   calc_opts)
+            mode = 'production'
+            calc_opts = CommentedMap(new_calc_opts[mode])
+            if self.calc_type.startswith('cmap_'):
+                fmap_prod_calc_opts = ncf['calc_opts'][self.calc_type.replace(
+                    'cmap_', 'fmap_')]['production']
+                calc_opts.add_yaml_merge([(0, fmap_prod_calc_opts)])
+            else:
+                calc_opts.add_yaml_merge([(0, test_calc_opts)])
+            calc_opts.yaml_set_anchor(f'{self.calc_type}_{mode}')
+            genreport._yaml_append_map(ncf['calc_opts'][self.calc_type], mode,
+                                       calc_opts)
+
+        else:
+            for mode in ['test', 'production']:
+                calc_opts = ncf['calc_opts'][self.calc_type][mode]
+                prop_names_from_wizard = list(self.setter_getter[mode])
+                for k in list(calc_opts):
+                    if k != 'remote_opts':
+                        if k not in prop_names_from_wizard:
+                            del calc_opts[k]
+                if 'remote_opts' in calc_opts:
+                    for k in list(calc_opts['remote_opts']):
+                        if k not in prop_names_from_wizard:
+                            del calc_opts[k]
+                for k, conv_type in self.setter_getter[mode].items():
+                    conv = self.converters[conv_type]['get']
+                    wtype = conv_type.split('_')[0]
+                    v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
+                    if k in ('partition', 'ntasks', 'time'):
+                        if k in common_remote_opts:
+                            if common_remote_opts[k] == v:
+                                continue
+                            else:
+                                if 'remote_opts' not in calc_opts:
+                                    calc_opts['remote_opts'] = CommentedMap({})
+                                f(calc_opts['remote_opts'], k, v)
+                        else:
+                            if 'remote_opts' not in calc_opts:
+                                calc_opts['remote_opts'] = CommentedMap({})
+                            f(calc_opts['remote_opts'], k, v)
+                    else:
+                        f(calc_opts, k, v)
+
+                if mode == 'test':
+                    if self.calc_type.startswith('cmap_'):
+                        fmap_test_calc_opts = ncf['calc_opts'][
+                            self.calc_type.replace('cmap_', 'fmap_')]['test']
+                        calc_opts.merge.clear()
+                        calc_opts.add_yaml_merge([(0, fmap_test_calc_opts)])
+                    if hasattr(calc_opts, 'anchor'):
+                        anchor_name = f'{self.calc_type}_{mode}'
+                        if calc_opts.anchor.value != anchor_name:
+                            calc_opts.yaml_set_anchor(anchor_name)
+                    else:
+                        raise ValueError
+                elif mode == 'production':
+                    if self.calc_type.startswith('cmap_'):
+                        fmap_prod_calc_opts = ncf['calc_opts'][
+                            self.calc_type.replace('cmap_', 'fmap_')
+                            ]['production']
+                        calc_opts.merge.clear()
+                        calc_opts.add_yaml_merge([(0, fmap_prod_calc_opts)])
+                    else:
+                        test_calc_opts = ncf['calc_opts'][self.calc_type]['test']
+                        calc_opts.merge.clear()
+                        calc_opts.add_yaml_merge([(0, test_calc_opts)])
+                    if hasattr(calc_opts, 'anchor'):
+                        anchor_name = f'{self.calc_type}_{mode}'
+                        if calc_opts.anchor.value != anchor_name:
+                            calc_opts.yaml_set_anchor(anchor_name)
+                    else:
+                        raise ValueError
+
+
 
         #_check_if_yaml_writable(mod_conf)
 
@@ -817,7 +1004,7 @@ class PageNonlinCalcPlot(PageGenReport):
 
         mod_conf = duplicate_yaml_conf(orig_conf)
 
-        #f = partial(update_aliased_scalar, mod_conf)
+        f = partial(update_aliased_scalar, mod_conf)
 
         mod_conf['lattice_props']['recalc'] = False
         mod_conf['lattice_props']['replot'] = False
@@ -850,7 +1037,8 @@ class PageNonlinCalcPlot(PageGenReport):
 
         common_remote_opts = self.wizardObj.common_remote_opts
 
-        if recalc_replot == 'recalc':
+
+        if False:
             del ncf['calc_opts'][self.calc_type]['production']
 
             mode = 'calc'
@@ -878,62 +1066,178 @@ class PageNonlinCalcPlot(PageGenReport):
             genreport._yaml_append_map(
                 ncf['calc_opts'][self.calc_type], 'production',
                 CommentedMap(new_calc_opts))
+        else:
+            mode = 'calc'
 
-        if recalc_replot in ('recalc', 'replot'):
+            try:
+                calc_opts = ncf['calc_opts'][self.calc_type]['production']
+            except:
+                if 'calc_opts' not in ncf:
+                    m1 = CommentedMap({})
+                    m2 = CommentedMap({'production': m1})
+                    m3 = CommentedMap({self.calc_type: m2})
+                    genreport._yaml_append_map(ncf, 'calc_opts', m3)
+                elif self.calc_type not in ncf['calc_opts']:
+                    m1 = CommentedMap({})
+                    m2 = CommentedMap({'production': m1})
+                    genreport._yaml_append_map(
+                        ncf['calc_opts'], self.calc_type, m2)
+                elif 'production' not in ncf['calc_opts'][self.calc_type]:
+                    m1 = CommentedMap({})
+                    genreport._yaml_append_map(
+                        ncf['calc_opts'][self.calc_type], 'production', m1)
+                else:
+                    raise ValueError
 
-            del ncf[f'{self.calc_type}_plot_opts']
-
-            mode = 'plot'
-
-            new_calc_opts = {}
+            prop_names_from_wizard = list(self.setter_getter[mode])
+            for k in list(calc_opts):
+                if k != 'remote_opts':
+                    if k not in prop_names_from_wizard:
+                        del calc_opts[k]
+            if 'remote_opts' in calc_opts:
+                for k in list(calc_opts['remote_opts']):
+                    if k not in prop_names_from_wizard:
+                        del calc_opts[k]
             for k, conv_type in self.setter_getter[mode].items():
                 conv = self.converters[conv_type]['get']
                 wtype = conv_type.split('_')[0]
                 v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
-                new_calc_opts[k] = v
+                if k in ('partition', 'ntasks', 'time'):
+                    if k in common_remote_opts:
+                        if common_remote_opts[k] == v:
+                            continue
+                        else:
+                            if 'remote_opts' not in calc_opts:
+                                calc_opts['remote_opts'] = CommentedMap({})
+                            f(calc_opts['remote_opts'], k, v)
+                    else:
+                        if 'remote_opts' not in calc_opts:
+                            calc_opts['remote_opts'] = CommentedMap({})
+                        f(calc_opts['remote_opts'], k, v)
+                else:
+                    f(calc_opts, k, v)
+
+        if False:
+            del ncf[f'{self.calc_type}_plot_opts']
+
+            mode = 'plot'
+
+            new_plot_opts = {}
+            for k, conv_type in self.setter_getter[mode].items():
+                conv = self.converters[conv_type]['get']
+                wtype = conv_type.split('_')[0]
+                v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
+                new_plot_opts[k] = v
 
                 if k.startswith('footprint_nux'):
-                    if 'footprint_nuxlim' not in new_calc_opts:
-                        new_calc_opts['footprint_nuxlim'] = [np.nan, np.nan]
+                    if 'footprint_nuxlim' not in new_plot_opts:
+                        new_plot_opts['footprint_nuxlim'] = [np.nan, np.nan]
                     if k == 'footprint_nux_min':
-                        new_calc_opts['footprint_nuxlim'][0] = v
+                        new_plot_opts['footprint_nuxlim'][0] = v
                     elif k == 'footprint_nux_max':
-                        new_calc_opts['footprint_nuxlim'][1] = v
+                        new_plot_opts['footprint_nuxlim'][1] = v
                     else:
                         raise ValueError
-                    del new_calc_opts[k]
+                    del new_plot_opts[k]
                 elif k.startswith('footprint_nuy'):
-                    if 'footprint_nuylim' not in new_calc_opts:
-                        new_calc_opts['footprint_nuylim'] = [np.nan, np.nan]
+                    if 'footprint_nuylim' not in new_plot_opts:
+                        new_plot_opts['footprint_nuylim'] = [np.nan, np.nan]
                     if k == 'footprint_nuy_min':
-                        new_calc_opts['footprint_nuylim'][0] = v
+                        new_plot_opts['footprint_nuylim'][0] = v
                     elif k == 'footprint_nuy_max':
-                        new_calc_opts['footprint_nuylim'][1] = v
+                        new_plot_opts['footprint_nuylim'][1] = v
                     else:
                         raise ValueError
-                    del new_calc_opts[k]
+                    del new_plot_opts[k]
                 elif k.startswith('fit_delta_'):
-                    if 'fit_deltalim' not in new_calc_opts:
-                        new_calc_opts['fit_deltalim'] = [np.nan, np.nan]
+                    if 'fit_deltalim' not in new_plot_opts:
+                        new_plot_opts['fit_deltalim'] = [np.nan, np.nan]
                     if k == 'fit_delta_min':
-                        new_calc_opts['fit_deltalim'][0] = v
+                        new_plot_opts['fit_deltalim'][0] = v
                     elif k == 'fit_delta_max':
-                        new_calc_opts['fit_deltalim'][1] = v
-                    del new_calc_opts[k]
+                        new_plot_opts['fit_deltalim'][1] = v
+                    del new_plot_opts[k]
             for plane in ['x', 'y']:
                 k = f'footprint_nu{plane}lim'
-                if k in new_calc_opts:
-                    seq = CommentedSeq(new_calc_opts[k])
+                if k in new_plot_opts:
+                    seq = CommentedSeq(new_plot_opts[k])
                     seq.fa.set_flow_style()
-                    new_calc_opts[k] = seq
+                    new_plot_opts[k] = seq
             k = 'fit_deltalim'
-            if k in new_calc_opts:
-                seq = CommentedSeq(new_calc_opts[k])
+            if k in new_plot_opts:
+                seq = CommentedSeq(new_plot_opts[k])
                 seq.fa.set_flow_style()
-                new_calc_opts[k] = seq
+                new_plot_opts[k] = seq
 
             genreport._yaml_append_map(
-                ncf, f'{self.calc_type}_plot_opts', CommentedMap(new_calc_opts))
+                ncf, f'{self.calc_type}_plot_opts', CommentedMap(new_plot_opts))
+        else:
+            mode = 'plot'
+
+            if f'{self.calc_type}_plot_opts' in ncf:
+                plot_opts = ncf[f'{self.calc_type}_plot_opts']
+            else:
+                plot_opts = CommentedMap({})
+                genreport._yaml_append_map(
+                    ncf, f'{self.calc_type}_plot_opts', plot_opts)
+
+            prop_names_from_wizard = list(self.setter_getter[mode])
+            for k in list(plot_opts):
+                if k not in prop_names_from_wizard:
+                    del plot_opts[k]
+
+            for k, conv_type in self.setter_getter[mode].items():
+                conv = self.converters[conv_type]['get']
+                wtype = conv_type.split('_')[0]
+                v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
+
+                if k.startswith('footprint_nux'):
+                    if 'footprint_nuxlim' not in plot_opts:
+                        seq = CommentedSeq([np.nan, np.nan])
+                        seq.fa.set_flow_style()
+                        genreport._yaml_append_map(
+                            plot_opts, 'footprint_nuxlim', seq)
+
+                    if k == 'footprint_nux_min':
+                        #f(plot_opts['footprint_nuxlim'], 0, v)
+                        plot_opts['footprint_nuxlim'][0] = v
+                    elif k == 'footprint_nux_max':
+                        #f(plot_opts['footprint_nuxlim'], 1, v)
+                        plot_opts['footprint_nuxlim'][1] = v
+                    else:
+                        raise ValueError
+                elif k.startswith('footprint_nuy'):
+                    if 'footprint_nuylim' not in plot_opts:
+                        seq = CommentedSeq([np.nan, np.nan])
+                        seq.fa.set_flow_style()
+                        genreport._yaml_append_map(
+                            plot_opts, 'footprint_nuylim', seq)
+
+                    if k == 'footprint_nuy_min':
+                        #f(plot_opts['footprint_nuylim'], 0, v)
+                        plot_opts['footprint_nuylim'][0] = v
+                    elif k == 'footprint_nuy_max':
+                        #f(plot_opts['footprint_nuylim'], 1, v)
+                        plot_opts['footprint_nuylim'][1] = v
+                    else:
+                        raise ValueError
+                elif k.startswith('fit_delta_'):
+                    if 'fit_deltalim' not in plot_opts:
+                        seq = CommentedSeq([np.nan, np.nan])
+                        seq.fa.set_flow_style()
+                        genreport._yaml_append_map(
+                            plot_opts, 'fit_deltalim', seq)
+
+                    if k == 'fit_delta_min':
+                        #f(plot_opts['fit_deltalim'], 0, v)
+                        plot_opts['fit_deltalim'][0] = v
+                    elif k == 'fit_delta_max':
+                        #f(plot_opts['fit_deltalim'], 1, v)
+                        plot_opts['fit_deltalim'][1] = v
+                    else:
+                        raise ValueError
+                else:
+                    f(plot_opts, k, v)
 
         #_check_if_yaml_writable(mod_conf)
 
@@ -967,19 +1271,12 @@ class PageNewSetup(QtWidgets.QWizardPage):
         # Register fields
 
         self.registerFieldOnFirstShow(
-            #'edit_rootname*',
-            'edit_rootname', # TO-BE-DELETED
+            'edit_rootname*',
             self.findChild(QtWidgets.QLineEdit, 'lineEdit_rootname'))
-        # TO-BE-DELETED
-        self.setField('edit_rootname', 'CBA_0001')
 
         self.registerFieldOnFirstShow(
-            #'edit_new_config_folder*',
-            'edit_new_config_folder', # TO-BE-DELETED
+            'edit_new_config_folder*',
             self.findChild(QtWidgets.QLineEdit, 'lineEdit_new_config_folder'))
-        # TO-BE-DELETED
-        self.setField('edit_new_config_folder',
-            '/GPFS/APC/yhidaka/git_repos/pyelegant/src/pyelegant/guis/nsls2apcluster/genreport_wizard')
 
         for obj_name in [
             'label_full_new_config', 'label_full_report_folder',
@@ -990,11 +1287,19 @@ class PageNewSetup(QtWidgets.QWizardPage):
 
         # Set fields
 
+        if TEST_MODE:
+            self.setField('edit_rootname', 'CBA_0001')
+
+            self.setField(
+                'edit_new_config_folder',
+                '/GPFS/APC/yhidaka/git_repos/pyelegant/src/pyelegant/guis/nsls2apcluster/genreport_wizard')
+
         # Establish connections
 
         self.edit_obj = self.findChild(
             QtWidgets.QLineEdit, 'lineEdit_new_config_folder')
         self.edit_obj.textChanged.connect(self.update_paths_on_folder)
+        self.edit_obj.textChanged.connect(self.completeChanged)
 
         b = self.findChild(QtWidgets.QPushButton,
                            'pushButton_browse_new_config_folder')
@@ -1002,6 +1307,25 @@ class PageNewSetup(QtWidgets.QWizardPage):
 
         e = self.findChild(QtWidgets.QLineEdit, 'lineEdit_rootname')
         e.textChanged.connect(self.update_paths_on_rootname)
+        e.textChanged.connect(self.completeChanged)
+
+        self.edit_obj.setText(self.wizardObj._settings['config_folderpath'])
+        self.update_paths_on_folder(self.edit_obj.text())
+
+    def isComplete(self):
+        """"""
+
+        if self.field('edit_rootname').strip() == '':
+            return False
+
+        config_folderpath = self.field('edit_new_config_folder').strip()
+        if config_folderpath == '':
+            return False
+
+        if not Path(config_folderpath).exists():
+            return False
+
+        return True
 
     def update_paths_on_folder(self, new_config_folderpath):
         """"""
@@ -1027,7 +1351,7 @@ class PageNewSetup(QtWidgets.QWizardPage):
         if not new_config_folder.exists():
             return
 
-        self.update_paths(new_config_folder, rootname)
+        self.update_paths(new_config_folder, new_rootname)
 
     def update_paths(self, new_config_folder, rootname):
         """"""
@@ -1073,6 +1397,8 @@ class PageNewSetup(QtWidgets.QWizardPage):
         new_config_folder = Path(new_config_folderpath)
         if not new_config_folder.exists():
             return False
+        else:
+            self.wizardObj._settings['config_folderpath'] = new_config_folderpath
 
         rootname = self.field('edit_rootname')
 
@@ -1106,15 +1432,12 @@ class PageLoadSeedConfig(QtWidgets.QWizardPage):
         self.edit_obj = self.findChild(
             QtWidgets.QLineEdit, 'lineEdit_seed_config_filepath')
 
-        # TO-BE-DELETED
-        self.edit_obj.setText(
-            #'/GPFS/APC/yhidaka/git_repos/nsls2cb/lat_reports/20200422_VS_DCBA25pm.yaml')
-            '/GPFS/APC/yhidaka/git_repos/pyelegant/src/pyelegant/guis/nsls2apcluster/genreport_wizard/CBA_0001.yaml')
-
         # Establish connections
 
         b = self.findChild(QtWidgets.QPushButton, 'pushButton_browse')
         b.clicked.connect(self.browse_yaml_config_file)
+
+        self.edit_obj.setText(self.wizardObj._settings['seed_config_filepath'])
 
     def browse_yaml_config_file(self):
         """"""
@@ -1149,6 +1472,8 @@ class PageLoadSeedConfig(QtWidgets.QWizardPage):
             showInvalidPageInputDialog(text, info_text)
 
             return False
+
+        self.wizardObj._settings['seed_config_filepath'] = seed_config_filepath
 
         try:
             yml = yaml.YAML()
@@ -1239,6 +1564,13 @@ class PageLTE(PageStandard):
 
         b = self.findChild(QtWidgets.QPushButton, 'pushButton_browse_LTE')
         b.clicked.connect(self.browse_LTE_file)
+
+        for k in [
+            'orig_LTE_path*', 'LTE_authors*', 'E_GeV*',
+            'use_beamline_cell*', 'use_beamline_ring*',]:
+            k_wo_star = (k[:-1] if k.endswith('*') else k)
+            w = self.findChild(QtWidgets.QLineEdit, f'lineEdit_{k_wo_star}')
+            w.textChanged.connect(self.completeChanged)
 
     def browse_LTE_file(self):
         """"""
@@ -1489,19 +1821,32 @@ class PageStraightCenters(PageStandard):
         # Register fields
 
         edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
-        #self.registerFieldOnFirstShow('edit_LS_center_name*', edit)
-        # TO-BE-DELETED
-        self.registerFieldOnFirstShow('edit_LS_center_name', edit)
-        # TO-BE-DELETED
-        self.setField('edit_LS_center_name', 'M_LS')
+        self.registerFieldOnFirstShow('edit_LS_center_name*', edit)
 
         edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_1st_center_name')
-        #self.registerFieldOnFirstShow('edit_SS_center_name*', edit)
-        # TO-BE-DELETED
-        self.registerFieldOnFirstShow('edit_SS_center_name', edit)
-        self.setField('edit_SS_center_name', 'M_SS')
+        self.registerFieldOnFirstShow('edit_SS_center_name*', edit)
 
         # Set fields
+
+        try:
+            beta = self.orig_conf['lattice_props']['req_props']['beta']
+            LS_elem_name = str(beta['LS']['name'])
+        except:
+            if TEST_MODE:
+                LS_elem_name = 'M_LS'
+            else:
+                LS_elem_name = ''
+        self.setField('edit_LS_center_name', LS_elem_name)
+        self.synchronize_LS_elem_names(LS_elem_name)
+
+        try:
+            SS_elem_name = str(beta['SS']['name'])
+            self.setField('edit_SS_center_name', SS_elem_name)
+        except:
+            if TEST_MODE:
+                self.setField('edit_SS_center_name', 'M_SS')
+            else:
+                self.setField('edit_SS_center_name', '')
 
         # Establish connections
 
@@ -1510,6 +1855,22 @@ class PageStraightCenters(PageStandard):
 
         b = self.findChild(QtWidgets.QPushButton, 'pushButton_reload_LTE')
         b.clicked.connect(self.update_LTE_table)
+
+        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
+        edit.textChanged.connect(self.completeChanged)
+        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_1st_center_name')
+        edit.textChanged.connect(self.completeChanged)
+
+    def isComplete(self):
+        """"""
+
+        if self.field('edit_LS_center_name').strip() == '':
+            return False
+
+        if self.field('edit_SS_center_name').strip() == '':
+            return False
+
+        return True
 
     def synchronize_LS_elem_names(self, new_text):
         """"""
@@ -1631,13 +1992,37 @@ class PagePhaseAdv(PageStandard):
         obj = self.findChild(QtWidgets.QLineEdit,
                              'lineEdit_disp_bump_marker_name')
         self.registerFieldOnFirstShow('edit_disp_bump_marker_name', obj)
-        # TO-BE-DELETED
-        self.setField('edit_disp_bump_marker_name', 'MDISP')
 
         obj = self.findChild(QtWidgets.QComboBox, 'comboBox_n_disp_bumps')
         self.registerFieldOnFirstShow('combo_n_disp_bumps', obj, property='currentText')
 
         # Set fields
+
+        try:
+            phase_adv = self.orig_conf['lattice_props']['opt_props']['phase_adv']
+        except:
+            if TEST_MODE:
+                elem_name = 'MDISP'
+            else:
+                elem_name = ''
+            self.setField('edit_disp_bump_marker_name', elem_name)
+            self.setField('combo_n_disp_bumps', '2')
+        try:
+            if 'MDISP across LS' in phase_adv:
+                elem_name = str(phase_adv['MDISP across LS']['elem2']['name'])
+                n_disp_bumps = 2
+            else:
+                elem_name = str(phase_adv['MDISP 0&1']['elem1']['name'])
+                n_disp_bumps = 4
+            self.setField('edit_disp_bump_marker_name', elem_name)
+            self.setField('combo_n_disp_bumps', f'{n_disp_bumps:d}')
+        except:
+            if TEST_MODE:
+                elem_name = 'MDISP'
+            else:
+                elem_name = ''
+            self.setField('edit_disp_bump_marker_name', elem_name)
+            self.setField('combo_n_disp_bumps', '2')
 
         # Establish connections
 
@@ -1796,22 +2181,35 @@ class PageStraightDrifts(PageStandard):
         # Register fields
 
         edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_drift_names')
-        #self.registerFieldOnFirstShow('edit_half_LS_drifts*', edit)
-        # TO-BE-DELETED
-        self.registerFieldOnFirstShow('edit_half_LS_drifts', edit)
-        # TO-BE-DELETED
-        self.setField('edit_half_LS_drifts', 'DH5')
+        self.registerFieldOnFirstShow('edit_half_LS_drifts*', edit)
 
         edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_drift_names')
-        #self.registerFieldOnFirstShow('edit_half_SS_drifts*', edit)
-        # TO-BE-DELETED
-        self.registerFieldOnFirstShow('edit_half_SS_drifts', edit)
-        # TO-BE-DELETED
-        self.setField('edit_half_SS_drifts', 'DL5')
+        self.registerFieldOnFirstShow('edit_half_SS_drifts*', edit)
 
         # Set fields
 
+        try:
+            length = self.orig_conf['lattice_props']['req_props']['length']
+            self.setField(
+                'edit_half_LS_drifts',
+                ', '.join([s.strip() for s in length['LS']['name_list']]))
+            self.setField(
+                'edit_half_SS_drifts',
+                ', '.join([s.strip() for s in length['SS']['name_list']]))
+        except:
+            if TEST_MODE:
+                self.setField('edit_half_LS_drifts', 'DH5')
+                self.setField('edit_half_SS_drifts', 'DL5')
+            else:
+                self.setField('edit_half_LS_drifts', '')
+                self.setField('edit_half_SS_drifts', '')
+
         # Establish connections
+
+        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_drift_names')
+        edit.textChanged.connect(self.completeChanged)
+        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_drift_names')
+        edit.textChanged.connect(self.completeChanged)
 
     def validatePage(self):
         """"""
@@ -2104,14 +2502,12 @@ class PageParagraphs(PageGenReport):
 
         # Register fields
 
-        #w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_keywords*')
-        w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_keywords') # TO-BE-DELETED
-        self.registerFieldOnFirstShow('edit_keywords', w)
+        w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_keywords')
+        self.registerFieldOnFirstShow('edit_keywords*', w)
 
-        w = self.findChild( QtWidgets.QPlainTextEdit,
-                            #'plainTextEdit_lattice_description*')
-                           'plainTextEdit_lattice_description') # TO-BE-DELETED
-        self.registerFieldOnFirstShow('edit_lattice_description', w, 'plainText')
+        w = self.findChild(QtWidgets.QPlainTextEdit,
+                           'plainTextEdit_lattice_description')
+        self.registerFieldOnFirstShow('edit_lattice_description*', w, 'plainText')
 
         w = self.findChild(QtWidgets.QPlainTextEdit,
                            'plainTextEdit_lattice_properties')
@@ -2143,6 +2539,24 @@ class PageParagraphs(PageGenReport):
         # Establish connections
 
         self.establish_connections()
+
+        w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_keywords')
+        w.textChanged.connect(self.completeChanged)
+
+        w = self.findChild(QtWidgets.QPlainTextEdit,
+                           'plainTextEdit_lattice_description')
+        w.textChanged.connect(self.completeChanged)
+
+    def isComplete(self):
+        """"""
+
+        if self.field('edit_keywords').strip() == '':
+            return False
+
+        if self.field('edit_lattice_description').strip() == '':
+            return False
+
+        return True
 
     def validatePage(self):
         """"""
@@ -2627,7 +3041,7 @@ class PageNonlinChrom(PageNonlinCalcPlot):
         self.wizardObj = self.wizard()
         self.wizardObj.showSkipButton(True)
 
-        self.set_orig_conf('tswa')
+        self.set_orig_conf('nonlin_chrom')
 
         # Hook up models to views
 
@@ -2668,3 +3082,494 @@ class PageNonlinChrom(PageNonlinCalcPlot):
 
         # Establish connections
         self.establish_connections()
+
+class PageNonlinProduction(PageGenReport):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+
+        self.set_orig_conf('nonlin_prod')
+
+        # Hook up models to views
+
+        # Register fields
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+
+        self._checkboxes = {}
+        for opt_type in ['include', 'recalc', 'replot']:
+            for calc_type in ['all'] + self.all_calc_types:
+                w = self.findChild(
+                    check, f'checkBox_nonlin_{opt_type}_{calc_type}')
+                self._checkboxes[f'{opt_type}:{calc_type}'] = w
+                self.registerFieldOnFirstShow(f'check_{opt_type}_{calc_type}', w)
+
+        self.setter_getter = {
+            'cmap_xy': dict(cmin='spin', cmax='spin'),
+            'cmap_px': dict(cmin='spin', cmax='spin'),
+        }
+
+        for calc_type, d in self.setter_getter.items():
+            for prop_name, wtype in d.items():
+                suffix = f'{calc_type}_{prop_name}'
+                if wtype == 'spin':
+                    w = self.findChild(spin, f'spinBox_{suffix}')
+                    self.registerFieldOnFirstShow(f'{wtype}_{suffix}', w)
+                else:
+                    raise ValueError()
+
+        # Set fields
+
+        ncf = self.orig_conf['nonlin']
+
+        for opt_type in ['include', 'recalc', 'replot']:
+            all_true = True
+            for calc_type in self.all_calc_types:
+                v = ncf[opt_type][calc_type]
+                self.setField(f'check_{opt_type}_{calc_type}', v)
+                if not v:
+                    all_true = False
+            self._checkboxes[f'{opt_type}:all'].setChecked(all_true)
+
+        for calc_type in ['cmap_xy', 'cmap_px']:
+            if f'{calc_type}_plot_opts' in ncf:
+                opts = ncf[f'{calc_type}_plot_opts']
+                for k, v in opts.items():
+                    conv_type = self.setter_getter[calc_type][k]
+                    conv = self.converters[conv_type]['set']
+                    wtype = conv_type.split('_')[0]
+                    self.setField(f'{wtype}_{calc_type}_{k}', conv(v))
+
+        # Establish connections
+
+        self.establish_connections() # "Run Production" & "Open PDF" buttons
+
+        for opt_type in ['include', 'recalc', 'replot']:
+            obj = self._checkboxes[f'{opt_type}:all']
+            obj.clicked.connect(
+                partial(self.change_all_nonlin_calc_type_checkbox_states,
+                        opt_type))
+
+        for calc_type in self.all_calc_types:
+            obj = self._checkboxes[f'include:{calc_type}']
+            obj.clicked.connect(partial(self.uncheck_all, 'include'))
+            #obj.stateChanged.connect(partial(
+                #self.change_state_recalc_replot_checkboxes, calc_type))
+
+            obj = self._checkboxes[f'recalc:{calc_type}']
+            obj.clicked.connect(partial(self.uncheck_all, 'recalc'))
+            #obj.stateChanged.connect(partial(
+                #self.change_state_replot_checkboxes, calc_type))
+
+            obj = self._checkboxes[f'replot:{calc_type}']
+            obj.clicked.connect(partial(self.uncheck_all, 'replot'))
+
+    def change_all_nonlin_calc_type_checkbox_states(self, opt_type, checked):
+        """"""
+
+        for calc_type in self.all_calc_types:
+            obj = self._checkboxes[f'{opt_type}:{calc_type}']
+            obj.setChecked(checked)
+
+    def uncheck_all(self, opt_type, checked):
+        """"""
+        if not checked:
+            self._checkboxes[f'{opt_type}:all'].setChecked(False)
+
+    def change_state_recalc_replot_checkboxes(self, calc_type, include_checked):
+        """"""
+
+        obj = self._checkboxes[f'recalc:{calc_type}']
+        obj.setEnabled(include_checked)
+        obj = self._checkboxes[f'replot:{calc_type}']
+        obj.setEnabled(include_checked)
+
+    def change_state_replot_checkboxes(self, calc_type, recalc_checked):
+        """"""
+
+        obj = self._checkboxes[f'replot:{calc_type}']
+        obj.setEnabled(recalc_checked)
+
+    def validatePage(self):
+        """"""
+
+        mod_conf = self.modify_conf(self.orig_conf)
+
+        self.mod_conf = mod_conf
+
+        return True
+
+    def modify_conf(self, orig_conf):
+        """"""
+
+        w = self.findChildren(QtWidgets.QTabWidget,
+                              QtCore.QRegExp('tabWidget_std_.+'))[0]
+        w.setCurrentIndex(0) # show "stdout" tab before report generation starts
+
+        mod_conf = duplicate_yaml_conf(orig_conf)
+
+        f = partial(update_aliased_scalar, mod_conf)
+
+        mod_conf['lattice_props']['recalc'] = False
+        mod_conf['lattice_props']['replot'] = False
+
+        ncf = mod_conf['nonlin']
+
+        for opt_type in ['include', 'recalc', 'replot']:
+            for calc_type in self.all_calc_types:
+                v = self.field(f'check_{opt_type}_{calc_type}')
+                ncf[opt_type][calc_type] = v
+
+        if ncf['use_beamline'] is not mod_conf['use_beamline_ring']:
+            ncf['use_beamline'] = mod_conf['use_beamline_ring']
+
+        for calc_type in self.all_calc_types:
+            ncf['selected_calc_opt_names'][calc_type] = 'production'
+
+        for calc_type in ['cmap_xy', 'cmap_px']:
+            for k, conv_type in self.setter_getter[calc_type].items():
+                conv = self.converters[conv_type]['get']
+                wtype = conv_type.split('_')[0]
+                v = conv(self.field(f'{wtype}_{calc_type}_{k}'))
+
+                f(ncf[f'{calc_type}_plot_opts'], k, v)
+
+        #_check_if_yaml_writable(mod_conf)
+
+        self.mod_conf = mod_conf
+
+        return mod_conf
+
+class PageRfTau(PageGenReport):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+    def initializePage(self):
+        """"""
+
+        self.wizardObj = self.wizard()
+        self.wizardObj.showSkipButton(False)
+
+        self.set_orig_conf('rf_tau')
+
+        # Hook up models to views
+
+        # Register fields
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+        self.rf_list = [
+            ('rf_include', check), ('rf_recalc', check),
+            ('harmonic_number', spin), ('rf_voltages', edit),
+        ]
+        self.tau_list = [
+            ('tau_include', check), ('tau_recalc', check),
+            ('total_beam_current', edit), ('num_filled_bunches', spin),
+            ('max_mom_aper', combo), ('coupling_list', edit),
+        ]
+
+        self.setter_getter = {
+            'rf': dict(
+                rf_include='check', rf_recalc='check', harmonic_number='spin',
+                rf_voltages='edit_special'),
+            'tau': dict(
+                tau_include='check', tau_recalc='check',
+                total_beam_current='edit_float', num_filled_bunches='spin',
+                max_mom_aper='combo_special', coupling_list='edit_special'),
+        }
+
+        for k_wtype_list in [self.rf_list, self.tau_list]:
+            for k, wtype in k_wtype_list:
+                w_suffix = f_suffix = k
+                if wtype == spin:
+                    w = self.findChild(spin, f'spinBox_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'spin_{f_suffix}', w)
+                elif wtype == edit:
+                    w = self.findChild(edit, f'lineEdit_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'edit_{f_suffix}', w)
+                elif wtype == check:
+                    w = self.findChild(check, f'checkBox_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'check_{f_suffix}', w)
+                elif wtype == combo:
+                    w = self.findChild(combo, f'comboBox_{w_suffix}')
+                    self.registerFieldOnFirstShow(f'combo_{f_suffix}', w,
+                                                  property='currentText')
+                else:
+                    raise ValueError()
+
+        # Set fields
+
+        if 'rf_dep_calc_opts' in self.orig_conf:
+            rf = self.orig_conf['rf_dep_calc_opts']
+            #
+            self.setField('check_rf_include', True)
+            self.enable_opts(self.rf_list, True)
+            #
+            conv_type = self.setter_getter['rf']['rf_recalc']
+            conv = self.converters[conv_type]['set']
+            self.setField('check_rf_recalc', conv(rf.get('recalc', False)))
+            #
+            conv_type = self.setter_getter['rf']['harmonic_number']
+            conv = self.converters[conv_type]['set']
+            self.setField('spin_harmonic_number',
+                          conv(rf.get('harmonic_number', 1320)))
+            #
+            conv_type = self.setter_getter['rf']['rf_voltages']
+            conv = partial(self.converters[conv_type]['set'], 'rf_voltages')
+            self.setField('edit_rf_voltages', conv(rf.get('rf_V', [3e6])))
+        else:
+            self.setField('check_rf_include', False)
+            self.enable_opts(self.rf_list, False)
+
+        if 'lifetime_calc_opts' in self.orig_conf:
+            tau = self.orig_conf['lifetime_calc_opts']
+            #
+            self.setField('check_tau_include', True)
+            self.enable_opts(self.tau_list, True)
+            #
+            conv_type = self.setter_getter['tau']['tau_recalc']
+            conv = self.converters[conv_type]['set']
+            self.setField('check_tau_recalc', conv(tau.get('recalc', False)))
+            #
+            conv_type = self.setter_getter['tau']['total_beam_current']
+            conv = self.converters[conv_type]['set']
+            self.setField('edit_total_beam_current',
+                          conv(tau.get('total_beam_current_mA', 5e2)))
+            #
+            conv_type = self.setter_getter['tau']['num_filled_bunches']
+            conv = self.converters[conv_type]['set']
+            self.setField('spin_num_filled_bunches',
+                          conv(tau.get('num_filled_bunches', 1200)))
+            #
+            conv_type = self.setter_getter['tau']['max_mom_aper']
+            conv = partial(self.converters[conv_type]['set'], 'max_mom_aper')
+            self.setField('combo_max_mom_aper', conv(
+                tau.get('max_mom_aper_percent', None)))
+            #
+            conv_type = self.setter_getter['tau']['coupling_list']
+            conv = partial(self.converters[conv_type]['set'], 'coupling_list')
+            self.setField('edit_coupling_list', conv(
+                tau.get('coupling', ['8pm', '100%'])))
+        else:
+            self.setField('check_tau_include', False)
+            self.enable_opts(self.tau_list, False)
+
+        # Establish connections
+
+        self.establish_connections() # "Run Production" & "Open PDF" buttons
+
+        w = self.findChild(check, 'checkBox_rf_include')
+        w.stateChanged.connect(partial(self.enable_opts, self.rf_list))
+
+        w = self.findChild(check, 'checkBox_tau_include')
+        w.stateChanged.connect(partial(self.enable_opts, self.tau_list))
+
+        w = self.findChild(combo, 'comboBox_max_mom_aper')
+        w.currentTextChanged.connect(self.setEditable_comboBox_max_mom_aper)
+        self.setEditable_comboBox_max_mom_aper(w.currentText())
+
+
+    def setEditable_comboBox_max_mom_aper(self, new_text):
+        """"""
+
+        w = self.findChild(QtWidgets.QComboBox, 'comboBox_max_mom_aper')
+
+        if new_text != 'None':
+            w.setEditable(True)
+            validator = QtGui.QDoubleValidator(-100, 100, 6)
+            validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+            w.setValidator(validator)
+
+            w.installEventFilter(self)
+        else:
+            w.setEditable(False)
+
+    def comboBox_max_mom_aper_focusOut_handler(self, comboBox_max_mom_aper):
+        """"""
+
+        w = comboBox_max_mom_aper
+        validator = w.validator()
+        new_text = w.currentText()
+
+        custom_val_index = 1
+
+        if validator.validate(new_text, 0)[0] == QtGui.QValidator.Acceptable:
+            if w.findText(new_text) != -1:
+                return
+
+            w.insertItem(custom_val_index, new_text)
+
+            while w.count() >= 3:
+                w.removeItem(custom_val_index + 1)
+        else:
+            w.setCurrentIndex(custom_val_index)
+
+    def eventFilter(self, widget, event):
+
+        # FocusOut event
+        if event.type() == QtCore.QEvent.FocusOut:
+
+            if widget == self.findChild(
+                QtWidgets.QComboBox, 'comboBox_max_mom_aper'):
+
+                self.comboBox_max_mom_aper_focusOut_handler(widget)
+
+        return super().eventFilter(widget, event)
+
+    def enable_opts(self, k_wtype_list, enabled):
+        """"""
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+
+        for k, wtype in k_wtype_list:
+
+            if k.endswith('_include'):
+                continue
+
+            w_suffix = k
+            if wtype == spin:
+                w = self.findChild(spin, f'spinBox_{w_suffix}')
+            elif wtype == edit:
+                w = self.findChild(edit, f'lineEdit_{w_suffix}')
+            elif wtype == check:
+                w = self.findChild(check, f'checkBox_{w_suffix}')
+            elif wtype == combo:
+                w = self.findChild(combo, f'comboBox_{w_suffix}')
+            else:
+                raise ValueError()
+
+            w.setEnabled(enabled)
+
+    def validatePage(self):
+        """"""
+
+        try:
+            mod_conf = self.modify_conf(self.orig_conf)
+        except AssertionError:
+            return False
+
+        self.mod_conf = mod_conf
+
+        return True
+
+    def modify_conf(self, orig_conf):
+        """"""
+
+        w = self.findChildren(QtWidgets.QTabWidget,
+                              QtCore.QRegExp('tabWidget_std_.+'))[0]
+        w.setCurrentIndex(0) # show "stdout" tab before report generation starts
+
+        mod_conf = duplicate_yaml_conf(orig_conf)
+
+        f = partial(update_aliased_scalar, mod_conf)
+
+        conv_type = self.setter_getter['rf']['rf_include']
+        conv = self.converters[conv_type]['get']
+        if conv(self.field('check_rf_include')):
+            if 'rf_dep_calc_opts' not in mod_conf:
+                f(mod_conf, 'rf_dep_calc_opts', CommentedMap({}))
+            #
+            rf = mod_conf['rf_dep_calc_opts']
+            #
+            conv_type = self.setter_getter['rf']['rf_recalc']
+            conv = self.converters[conv_type]['get']
+            f(rf, 'recalc', conv(self.field('check_rf_recalc')))
+            #
+            conv_type = self.setter_getter['rf']['harmonic_number']
+            conv = self.converters[conv_type]['get']
+            f(rf, 'harmonic_number', conv(self.field('spin_harmonic_number')))
+            #
+            conv_type = self.setter_getter['rf']['rf_voltages']
+            conv = partial(self.converters[conv_type]['get'], 'rf_voltages')
+            v = conv(self.field('edit_rf_voltages'))
+            seq = CommentedSeq(v)
+            seq.fa.set_flow_style()
+            f(rf, 'rf_V', seq)
+        else:
+            if 'rf_dep_calc_opts' in mod_conf:
+                del mod_conf['rf_dep_calc_opts']
+
+        conv_type = self.setter_getter['tau']['tau_include']
+        conv = self.converters[conv_type]['get']
+        if conv(self.field('check_tau_include')):
+            if 'lifetime_calc_opts' not in mod_conf:
+                f(mod_conf, 'lifetime_calc_opts', CommentedMap({}))
+            #
+            tau = mod_conf['lifetime_calc_opts']
+            #
+            conv_type = self.setter_getter['tau']['tau_recalc']
+            conv = self.converters[conv_type]['get']
+            f(tau, 'recalc', conv(self.field('check_tau_recalc')))
+            #
+            conv_type = self.setter_getter['tau']['total_beam_current']
+            conv = self.converters[conv_type]['get']
+            f(tau, 'total_beam_current_mA',
+              conv(self.field('edit_total_beam_current')))
+            #
+            conv_type = self.setter_getter['tau']['num_filled_bunches']
+            conv = self.converters[conv_type]['get']
+            f(tau, 'num_filled_bunches', conv(self.field('spin_num_filled_bunches')))
+            #
+            conv_type = self.setter_getter['tau']['max_mom_aper']
+            conv = partial(self.converters[conv_type]['get'], 'max_mom_aper')
+            v = conv(self.field('combo_max_mom_aper'))
+            if v not in (None, 'auto') and not isinstance(v, float):
+                text = 'Invalid input for "max_mom_aper"'
+                info_text = (
+                    f'"max_mom_aper" must be None, "auto", or a float')
+                showInvalidPageInputDialog(text, info_text)
+                raise AssertionError
+            f(tau, 'max_mom_aper_percent', v)
+            #
+            conv_type = self.setter_getter['tau']['coupling_list']
+            conv = partial(self.converters[conv_type]['get'], 'coupling_list')
+            v = conv(self.field('edit_coupling_list'))
+            def _coupling_list_error_msg():
+                text = 'Invalid input for "Coupling List"'
+                info_text = (
+                    f'Must be a comma-separated list of strings that end with'
+                    f'"pm" or "%", preceded with a number.')
+                showInvalidPageInputDialog(text, info_text)
+            for val in v:
+                if val.endswith('pm'):
+                    try:
+                        float(val[:-2])
+                    except:
+                        _coupling_list_error_msg()
+                        raise AssertionError
+                elif val.endswith('%'):
+                    try:
+                        float(val[:-1])
+                    except:
+                        _coupling_list_error_msg()
+                        raise AssertionError
+                else:
+                    _coupling_list_error_msg()
+                    raise AssertionError
+            seq = CommentedSeq(v)
+            seq.fa.set_flow_style()
+            f(tau, 'coupling', seq)
+        else:
+            if 'lifetime_calc_opts' in mod_conf:
+                del mod_conf['lifetime_calc_opts']
+
+
+        #_check_if_yaml_writable(mod_conf)
+
+        self.mod_conf = mod_conf
+
+        return mod_conf

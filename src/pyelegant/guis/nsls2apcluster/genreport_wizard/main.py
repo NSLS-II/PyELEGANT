@@ -1,6 +1,8 @@
 import os
 import sys
 
+from ruamel.yaml.comments import CommentedMap
+
 from qtpy import QtCore, QtGui, QtWidgets
 from qtpy import uic
 
@@ -73,14 +75,13 @@ class ReportWizard(QtWidgets.QWizard):
         self.conf = None
         self.LTE = None
         self.model_elem_list = None
-        self.common_remote_opts = {}
+        self.common_remote_opts = CommentedMap({})
 
         self.page_name_list = [
             'LTE', 'straight_centers', 'phase_adv', 'straight_length',
             'test1', 'twiss_plots', 'paragraphs', 'N_KICKS', 'xy_aper_test',
             'fmap_xy_test', 'fmap_px_test', 'cmap_xy_test', 'cmap_px_test',
-            'mom_aper_test', 'tswa', 'nonlin_chrom']
-        #, 'rf_dep_props', 'lifetime']
+            'mom_aper_test', 'tswa', 'nonlin_chrom', 'nonlin_prod', 'rf_tau']
 
         self.page_links = {}
         for k in self.page_name_list:
@@ -98,8 +99,54 @@ class ReportWizard(QtWidgets.QWizard):
         self.showSkipButton(False)
         self.customButtonClicked.connect(self.skip_to)
 
+        self.settings = QtCore.QSettings('nsls2', 'report_wizard')
+        self.loadSettings()
+
+        if False:
+            x0, y0 = 100, 300
+            self.setGeometry(x0, y0, 600, 400)
+        else:
+            self.setGeometry(self._settings['MainWindow']['geometry'])
+
+    def loadSettings(self):
+        """"""
+
+        self._settings = {'MainWindow': {}}
+
+        self.settings.beginGroup('MainWindow')
+        d = self._settings['MainWindow']
+        # default values:
         x0, y0 = 100, 300
-        self.setGeometry(x0, y0, 600, 400)
+        width, height = 600, 400
+        d['geometry'] = self.settings.value(
+            'geometry', QtCore.QRect(x0, y0, width, height))
+        self.settings.endGroup()
+
+        self._settings['config_folderpath'] = \
+            self.settings.value('config_folderpath', os.getcwd())
+
+        self._settings['seed_config_filepath'] = \
+            self.settings.value('seed_config_filepath', '')
+
+    def saveSettings(self):
+        """"""
+
+        self.settings.beginGroup('MainWindow')
+        self.settings.setValue('geometry', self.geometry())
+        self.settings.endGroup()
+
+        self.settings.setValue('config_folderpath',
+                               self._settings['config_folderpath'])
+
+        self.settings.setValue('seed_config_filepath',
+                               self._settings['seed_config_filepath'])
+
+    def closeEvent(self, event):
+        """"""
+
+        self.saveSettings()
+
+        super().closeEvent(event)
 
     def showSkipButton(self, TF):
         """"""

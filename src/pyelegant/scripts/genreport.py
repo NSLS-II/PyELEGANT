@@ -4936,7 +4936,7 @@ class Report_NSLS2U_Default:
             raw_coupling_specs = lifetime_calc_opts['coupling']
             raw_max_mom_aper_percent = lifetime_calc_opts['max_mom_aper_percent']
 
-            if raw_max_mom_aper_percent in ('None', 'none'):
+            if raw_max_mom_aper_percent in (None, 'None', 'none'):
                 max_mom_aper_percent = None
             elif raw_max_mom_aper_percent in ('Auto', 'auto'):
                 raise NotImplementedError((
