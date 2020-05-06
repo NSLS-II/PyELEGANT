@@ -3714,7 +3714,7 @@ delta_offset</string>
         <item>
          <widget class="QTabWidget" name="tabWidget_fmap_px">
           <property name="currentIndex">
-           <number>0</number>
+           <number>1</number>
           </property>
           <widget class="QWidget" name="tab_19">
            <attribute name="title">
@@ -5169,7 +5169,7 @@ delta_offset
         <item>
          <widget class="QTabWidget" name="tabWidget_cmap_px">
           <property name="currentIndex">
-           <number>0</number>
+           <number>1</number>
           </property>
           <widget class="QWidget" name="tab_29">
            <attribute name="title">
@@ -10145,6 +10145,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
   <tabstop>pushButton_open_pdf_test1</tabstop>
   <tabstop>tabWidget_std_test1</tabstop>
   <tabstop>listView_stdout_test1</tabstop>
+  <tabstop>listView_stderr_test1</tabstop>
   <tabstop>spinBox_element_divisions</tabstop>
   <tabstop>spinBox_font_size</tabstop>
   <tabstop>lineEdit_extra_dy_frac</tabstop>
@@ -10162,33 +10163,258 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
   <tabstop>pushButton_open_pdf_twiss_plots</tabstop>
   <tabstop>tabWidget_std_twiss_plots</tabstop>
   <tabstop>listView_stdout_twiss_plots</tabstop>
+  <tabstop>listView_stderr_twiss_plots</tabstop>
   <tabstop>lineEdit_keywords</tabstop>
   <tabstop>plainTextEdit_lattice_description</tabstop>
   <tabstop>plainTextEdit_lattice_properties</tabstop>
+  <tabstop>pushButton_gen_paragraphs</tabstop>
+  <tabstop>pushButton_open_pdf_paragraphs</tabstop>
+  <tabstop>tabWidget_std_paragraphs</tabstop>
+  <tabstop>listView_stdout_paragraphs</tabstop>
+  <tabstop>listView_stderr_paragraphs</tabstop>
   <tabstop>spinBox_N_KICKS_CSBEND</tabstop>
   <tabstop>spinBox_N_KICKS_KQUAD</tabstop>
   <tabstop>spinBox_N_KICKS_KSEXT</tabstop>
   <tabstop>spinBox_N_KICKS_KOCT</tabstop>
-  <tabstop>listView_stderr_twiss_plots</tabstop>
-  <tabstop>tabWidget_std_xy_aper_test</tabstop>
-  <tabstop>listView_stdout_xy_aper_test</tabstop>
-  <tabstop>listView_stderr_xy_aper_test</tabstop>
-  <tabstop>plainTextEdit</tabstop>
   <tabstop>tabWidget_xy_aper</tabstop>
+  <tabstop>spinBox_n_turns_xy_aper_test</tabstop>
+  <tabstop>lineEdit_abs_xmax_xy_aper_test</tabstop>
   <tabstop>lineEdit_abs_ymax_xy_aper_test</tabstop>
   <tabstop>spinBox_ini_ndiv_xy_aper_test</tabstop>
-  <tabstop>lineEdit_abs_xmax_xy_aper_test</tabstop>
-  <tabstop>checkBox_neg_y_search_xy_aper_test</tabstop>
-  <tabstop>spinBox_n_turns_xy_aper_test</tabstop>
   <tabstop>spinBox_n_lines_xy_aper_test</tabstop>
-  <tabstop>lineEdit_time_xy_aper_test</tabstop>
+  <tabstop>checkBox_neg_y_search_xy_aper_test</tabstop>
   <tabstop>comboBox_partition_xy_aper_test</tabstop>
   <tabstop>spinBox_ntasks_xy_aper_test</tabstop>
+  <tabstop>lineEdit_time_xy_aper_test</tabstop>
+  <tabstop>pushButton_gen_xy_aper_test</tabstop>
+  <tabstop>pushButton_open_pdf_xy_aper_test</tabstop>
+  <tabstop>tabWidget_std_xy_aper_test</tabstop>
+  <tabstop>plainTextEdit</tabstop>
+  <tabstop>listView_stdout_xy_aper_test</tabstop>
+  <tabstop>listView_stderr_xy_aper_test</tabstop>
   <tabstop>spinBox_n_turns_xy_aper_prod</tabstop>
-  <tabstop>lineEdit_time_xy_aper_prod</tabstop>
   <tabstop>comboBox_partition_xy_aper_prod</tabstop>
   <tabstop>spinBox_ntasks_xy_aper_prod</tabstop>
-  <tabstop>listView_stderr_test1</tabstop>
+  <tabstop>lineEdit_time_xy_aper_prod</tabstop>
+  <tabstop>tabWidget_fmap_xy</tabstop>
+  <tabstop>spinBox_n_turns_fmap_xy_test</tabstop>
+  <tabstop>lineEdit_xmin_fmap_xy_test</tabstop>
+  <tabstop>lineEdit_xmax_fmap_xy_test</tabstop>
+  <tabstop>lineEdit_ymin_fmap_xy_test</tabstop>
+  <tabstop>lineEdit_ymax_fmap_xy_test</tabstop>
+  <tabstop>spinBox_nx_fmap_xy_test</tabstop>
+  <tabstop>spinBox_ny_fmap_xy_test</tabstop>
+  <tabstop>lineEdit_x_offset_fmap_xy_test</tabstop>
+  <tabstop>lineEdit_y_offset_fmap_xy_test</tabstop>
+  <tabstop>lineEdit_delta_offset_fmap_xy_test</tabstop>
+  <tabstop>comboBox_partition_fmap_xy_test</tabstop>
+  <tabstop>spinBox_ntasks_fmap_xy_test</tabstop>
+  <tabstop>lineEdit_time_fmap_xy_test</tabstop>
+  <tabstop>pushButton_gen_fmap_xy_test</tabstop>
+  <tabstop>pushButton_open_pdf_fmap_xy_test</tabstop>
+  <tabstop>tabWidget_std_fmap_xy_test</tabstop>
+  <tabstop>plainTextEdit_2</tabstop>
+  <tabstop>listView_stdout_fmap_xy_test</tabstop>
+  <tabstop>listView_stderr_fmap_xy_test</tabstop>
+  <tabstop>spinBox_n_turns_fmap_xy_prod</tabstop>
+  <tabstop>spinBox_nx_fmap_xy_prod</tabstop>
+  <tabstop>spinBox_ny_fmap_xy_prod</tabstop>
+  <tabstop>comboBox_partition_fmap_xy_prod</tabstop>
+  <tabstop>spinBox_ntasks_fmap_xy_prod</tabstop>
+  <tabstop>lineEdit_time_fmap_xy_prod</tabstop>
+  <tabstop>tabWidget_fmap_px</tabstop>
+  <tabstop>spinBox_n_turns_fmap_px_test</tabstop>
+  <tabstop>lineEdit_xmin_fmap_px_test</tabstop>
+  <tabstop>lineEdit_xmax_fmap_px_test</tabstop>
+  <tabstop>lineEdit_delta_min_fmap_px_test</tabstop>
+  <tabstop>lineEdit_delta_max_fmap_px_test</tabstop>
+  <tabstop>spinBox_nx_fmap_px_test</tabstop>
+  <tabstop>spinBox_ndelta_fmap_px_test</tabstop>
+  <tabstop>lineEdit_x_offset_fmap_px_test</tabstop>
+  <tabstop>lineEdit_y_offset_fmap_px_test</tabstop>
+  <tabstop>lineEdit_delta_offset_fmap_px_test</tabstop>
+  <tabstop>comboBox_partition_fmap_px_test</tabstop>
+  <tabstop>spinBox_ntasks_fmap_px_test</tabstop>
+  <tabstop>lineEdit_time_fmap_px_test</tabstop>
+  <tabstop>pushButton_gen_fmap_px_test</tabstop>
+  <tabstop>pushButton_open_pdf_fmap_px_test</tabstop>
+  <tabstop>tabWidget_std_fmap_px_test</tabstop>
+  <tabstop>plainTextEdit_3</tabstop>
+  <tabstop>listView_stdout_fmap_px_test</tabstop>
+  <tabstop>listView_stderr_fmap_px_test</tabstop>
+  <tabstop>spinBox_n_turns_fmap_px_prod</tabstop>
+  <tabstop>spinBox_nx_fmap_px_prod</tabstop>
+  <tabstop>spinBox_ndelta_fmap_px_prod</tabstop>
+  <tabstop>comboBox_partition_fmap_px_prod</tabstop>
+  <tabstop>spinBox_ntasks_fmap_px_prod</tabstop>
+  <tabstop>lineEdit_time_fmap_px_prod</tabstop>
+  <tabstop>tabWidget_cmap_xy</tabstop>
+  <tabstop>spinBox_n_turns_cmap_xy_test</tabstop>
+  <tabstop>comboBox_partition_cmap_xy_test</tabstop>
+  <tabstop>spinBox_ntasks_cmap_xy_test</tabstop>
+  <tabstop>lineEdit_time_cmap_xy_test</tabstop>
+  <tabstop>pushButton_gen_cmap_xy_test</tabstop>
+  <tabstop>pushButton_open_pdf_cmap_xy_test</tabstop>
+  <tabstop>tabWidget_std_cmap_xy_test</tabstop>
+  <tabstop>plainTextEdit_4</tabstop>
+  <tabstop>listView_stdout_cmap_xy_test</tabstop>
+  <tabstop>listView_stderr_cmap_xy_test</tabstop>
+  <tabstop>spinBox_n_turns_cmap_xy_prod</tabstop>
+  <tabstop>comboBox_partition_cmap_xy_prod</tabstop>
+  <tabstop>spinBox_ntasks_cmap_xy_prod</tabstop>
+  <tabstop>lineEdit_time_cmap_xy_prod</tabstop>
+  <tabstop>tabWidget_cmap_px</tabstop>
+  <tabstop>spinBox_n_turns_cmap_px_test</tabstop>
+  <tabstop>comboBox_partition_cmap_px_test</tabstop>
+  <tabstop>spinBox_ntasks_cmap_px_test</tabstop>
+  <tabstop>lineEdit_time_cmap_px_test</tabstop>
+  <tabstop>pushButton_gen_cmap_px_test</tabstop>
+  <tabstop>pushButton_open_pdf_cmap_px_test</tabstop>
+  <tabstop>tabWidget_std_cmap_px_test</tabstop>
+  <tabstop>plainTextEdit_5</tabstop>
+  <tabstop>listView_stdout_cmap_px_test</tabstop>
+  <tabstop>listView_stderr_cmap_px_test</tabstop>
+  <tabstop>spinBox_n_turns_cmap_px_prod</tabstop>
+  <tabstop>comboBox_partition_cmap_px_prod</tabstop>
+  <tabstop>spinBox_ntasks_cmap_px_prod</tabstop>
+  <tabstop>lineEdit_time_cmap_px_prod</tabstop>
+  <tabstop>tabWidget_mom_aper</tabstop>
+  <tabstop>spinBox_n_turns_mom_aper_test</tabstop>
+  <tabstop>lineEdit_x_initial_mom_aper_test</tabstop>
+  <tabstop>lineEdit_y_initial_mom_aper_test</tabstop>
+  <tabstop>lineEdit_delta_negative_start_mom_aper_test</tabstop>
+  <tabstop>lineEdit_delta_negative_limit_mom_aper_test</tabstop>
+  <tabstop>lineEdit_init_delta_step_size_mom_aper_test</tabstop>
+  <tabstop>lineEdit_delta_positive_start_mom_aper_test</tabstop>
+  <tabstop>lineEdit_delta_positive_limit_mom_aper_test</tabstop>
+  <tabstop>lineEdit_include_name_pattern_mom_aper_test</tabstop>
+  <tabstop>spinBox_steps_back_mom_aper_test</tabstop>
+  <tabstop>spinBox_splits_mom_aper_test</tabstop>
+  <tabstop>spinBox_split_step_divisor_mom_aper_test</tabstop>
+  <tabstop>comboBox_partition_mom_aper_test</tabstop>
+  <tabstop>spinBox_ntasks_mom_aper_test</tabstop>
+  <tabstop>lineEdit_time_mom_aper_test</tabstop>
+  <tabstop>pushButton_gen_mom_aper_test</tabstop>
+  <tabstop>pushButton_open_pdf_mom_aper_test</tabstop>
+  <tabstop>tabWidget_std_mom_aper_test</tabstop>
+  <tabstop>plainTextEdit_6</tabstop>
+  <tabstop>listView_stdout_mom_aper_test</tabstop>
+  <tabstop>listView_stderr_mom_aper_test</tabstop>
+  <tabstop>spinBox_n_turns_mom_aper_prod</tabstop>
+  <tabstop>lineEdit_init_delta_step_size_mom_aper_prod</tabstop>
+  <tabstop>lineEdit_include_name_pattern_mom_aper_prod</tabstop>
+  <tabstop>spinBox_steps_back_mom_aper_prod</tabstop>
+  <tabstop>spinBox_splits_mom_aper_prod</tabstop>
+  <tabstop>spinBox_split_step_divisor_mom_aper_prod</tabstop>
+  <tabstop>comboBox_partition_mom_aper_prod</tabstop>
+  <tabstop>spinBox_ntasks_mom_aper_prod</tabstop>
+  <tabstop>lineEdit_time_mom_aper_prod</tabstop>
+  <tabstop>tabWidget_tswa</tabstop>
+  <tabstop>spinBox_n_turns_tswa_calc</tabstop>
+  <tabstop>lineEdit_abs_xmax_tswa_calc</tabstop>
+  <tabstop>lineEdit_abs_ymax_tswa_calc</tabstop>
+  <tabstop>spinBox_nx_tswa_calc</tabstop>
+  <tabstop>spinBox_ny_tswa_calc</tabstop>
+  <tabstop>lineEdit_x_offset_tswa_calc</tabstop>
+  <tabstop>lineEdit_y_offset_tswa_calc</tabstop>
+  <tabstop>comboBox_partition_tswa_calc</tabstop>
+  <tabstop>spinBox_ntasks_tswa_calc</tabstop>
+  <tabstop>lineEdit_time_tswa_calc</tabstop>
+  <tabstop>lineEdit_fit_xmin_tswa_plot</tabstop>
+  <tabstop>lineEdit_fit_ymin_tswa_plot</tabstop>
+  <tabstop>lineEdit_footprint_nux_min_tswa_plot</tabstop>
+  <tabstop>lineEdit_footprint_nux_max_tswa_plot</tabstop>
+  <tabstop>lineEdit_fit_xmax_tswa_plot</tabstop>
+  <tabstop>lineEdit_fit_ymax_tswa_plot</tabstop>
+  <tabstop>lineEdit_footprint_nuy_min_tswa_plot</tabstop>
+  <tabstop>lineEdit_footprint_nuy_max_tswa_plot</tabstop>
+  <tabstop>pushButton_gen_recalc_tswa</tabstop>
+  <tabstop>pushButton_gen_replot_tswa</tabstop>
+  <tabstop>pushButton_open_pdf_tswa</tabstop>
+  <tabstop>tabWidget_std_tswa</tabstop>
+  <tabstop>plainTextEdit_7</tabstop>
+  <tabstop>listView_stdout_tswa</tabstop>
+  <tabstop>listView_stderr_tswa</tabstop>
+  <tabstop>tabWidget_nonlin_chrom</tabstop>
+  <tabstop>spinBox_n_turns_nonlin_chrom_calc</tabstop>
+  <tabstop>lineEdit_delta_min_nonlin_chrom_calc</tabstop>
+  <tabstop>lineEdit_delta_max_nonlin_chrom_calc</tabstop>
+  <tabstop>spinBox_ndelta_nonlin_chrom_calc</tabstop>
+  <tabstop>lineEdit_x_offset_nonlin_chrom_calc</tabstop>
+  <tabstop>lineEdit_y_offset_nonlin_chrom_calc</tabstop>
+  <tabstop>lineEdit_delta_offset_nonlin_chrom_calc</tabstop>
+  <tabstop>checkBox_save_fft_nonlin_chrom_calc</tabstop>
+  <tabstop>comboBox_partition_nonlin_chrom_calc</tabstop>
+  <tabstop>spinBox_ntasks_nonlin_chrom_calc</tabstop>
+  <tabstop>lineEdit_time_nonlin_chrom_calc</tabstop>
+  <tabstop>spinBox_max_chrom_order_nonlin_chrom_plot</tabstop>
+  <tabstop>lineEdit_fit_delta_min_nonlin_chrom_plot</tabstop>
+  <tabstop>lineEdit_footprint_nux_min_nonlin_chrom_plot</tabstop>
+  <tabstop>lineEdit_footprint_nux_max_nonlin_chrom_plot</tabstop>
+  <tabstop>checkBox_plot_fft_nonlin_chrom_plot</tabstop>
+  <tabstop>lineEdit_fit_delta_max_nonlin_chrom_plot</tabstop>
+  <tabstop>lineEdit_footprint_nuy_min_nonlin_chrom_plot</tabstop>
+  <tabstop>lineEdit_footprint_nuy_max_nonlin_chrom_plot</tabstop>
+  <tabstop>pushButton_gen_recalc_nonlin_chrom</tabstop>
+  <tabstop>pushButton_gen_replot_nonlin_chrom</tabstop>
+  <tabstop>pushButton_open_pdf_nonlin_chrom</tabstop>
+  <tabstop>tabWidget_std_nonlin_chrom</tabstop>
+  <tabstop>plainTextEdit_8</tabstop>
+  <tabstop>listView_stdout_nonlin_chrom</tabstop>
+  <tabstop>listView_stderr_nonlin_chrom</tabstop>
+  <tabstop>checkBox_nonlin_include_all</tabstop>
+  <tabstop>checkBox_nonlin_include_xy_aper</tabstop>
+  <tabstop>checkBox_nonlin_include_fmap_xy</tabstop>
+  <tabstop>checkBox_nonlin_include_fmap_px</tabstop>
+  <tabstop>checkBox_nonlin_include_cmap_xy</tabstop>
+  <tabstop>checkBox_nonlin_include_cmap_px</tabstop>
+  <tabstop>checkBox_nonlin_include_tswa</tabstop>
+  <tabstop>checkBox_nonlin_include_nonlin_chrom</tabstop>
+  <tabstop>checkBox_nonlin_include_mom_aper</tabstop>
+  <tabstop>checkBox_nonlin_recalc_all</tabstop>
+  <tabstop>checkBox_nonlin_recalc_xy_aper</tabstop>
+  <tabstop>checkBox_nonlin_recalc_fmap_xy</tabstop>
+  <tabstop>checkBox_nonlin_recalc_fmap_px</tabstop>
+  <tabstop>checkBox_nonlin_recalc_cmap_xy</tabstop>
+  <tabstop>checkBox_nonlin_recalc_cmap_px</tabstop>
+  <tabstop>checkBox_nonlin_recalc_tswa</tabstop>
+  <tabstop>checkBox_nonlin_recalc_nonlin_chrom</tabstop>
+  <tabstop>checkBox_nonlin_recalc_mom_aper</tabstop>
+  <tabstop>checkBox_nonlin_replot_all</tabstop>
+  <tabstop>checkBox_nonlin_replot_xy_aper</tabstop>
+  <tabstop>checkBox_nonlin_replot_fmap_xy</tabstop>
+  <tabstop>checkBox_nonlin_replot_fmap_px</tabstop>
+  <tabstop>checkBox_nonlin_replot_cmap_xy</tabstop>
+  <tabstop>checkBox_nonlin_replot_cmap_px</tabstop>
+  <tabstop>checkBox_nonlin_replot_tswa</tabstop>
+  <tabstop>checkBox_nonlin_replot_nonlin_chrom</tabstop>
+  <tabstop>checkBox_nonlin_replot_mom_aper</tabstop>
+  <tabstop>tabWidget_nonlin_plot_opts</tabstop>
+  <tabstop>spinBox_cmap_xy_cmin</tabstop>
+  <tabstop>spinBox_cmap_xy_cmax</tabstop>
+  <tabstop>spinBox_cmap_px_cmin</tabstop>
+  <tabstop>spinBox_cmap_px_cmax</tabstop>
+  <tabstop>pushButton_gen_nonlin_prod</tabstop>
+  <tabstop>pushButton_open_pdf_nonlin_prod</tabstop>
+  <tabstop>tabWidget_std_nonlin_prod</tabstop>
+  <tabstop>listView_stdout_nonlin_prod</tabstop>
+  <tabstop>listView_stderr_nonlin_prod</tabstop>
+  <tabstop>tabWidget_nonlin_plot_opts_2</tabstop>
+  <tabstop>checkBox_rf_include</tabstop>
+  <tabstop>checkBox_rf_recalc</tabstop>
+  <tabstop>spinBox_harmonic_number</tabstop>
+  <tabstop>lineEdit_rf_voltages</tabstop>
+  <tabstop>checkBox_tau_include</tabstop>
+  <tabstop>checkBox_tau_recalc</tabstop>
+  <tabstop>lineEdit_total_beam_current</tabstop>
+  <tabstop>spinBox_num_filled_bunches</tabstop>
+  <tabstop>comboBox_max_mom_aper</tabstop>
+  <tabstop>lineEdit_coupling_list</tabstop>
+  <tabstop>pushButton_gen_rf_tau</tabstop>
+  <tabstop>pushButton_open_pdf_rf_tau</tabstop>
+  <tabstop>tabWidget_std_rf_tau</tabstop>
+  <tabstop>listView_stdout_rf_tau</tabstop>
+  <tabstop>listView_stderr_rf_tau</tabstop>
  </tabstops>
  <resources/>
  <connections/>
