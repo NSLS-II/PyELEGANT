@@ -2083,7 +2083,7 @@ class PagePhaseAdv(PageStandard):
         if n_disp_bumps == 2:
             d2 = d['MDISP across LS']
             f(d2, 'pdf_label', (
-                r'Phase Advance btw. Disp. Bumps across LS '
+                r'Phase Advance btw. Disp. Bumps\n across LS '
                 r'$(\Delta\nu_x, \Delta\nu_y)$'))
             seq = CommentedSeq([
                 "normal", sqss(
@@ -2106,7 +2106,7 @@ class PagePhaseAdv(PageStandard):
             #
             d2 = d['MDISP across SS']
             f(d2, 'pdf_label', (
-                r'Phase Advance btw. Disp. Bumps across SS '
+                r'Phase Advance btw. Disp. Bumps\n across SS '
                 r'$(\Delta\nu_x, \Delta\nu_y)$'))
             seq = CommentedSeq([
                 "normal", sqss(
@@ -2130,7 +2130,7 @@ class PagePhaseAdv(PageStandard):
         elif n_disp_bumps == 4:
             d2 = d['MDISP 0&1']
             f(d2, 'pdf_label', (
-                r'Phase Advance btw. Dispersion Bumps '
+                r'Phase Advance btw. Dispersion Bumps\n '
                 r'$(\Delta\nu_x, \Delta\nu_y)$'))
             seq = CommentedSeq([
                 "normal", sqss('Horizontal Phase Advance btw. Disp. Bumps '),

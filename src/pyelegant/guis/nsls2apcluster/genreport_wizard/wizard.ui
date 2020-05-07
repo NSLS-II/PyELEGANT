@@ -1219,7 +1219,7 @@ p, li { white-space: pre-wrap; }
           <item>
            <widget class="QLineEdit" name="lineEdit_extra_dy_frac">
             <property name="text">
-             <string>0.05</string>
+             <string>0.8</string>
             </property>
            </widget>
           </item>

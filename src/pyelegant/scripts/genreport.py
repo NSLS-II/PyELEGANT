@@ -6405,6 +6405,47 @@ class Report_NSLS2U_Default:
         conf.insert(i, 'lattice_authors', '', comment='REQUIRED')
         del conf['lattice_author']
 
+        # Define "disp_elem_names" anchor
+        com_map = yaml.comments.CommentedMap
+        com_seq = yaml.comments.CommentedSeq
+        #
+        disp_elem_names = com_map({
+            'bends': True, 'quads': True, 'sexts': True, 'octs': True,
+            'font_size': 8, 'extra_dy_frac': 0.8})
+        disp_elem_names.fa.set_flow_style()
+        disp_elem_names.yaml_set_anchor('disp_elem_names')
+        one_period = [com_map({'right_margin_adj': 0.85})]
+        slim = com_seq([0.0, 9.0])
+        slim.fa.set_flow_style()
+        one_period.append(
+            com_map({'right_margin_adj': 0.85, 'slim': slim,
+                     'disp_elem_names': disp_elem_names})
+        )
+        slim = com_seq([4.0, 16.0])
+        slim.fa.set_flow_style()
+        one_period.append(
+            com_map({'right_margin_adj': 0.85, 'slim': slim,
+                     'disp_elem_names': disp_elem_names})
+        )
+        slim = com_seq([14.0, 23.0])
+        slim.fa.set_flow_style()
+        one_period.append(
+            com_map({'right_margin_adj': 0.85, 'slim': slim,
+                     'disp_elem_names': disp_elem_names})
+        )
+        one_period = com_seq(one_period)
+        #
+        twiss_plot_opts = {'one_period': one_period}
+        if example:
+            twiss_plot_opts['ring'] = com_seq([])
+            twiss_plot_opts['ring_natural'] = com_seq([])
+        twiss_plot_opts = com_map(twiss_plot_opts)
+        #
+        i = list(conf['lattice_props']).index('twiss_plot_opts')
+        del conf['lattice_props']['twiss_plot_opts']
+        conf['lattice_props'].insert(i, 'twiss_plot_opts', twiss_plot_opts,
+                                     comment='REQUIRED')
+
         if example:
             lifetime_plot_opts = yaml.comments.CommentedMap()
             _yaml_append_map(lifetime_plot_opts, 'replot', False)
