@@ -10,6 +10,7 @@ import itertools
 from pathlib import Path
 from subprocess import Popen, PIPE
 import shlex
+import matplotlib.patches as patches
 
 from . import __version__
 
@@ -631,3 +632,172 @@ def chained_Popen(cmd_list):
     out, err = p.communicate()
 
     return out, err, p.returncode
+
+def get_visible_spos_inds(all_s_array, slim, s_margin_m=0.1):
+    """
+    s_margin_m [m]
+    """
+
+    shifted_slim = slim - slim[0]
+
+    _visible = np.logical_and(
+        all_s_array - slim[0] >= shifted_slim[0] - s_margin_m,
+        all_s_array - slim[0] <= shifted_slim[1] + s_margin_m
+    )
+
+    return _visible
+
+def add_magnet_profiles(
+    ax, twi_arrays, parameters_arrays, slim, s_margin_m=0.1, s0_m=0.0):
+    """"""
+
+    prof_center_y = 0.0
+    quad_height = 0.5
+    sext_height = quad_height * 1.5
+    oct_height = quad_height * 1.75
+    bend_half_height = quad_height/3.0
+
+    ax.set_yticks([])
+
+    ax.set_xlim(slim)
+    max_height = max([quad_height, sext_height, oct_height, bend_half_height])
+    ax.set_ylim(np.array([-max_height, +max_height]))
+
+    twi_ar = twi_arrays
+    parameters = parameters_arrays
+
+    prev_s = 0.0 - s0_m
+    assert len(twi_ar['s']) == len(twi_ar['ElementType']) == \
+           len(twi_ar['ElementName']) == len(twi_ar['ElementOccurence'])
+    for ei, (s, elem_type, elem_name, elem_occur) in enumerate(zip(
+        twi_ar['s'], twi_ar['ElementType'], twi_ar['ElementName'],
+        twi_ar['ElementOccurence'])):
+
+        cur_s = s - s0_m
+
+        if (s < slim[0] - s_margin_m) or (s > slim[1] + s_margin_m):
+            prev_s = cur_s
+            continue
+
+        elem_type = elem_type.upper()
+
+        if elem_type in ('QUAD', 'KQUAD'):
+
+            K1 = _get_param_val('K1', parameters, elem_name, elem_occur)
+            c = 'r'
+            if K1 >= 0.0: # Focusing Quad
+                bottom, top = 0.0, quad_height
+            else: # Defocusing Quad
+                bottom, top = -quad_height, 0.0
+
+            # Shift vertically
+            bottom += prof_center_y
+            top += prof_center_y
+
+            width = cur_s - prev_s
+            height = top - bottom
+
+            p = patches.Rectangle((prev_s, bottom), width, height, fill=True, color=c)
+            ax.add_patch(p)
+
+        elif elem_type in ('SEXT', 'KSEXT'):
+
+            K2 = _get_param_val('K2', parameters, elem_name, elem_occur)
+            c = 'b'
+            if K2 >= 0.0: # Focusing Sext
+                bottom, mid_h, top = 0.0, sext_height / 2, sext_height
+            else: # Defocusing Sext
+                bottom, mid_h, top = -sext_height, -sext_height / 2, 0.0
+
+            # Shift vertically
+            bottom += prof_center_y
+            mid_h += prof_center_y
+            top += prof_center_y
+
+            mid_s = (prev_s + cur_s) / 2
+
+            if K2 >= 0.0: # Focusing Sext
+                xy = np.array([
+                    [prev_s, bottom], [prev_s, mid_h], [mid_s, top],
+                    [cur_s, mid_h], [cur_s, bottom]
+                ])
+            else:
+                xy = np.array([
+                    [prev_s, top], [prev_s, mid_h], [mid_s, bottom],
+                    [cur_s, mid_h], [cur_s, top]
+                ])
+            p = patches.Polygon(xy, closed=True, fill=True, color=c)
+            ax.add_patch(p)
+
+        elif elem_type in ('OCTU', 'KOCT'):
+
+            K3 = _get_param_val('K3', parameters, elem_name, elem_occur)
+            c = 'g'
+            if K3 >= 0.0: # Focusing Octupole
+                bottom, mid_h, top = 0.0, oct_height / 2, oct_height
+            else: # Defocusing Octupole
+                bottom, mid_h, top = -oct_height, -oct_height / 2, 0.0
+
+            # Shift vertically
+            bottom += prof_center_y
+            mid_h += prof_center_y
+            top += prof_center_y
+
+            mid_s = (prev_s + cur_s) / 2
+
+            if K3 >= 0.0: # Focusing Octupole
+                xy = np.array([
+                    [prev_s, bottom], [prev_s, mid_h], [mid_s, top],
+                    [cur_s, mid_h], [cur_s, bottom]
+                ])
+            else:
+                xy = np.array([
+                    [prev_s, top], [prev_s, mid_h], [mid_s, bottom],
+                    [cur_s, mid_h], [cur_s, top]
+                ])
+            p = patches.Polygon(xy, closed=True, fill=True, color=c)
+            ax.add_patch(p)
+
+        elif elem_type in ('RBEND', 'SBEND', 'SBEN', 'CSBEND'):
+            bottom, top = -bend_half_height, bend_half_height
+
+            # Shift vertically
+            bottom += prof_center_y
+            top += prof_center_y
+
+            width = cur_s - prev_s
+            height = top - bottom
+
+            p = patches.Rectangle((prev_s, bottom), width, height, fill=True, color='k')
+            ax.add_patch(p)
+        else:
+            ax.plot([prev_s, cur_s], np.array([0.0, 0.0]) + prof_center_y, 'k-')
+
+        prev_s = cur_s
+
+def _get_param_val(param_name, parameters_dict, elem_name, elem_occur):
+    """
+    Used only by add_magnet_profiles()
+    """
+
+    parameters = parameters_dict
+
+    matched_elem_names = (parameters['ElementName'] == elem_name)
+    matched_elem_occurs = (parameters['ElementOccurence'] == elem_occur)
+    m = np.logical_and(matched_elem_names, matched_elem_occurs)
+    if np.sum(m) == 0:
+        m = np.where(matched_elem_names)[0]
+        u_elem_occurs_int = np.unique(parameters['ElementOccurence'][m])
+        if np.all(u_elem_occurs_int > elem_occur):
+            elem_occur = np.min(u_elem_occurs_int)
+        elif np.all(u_elem_occurs_int < elem_occur):
+            elem_occur = np.max(u_elem_occurs_int)
+        else:
+            elem_occur = np.min(
+                u_elem_occurs_int[u_elem_occurs_int >= elem_occur])
+        matched_elem_occurs = (parameters['ElementOccurence'] == elem_occur)
+        m = np.logical_and(matched_elem_names, matched_elem_occurs)
+    m = np.logical_and(m, parameters['ElementParameter'] == param_name)
+    assert np.sum(m) == 1
+
+    return parameters['ParameterValue'][m][0]

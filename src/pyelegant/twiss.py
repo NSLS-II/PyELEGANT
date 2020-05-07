@@ -2,8 +2,6 @@ import os
 import tempfile
 import numpy as np
 import matplotlib.pylab as plt
-from matplotlib.backends.backend_pdf import PdfPages
-import matplotlib.patches as patches
 import h5py
 
 from .local import run
@@ -402,20 +400,6 @@ def _calc_matrix_elem_linear_natural_chrom(twi_arrays, parameters_arrays):
 
     return output
 
-def get_visible_inds(all_s_array, slim, s_margin_m=0.1):
-    """
-    s_margin_m [m]
-    """
-
-    shifted_slim = slim - slim[0]
-
-    _visible = np.logical_and(
-        all_s_array - slim[0] >= shifted_slim[0] - s_margin_m,
-        all_s_array - slim[0] <= shifted_slim[1] + s_margin_m
-    )
-
-    return _visible
-
 def _get_param_val(param_name, parameters_dict, elem_name, elem_occur):
     """"""
 
@@ -443,9 +427,14 @@ def _get_param_val(param_name, parameters_dict, elem_name, elem_occur):
 
 def plot_twiss(
     result_filepath, result_file_type=None, slim=None, s_margin_m=0.1, s0_m=0.0,
-    etax_unit='mm', right_margin_adj=0.88, print_scalars=None,
-    disp_elem_names=None):
+    etax_unit='mm', right_margin_adj=0.88, twiss_plot_area_height=5,
+    print_scalars=None, disp_elem_names=None):
     """"""
+
+    if twiss_plot_area_height < 1:
+        raise ValueError((
+            '"twiss_plot_area_height" must be an integer higher than or '
+            'equal to 1.'))
 
     if result_file_type in ('hdf5', 'h5'):
         d, meta, version = util.load_sdds_hdf5_file(result_filepath)
@@ -463,11 +452,17 @@ def plot_twiss(
     else:
         raise ValueError('"result_file_type" must be one of "hdf5", "h5", "pgz"')
 
-    twi_ar = d['twi']['arrays']
-    twi_sc = d['twi']['scalars']
+    twi_ext = _d['input']['twi_filepath'].split('.')[-1]
+    try:
+        param_ext = _d['input']['parameters'].split('.')[-1]
+    except:
+        param_ext = None
 
-    meta_twi_ar = meta['twi']['arrays']
-    meta_twi_sc = meta['twi']['scalars']
+    twi_ar = d[twi_ext]['arrays']
+    twi_sc = d[twi_ext]['scalars']
+
+    meta_twi_ar = meta[twi_ext]['arrays']
+    meta_twi_sc = meta[twi_ext]['scalars']
 
     # Print out scalar values
     scalar_lines = []
@@ -498,52 +493,60 @@ def plot_twiss(
     slim = np.array(slim)
 
     shifted_slim = slim - s0_m
-    _vis = get_visible_inds(twi_ar['s'], slim, s_margin_m=s_margin_m)
+    _vis = util.get_visible_spos_inds(twi_ar['s'], slim, s_margin_m=s_margin_m)
 
-    if 'parameters' in d:
-        parameters = d['parameters']['arrays']
+    if param_ext is not None:
+        param_ar = d[param_ext]['arrays']
         show_mag_prof = True
     else:
-        parameters = {}
+        param_ar = {}
         show_mag_prof = False
 
     _kw_label = dict(size=16)
     leg_prop = dict(size=14)
     maj_ticks = dict(labelsize=12, length=7)
     min_ticks = dict(labelsize=5, length=2)
+    ms_main = 2.0
 
     fig = plt.figure()
-    ax1 = plt.subplot2grid((4,1), (0,0), colspan=1, rowspan=4)
-    [hbx,hby] = ax1.plot(
-        (twi_ar['s'] - s0_m)[_vis], twi_ar['betax'][_vis], 'b.-',
-        (twi_ar['s'] - s0_m)[_vis], twi_ar['betay'][_vis], 'r.-')
-    ax1.set_xlim(shifted_slim)
-    if s0_m == 0.0:
-        ax1.set_xlabel(r'$s\, [\mathrm{m}]$', **_kw_label)
+    if show_mag_prof:
+        nrows = twiss_plot_area_height + 1
+        ax1 = plt.subplot2grid((nrows, 1), (0, 0), rowspan=nrows-1)
+        ax2 = plt.subplot2grid((nrows, 1), (nrows-1, 0), rowspan=1, sharex=ax1)
     else:
-        ax1.set_xlabel(r'$s\, - {:.6g}\, [\mathrm{{m}}]$'.format(s0_m), **_kw_label)
-    #ax1.set_xticks([]) # hide x-ticks
-    #
+        ax1 = plt.gca()
+    [hbx,] = ax1.plot(
+        twi_ar['s'][_vis] - s0_m, twi_ar['betax'][_vis], 'b.-', ms=ms_main)
+    [hby,] = ax1.plot(
+        twi_ar['s'][_vis] - s0_m, twi_ar['betay'][_vis], 'r.-', ms=ms_main)
+    ax1.set_xlim(shifted_slim)
+    if show_mag_prof:
+        util.add_magnet_profiles(ax2, twi_ar, param_ar, slim,
+                                 s_margin_m=s_margin_m, s0_m=s0_m)
+        plt.setp(ax1.get_xticklabels(), visible=False)
+        if s0_m == 0.0:
+            ax2.set_xlabel(r'$s\, [\mathrm{m}]$', **_kw_label)
+        else:
+            ax2.set_xlabel(r'$s\, - {:.6g}\, [\mathrm{{m}}]$'.format(s0_m),
+                           **_kw_label)
+        ax1.spines['bottom'].set_visible(False)
+        ax2.spines['top'].set_visible(False)
+    else:
+        if s0_m == 0.0:
+            ax1.set_xlabel(r'$s\, [\mathrm{m}]$', **_kw_label)
+        else:
+            ax1.set_xlabel(r'$s\, - {:.6g}\, [\mathrm{{m}}]$'.format(s0_m),
+                           **_kw_label)
     # Make the y-axis label and tick labels match the line color.
     ax1.set_ylabel(r'$\beta_x,\, \beta_y\, [\mathrm{m}]$', color='k', **_kw_label)
     for tl in ax1.get_yticklabels():
         tl.set_color('k')
     ax1.tick_params(axis='both', which='major', **maj_ticks)
     ax1.tick_params(axis='both', which='minor', **min_ticks)
-    if show_mag_prof or disp_elem_names:
-        extra_dy_frac = 0.2
-
-        ylim = ax1.get_ylim()
-        extra_dy = (ylim[1] - ylim[0]) * extra_dy_frac
-        ax1.set_ylim([ylim[0] - extra_dy, ylim[1]])
-
-        prof_center_y = - extra_dy * 0.6
-        quad_height = extra_dy / 5.0
-        sext_height = quad_height * 1.5
-        oct_height = quad_height * 1.75
-        bend_half_height = quad_height/3.0
     ax1.axhline(0.0, color='k', linestyle='-.')
-    ax2 = ax1.twinx()
+    ax3 = ax1.twinx()
+    if show_mag_prof:
+        ax3.spines['bottom'].set_visible(False)
     if etax_unit == 'mm':
         etax = twi_ar['etax'] * 1e3
         etax_ylabel = r'$\eta_x\, [\mathrm{mm}]$'
@@ -553,137 +556,18 @@ def plot_twiss(
     else:
         raise ValueError()
     _ex_c = 'g'
-    hex, = ax2.plot((twi_ar['s'] - s0_m)[_vis], etax[_vis], _ex_c + '.-')
-    ax2.set_xlim(shifted_slim)
-    ax2.set_ylabel(etax_ylabel, color='k', **_kw_label)
-    for tl in ax2.get_yticklabels():
+    hex, = ax3.plot(twi_ar['s'][_vis] - s0_m, etax[_vis], _ex_c + '.-', ms=ms_main)
+    ax3.set_xlim(shifted_slim)
+    ax3.set_ylabel(etax_ylabel, color='k', **_kw_label)
+    for tl in ax3.get_yticklabels():
         tl.set_color('k')
-    ax2.tick_params(axis='both', which='major', **maj_ticks)
-    ax2.tick_params(axis='both', which='minor', **min_ticks)
-    ax2.axhline(0.0, color=_ex_c, linestyle='-.')
+    ax3.tick_params(axis='both', which='major', **maj_ticks)
+    ax3.tick_params(axis='both', which='minor', **min_ticks)
+    ax3.axhline(0.0, color=_ex_c, linestyle='-.')
     plt.legend([hbx,hby,hex], [r'$\beta_x$', r'$\beta_y$', r'$\eta_x$'],
                bbox_to_anchor=(0, 1.04, 1., 0.102),
                loc='upper center', mode='expand',
                ncol=3, borderaxespad=0., prop=leg_prop)
-    #ax1.grid(True)
-    if show_mag_prof:
-
-        ylim = ax2.get_ylim()
-        extra_dy = (ylim[1] - ylim[0]) * extra_dy_frac
-        ax2.set_ylim([ylim[0] - extra_dy, ylim[1]])
-
-        # --- Add magnet profiles
-
-        ax = ax1
-
-        prev_s = 0.0 - s0_m
-        assert len(twi_ar['s']) == len(twi_ar['ElementType']) == \
-               len(twi_ar['ElementName']) == len(twi_ar['ElementOccurence'])
-        for ei, (s, elem_type, elem_name, elem_occur) in enumerate(zip(
-            twi_ar['s'], twi_ar['ElementType'], twi_ar['ElementName'],
-            twi_ar['ElementOccurence'])):
-
-            cur_s = s - s0_m
-
-            if (s < slim[0] - s_margin_m) or (s > slim[1] + s_margin_m):
-                prev_s = cur_s
-                continue
-
-            elem_type = elem_type.upper()
-
-            if elem_type in ('QUAD', 'KQUAD'):
-
-                K1 = _get_param_val('K1', parameters, elem_name, elem_occur)
-                c = 'r'
-                if K1 >= 0.0: # Focusing Quad
-                    bottom, top = 0.0, quad_height
-                else: # Defocusing Quad
-                    bottom, top = -quad_height, 0.0
-
-                # Shift vertically
-                bottom += prof_center_y
-                top += prof_center_y
-
-                width = cur_s - prev_s
-                height = top - bottom
-
-                p = patches.Rectangle((prev_s, bottom), width, height, fill=True, color=c)
-                ax.add_patch(p)
-
-            elif elem_type in ('SEXT', 'KSEXT'):
-
-                K2 = _get_param_val('K2', parameters, elem_name, elem_occur)
-                c = 'b'
-                if K2 >= 0.0: # Focusing Sext
-                    bottom, mid_h, top = 0.0, sext_height / 2, sext_height
-                else: # Defocusing Sext
-                    bottom, mid_h, top = -sext_height, -sext_height / 2, 0.0
-
-                # Shift vertically
-                bottom += prof_center_y
-                mid_h += prof_center_y
-                top += prof_center_y
-
-                mid_s = (prev_s + cur_s) / 2
-
-                if K2 >= 0.0: # Focusing Sext
-                    xy = np.array([
-                        [prev_s, bottom], [prev_s, mid_h], [mid_s, top],
-                        [cur_s, mid_h], [cur_s, bottom]
-                    ])
-                else:
-                    xy = np.array([
-                        [prev_s, top], [prev_s, mid_h], [mid_s, bottom],
-                        [cur_s, mid_h], [cur_s, top]
-                    ])
-                p = patches.Polygon(xy, closed=True, fill=True, color=c)
-                ax.add_patch(p)
-
-            elif elem_type in ('OCTU', 'KOCT'):
-
-                K3 = _get_param_val('K3', parameters, elem_name, elem_occur)
-                c = 'g'
-                if K3 >= 0.0: # Focusing Octupole
-                    bottom, mid_h, top = 0.0, oct_height / 2, oct_height
-                else: # Defocusing Octupole
-                    bottom, mid_h, top = -oct_height, -oct_height / 2, 0.0
-
-                # Shift vertically
-                bottom += prof_center_y
-                mid_h += prof_center_y
-                top += prof_center_y
-
-                mid_s = (prev_s + cur_s) / 2
-
-                if K3 >= 0.0: # Focusing Octupole
-                    xy = np.array([
-                        [prev_s, bottom], [prev_s, mid_h], [mid_s, top],
-                        [cur_s, mid_h], [cur_s, bottom]
-                    ])
-                else:
-                    xy = np.array([
-                        [prev_s, top], [prev_s, mid_h], [mid_s, bottom],
-                        [cur_s, mid_h], [cur_s, top]
-                    ])
-                p = patches.Polygon(xy, closed=True, fill=True, color=c)
-                ax.add_patch(p)
-
-            elif elem_type in ('RBEND', 'SBEND', 'SBEN', 'CSBEND'):
-                bottom, top = -bend_half_height, bend_half_height
-
-                # Shift vertically
-                bottom += prof_center_y
-                top += prof_center_y
-
-                width = cur_s - prev_s
-                height = top - bottom
-
-                p = patches.Rectangle((prev_s, bottom), width, height, fill=True, color='k')
-                ax.add_patch(p)
-            else:
-                ax.plot([prev_s, cur_s], np.array([0.0, 0.0]) + prof_center_y, 'k-')
-
-            prev_s = cur_s
 
     if disp_elem_names:
 
@@ -714,18 +598,17 @@ def plot_twiss(
         elem_names_to_show = np.unique(elem_names_to_show).tolist()
 
         font_size = disp_elem_names.get('font_size', 10)
-        extra_dy_frac = disp_elem_names.get('extra_dy_frac', 0.1)
+        extra_dy_frac = disp_elem_names.get('extra_dy_frac', 0.2)
 
-        ylim = ax1.get_ylim()
+        ax = ax2 # axes for magnet profile
+
+        ylim = ax.get_ylim()
+
+        char_top = ylim[0]
+
         extra_dy = (ylim[1] - ylim[0]) * extra_dy_frac
-        ax1.set_ylim([ylim[0] - extra_dy, ylim[1]])
+        ax.set_ylim([ylim[0] - extra_dy, ylim[1]])
 
-        ylim = ax2.get_ylim()
-        extra_dy = (ylim[1] - ylim[0]) * extra_dy_frac
-        ax2.set_ylim([ylim[0] - extra_dy, ylim[1]])
-
-        ax = ax1
-        char_top = prof_center_y - sext_height
         for elem_name in elem_names_to_show:
             s_inds = np.where(elem_name == vis_elem_names)[0]
             sb = None
@@ -746,7 +629,10 @@ def plot_twiss(
                 sb = None
 
     plt.tight_layout()
-    plt.subplots_adjust(right=right_margin_adj)
+    if show_mag_prof:
+        plt.subplots_adjust(right=right_margin_adj, hspace=0.0, wspace=0.0)
+    else:
+        plt.subplots_adjust(right=right_margin_adj)
 
     if False:
         plt.figure()
