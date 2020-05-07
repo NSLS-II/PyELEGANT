@@ -598,7 +598,7 @@ def plot_twiss(
         elem_names_to_show = np.unique(elem_names_to_show).tolist()
 
         font_size = disp_elem_names.get('font_size', 10)
-        extra_dy_frac = disp_elem_names.get('extra_dy_frac', 0.2)
+        extra_dy_frac = disp_elem_names.get('extra_dy_frac', 0.8)
 
         ax = ax2 # axes for magnet profile
 
