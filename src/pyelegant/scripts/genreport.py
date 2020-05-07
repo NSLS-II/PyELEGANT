@@ -182,12 +182,20 @@ class Report_NSLS2U_Default:
         else:
             self.rf_dep_props = None
 
-        # Compute lifetime-related properties
+        # Compute & plot lifetime-related properties
         if 'lifetime_calc_opts' in self.conf:
-            self.calc_lifetime_props()
+            lifetime_calc_opts = self.conf['lifetime_calc_opts']
+            recalc = lifetime_calc_opts.get('recalc', False)
+            self.calc_lifetime_props(recalc)
+
+            if 'lifetime_plot_opts' in self.conf:
+                lifetime_plot_opts = self.conf['lifetime_plot_opts']
+                replot = lifetime_plot_opts.get('replot', False)
+                if recalc:
+                    replot = True
+                self.plot_lifetime_props(replot)
         else:
             self.lifetime_props = None
-
 
         if orig_pe_stdout_enabled:
             pe.enable_stdout()
@@ -1835,6 +1843,53 @@ class Report_NSLS2U_Default:
                                     row_list.append(plx.NoEscape(fr'\textbf{{{tau_hr:.2f}}}'))
                                 table.add_row(row_list)
 
+                    lifetime_plot_opts = self.conf['lifetime_plot_opts']
+                    loss_plots_indexes = lifetime_plot_opts.get(
+                        'loss_plots_indexes', None)
+                    if loss_plots_indexes is None:
+                        return
+
+                    lifetime_pdf_filepath = os.path.join(
+                        self.report_folderpath, 'lifetime.pdf')
+
+                    with doc.create(plx.Figure(position='h!t')) as fig:
+
+                        doc.append(plx.NoEscape(r'\centering'))
+
+                        for iFig, (iEnergy, iCoup, iVolt) in enumerate(zip(
+                            loss_plots_indexes['E_MeV'], loss_plots_indexes['coupling'],
+                            loss_plots_indexes['rf_V'])):
+                            page = iFig + 1
+                            caption = (
+                                r'$E$ (GeV) = ${0:.2g}$, '
+                                r'$V_{{\mathrm{{RF}}}}$ (MV) = ${1:.2g}$, '
+                                r'$I_{{\mathrm{{bunch}}}}$ (mA) = ${2:.3g}$, '
+                                r'$(\epsilon_x, \epsilon_y)$ (pm) = '
+                                r'$({3:.1f}, {4:.1f})$').format(
+                                self.lifetime_props['E_MeV_list'][iEnergy] / 1e3,
+                                self.rf_dep_props['rf_volts'][iVolt] / 1e6,
+                                self.lifetime_props[
+                                    'beam_current_per_bunch_mA_list'][iEnergy],
+                                self.lifetime_props['eps_xs_list'][iEnergy][iCoup] * 1e12,
+                                self.lifetime_props['eps_ys_list'][iEnergy][iCoup] * 1e12)
+                            with doc.create(plx.SubFigureForMultiPagePDF(
+                                position='b', width=plx.utils.NoEscape(r'0.45\linewidth'))
+                                            ) as subfig:
+                                subfig.add_image(
+                                    os.path.basename(lifetime_pdf_filepath), page=page,
+                                    width=plx.utils.NoEscape(r'\linewidth'))
+                                doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                                subfig.add_caption(plx.NoEscape(caption))
+
+                            doc.append(plx.HorizontalSpace(plx.NoEscape('+20pt')))
+
+                            if np.mod(iFig, 2) == 1:
+                                doc.append(plx.NewLine())
+
+                        #doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                        fig.add_caption('Local Particle Loss Rate')
+
+
         elif self._version == '1.0':
 
             with doc.create(plx.Section('RF-related Properties & Beam Lifetime')):
@@ -3272,6 +3327,7 @@ class Report_NSLS2U_Default:
         normal_center_border = wb_txt_fmts.normal_center_border
         italic = wb_txt_fmts.italic
         italic_sub = wb_txt_fmts.italic_sub
+        sub = wb_txt_fmts.sub
 
         ws.set_column(0, 0, 45)
 
@@ -3588,6 +3644,41 @@ class Report_NSLS2U_Default:
                         col = iEnergy * n_rf_volts + iVolt
                         ws.write(row_elegant_bunchlen_mm, col+1, v,
                                  wb_num_fmts['0.00'])
+
+                lifetime_plot_opts = self.conf['lifetime_plot_opts']
+                loss_plots_indexes = lifetime_plot_opts.get(
+                    'loss_plots_indexes', None)
+                if loss_plots_indexes is None:
+                    return
+
+                row += 2
+                img_height = 26
+                for iFig, fp in enumerate(
+                    sorted(Path(self.report_folderpath).glob('lifetime_*.png'))):
+
+                    iEnergy = loss_plots_indexes['E_MeV'][iFig]
+                    iCoup = loss_plots_indexes['coupling'][iFig]
+                    iVolt = loss_plots_indexes['rf_V'][iFig]
+
+                    E_GeV = self.lifetime_props['E_MeV_list'][iEnergy] / 1e3
+                    rf_MV = self.rf_dep_props['rf_volts'][iVolt] / 1e6
+                    bunch_mA = self.lifetime_props[
+                        'beam_current_per_bunch_mA_list'][iEnergy]
+                    eps_x_pm = self.lifetime_props['eps_xs_list'][iEnergy][iCoup] * 1e12
+                    eps_y_pm = self.lifetime_props['eps_ys_list'][iEnergy][iCoup] * 1e12
+                    #
+                    ws.write_rich_string(
+                        row, 0, italic, 'E', normal, f' (GeV) = {E_GeV:.2g}, ',
+                        italic, 'V', sub, 'RF', normal, f' (MV) = {rf_MV:.2g}, ',
+                        italic, 'I', sub, 'bunch', normal, f' (mA) = {bunch_mA:.3g}, ',
+                        normal, '(', italic, GREEK['epsilon'], italic_sub, 'x',
+                        normal, ', ', italic, GREEK['epsilon'], italic_sub, 'y',
+                        normal, f') (pm) = ({eps_x_pm:.1f}, {eps_y_pm:.1f})'
+                    )
+                    row += 1
+
+                    ws.insert_image(row, 0, fp)
+                    row += img_height
 
             else:
 
@@ -4610,7 +4701,8 @@ class Report_NSLS2U_Default:
         plt.figure(figsize=(9, 3))
         # Plot reference
         plt.plot(d['_ref_flr_z'][:ref_max_ind+1],
-                 d['_ref_flr_x'][:ref_max_ind+1], 'b.-', ms=5, label='Reference')
+                 d['_ref_flr_x'][:ref_max_ind+1], 'b.-', ms=0.5,#5,
+                 label='Reference')
         max_z = np.max(d['_ref_flr_z'][:ref_max_ind+1])
         for i in d['_ref_flr_speical_inds']:
             plt.plot(d['_ref_flr_z'][i], d['_ref_flr_x'][i], 'b+', ms=20)
@@ -4640,7 +4732,8 @@ class Report_NSLS2U_Default:
         #
         # Plot current
         plt.plot(d['_cur_flr_z'][:cur_max_ind+1],
-                 d['_cur_flr_x'][:cur_max_ind+1], 'r.-', ms=5, label='Current')
+                 d['_cur_flr_x'][:cur_max_ind+1], 'r.-', ms=0.5,#5,
+                 label='Current')
         for i in d['_cur_flr_speical_inds']:
             plt.plot(d['_cur_flr_z'][i], d['_cur_flr_x'][i], 'rx', ms=15)
             sel_zpos['cur'].append(d['_cur_flr_z'][i])
@@ -5491,9 +5584,12 @@ class Report_NSLS2U_Default:
 
         calc_type = 'mom_aper'
         if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
+            slim = [0.0,
+                    self.lin_data['circumf']/self.lin_data['n_periods_in_ring']]
             mom_aper_data = pe.nonlin.plot_mom_aper(
-                nonlin_data_filepaths[calc_type], title='', slim=None,
-                deltalim=None)
+                nonlin_data_filepaths[calc_type], title='',
+                add_mmap_info_to_title=True, slim=slim, deltalim=None,
+                show_mag_prof=True)
 
             self._save_nonlin_plots_to_pdf(calc_type, existing_fignums)
 
@@ -5605,12 +5701,10 @@ class Report_NSLS2U_Default:
             with open(output_filepath, 'wb') as f:
                 pickle.dump(self.rf_dep_props, f)
 
-    def calc_lifetime_props(self):
+    def calc_lifetime_props(self, recalc):
         """"""
 
         lifetime_calc_opts = self.conf['lifetime_calc_opts']
-
-        recalc = lifetime_calc_opts.get('recalc', False)
 
         output_filepath = os.path.join(self.report_folderpath, 'lifetime.pgz')
 
@@ -6178,6 +6272,65 @@ class Report_NSLS2U_Default:
             try: os.remove(mmap_sdds_filepath_ring)
             except: pass
 
+    def plot_lifetime_props(self, replot):
+        """"""
+
+        if not replot:
+            return
+
+        report_folderpath = self.report_folderpath
+
+        existing_fignums = plt.get_fignums()
+
+        lifetime_plot_opts = self.conf['lifetime_plot_opts']
+
+        loss_plots_indexes = lifetime_plot_opts.get('loss_plots_indexes', None)
+        if loss_plots_indexes is None:
+            return
+
+        output_filepath = os.path.join(self.report_folderpath, 'lifetime.pgz')
+
+        if not os.path.exists(output_filepath):
+            print('No calculation result file for lifetime exists. Skipping plots.')
+            return
+
+        self.lifetime_props = pe.util.load_pgz_file(output_filepath)
+
+        slim = [0.0, self.lin_data['circumf']/self.lin_data['n_periods_in_ring']]
+        for iEnergy, iCoup, iVolt in zip(
+            loss_plots_indexes['E_MeV'], loss_plots_indexes['coupling'],
+            loss_plots_indexes['rf_V']):
+
+            with tempfile.NamedTemporaryFile(suffix='.pgz') as tmp:
+                d = self.lifetime_props['sdds_lifetime_data_list'
+                                        ][iEnergy][iCoup][iVolt]
+                pe.util.robust_pgz_file_write(tmp.name, d)
+
+                pe.nonlin.plot_Touschek_lifetime(
+                    tmp.name, title='', add_tau_info_to_title=True,
+                    slim=slim, show_mag_prof=True)
+
+        lifetime_pdf_filepath = os.path.join(report_folderpath, 'lifetime.pdf')
+
+        fignums_to_delete = []
+
+        pp = PdfPages(lifetime_pdf_filepath)
+        page = 0
+        for fignum in plt.get_fignums():
+            if fignum not in existing_fignums:
+                pp.savefig(figure=fignum)
+                #plt.savefig(os.path.join(report_folderpath, f'lifetime_{page:d}.svg'))
+                plt.savefig(os.path.join(report_folderpath, f'lifetime_{page:d}.png'),
+                            dpi=200)
+                page += 1
+                fignums_to_delete.append(fignum)
+        pp.close()
+
+        #plt.show()
+
+        for fignum in fignums_to_delete:
+            plt.close(fignum)
+
     def get_default_config(self, report_version, example=False):
         """"""
 
@@ -6210,6 +6363,18 @@ class Report_NSLS2U_Default:
         i = list(conf).index('lattice_author')
         conf.insert(i, 'lattice_authors', '', comment='REQUIRED')
         del conf['lattice_author']
+
+        if example:
+            lifetime_plot_opts = yaml.comments.CommentedMap()
+            _yaml_append_map(lifetime_plot_opts, 'replot', False)
+            loss_plots_indexes = yaml.comments.CommentedMap()
+            for k in ['E_MeV', 'rf_V', 'coupling']:
+                seq = yaml.comments.CommentedSeq([0])
+                seq.fa.set_flow_style()
+                _yaml_append_map(loss_plots_indexes, k, seq)
+            _yaml_append_map(lifetime_plot_opts, 'loss_plots_indexes',
+                             loss_plots_indexes)
+            _yaml_append_map(conf, 'lifetime_plot_opts', lifetime_plot_opts)
 
         return conf
 
