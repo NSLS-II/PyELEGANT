@@ -6,6 +6,7 @@ import scipy.constants as PHYSCONST
 from scipy.integrate import romberg
 from scipy.interpolate import PchipInterpolator
 import matplotlib.pylab as plt
+import matplotlib.patches as patches
 import tempfile
 import h5py
 import shlex
@@ -1129,6 +1130,16 @@ def calc_mom_aper(
     if output_file_type in ('hdf5', 'h5'):
         util.save_input_to_hdf5(output_filepath, input_dict)
 
+    tmp = tempfile.NamedTemporaryFile(prefix=f'tmpTwi_', suffix='.pgz')
+    twi_pgz_filepath = os.path.abspath(tmp.name)
+    tmp.close()
+    #
+    twiss.calc_ring_twiss(
+        twi_pgz_filepath, LTE_filepath, E_MeV, use_beamline=use_beamline,
+        parameters='%s.param', run_local=True)
+    # ^ "%s.twi" & "%s.param" are needed only for the purpose of showing magnet
+    #   profiles in the plotting function.
+
     if ele_filepath is None:
         tmp = tempfile.NamedTemporaryFile(
             dir=os.getcwd(), delete=False, prefix=f'tmpMomAper_', suffix='.ele')
@@ -1209,6 +1220,15 @@ def calc_mom_aper(
     timestamp_fin = util.get_current_local_time_str()
 
     if output_file_type in ('hdf5', 'h5'):
+        twi = util.load_pgz_file(twi_pgz_filepath)
+        for _k in ['twi', 'param']:
+            output[_k] = {}
+            meta[_k] = {}
+            for _k2 in ['scalars', 'arrays']:
+                if _k2 in twi['data'][_k]:
+                    output[_k][_k2] = twi['data'][_k][_k2]
+                    meta[_k][_k2] = twi['meta'][_k][_k2]
+
         util.robust_sdds_hdf5_write(
             output_filepath, [output, meta], nMaxTry=10, sleep=10.0, mode='a')
         f = h5py.File(output_filepath, 'a')
@@ -1235,6 +1255,15 @@ def calc_mom_aper(
                 mod_meta[k]['scalars'] = v['params']
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
+
+        twi = util.load_pgz_file(twi_pgz_filepath)
+        for _k in ['twi', 'param']:
+            mod_output[_k] = {}
+            mod_meta[_k] = {}
+            for _k2 in ['scalars', 'arrays']:
+                if _k2 in twi['data'][_k]:
+                    mod_output[_k][_k2] = twi['data'][_k][_k2]
+                    mod_meta[_k][_k2] = twi['meta'][_k][_k2]
 
         output_dict = dict(
             data=mod_output, meta=mod_meta,
@@ -1265,7 +1294,9 @@ def calc_mom_aper(
 
     return output_filepath
 
-def plot_mom_aper(output_filepath, title='', slim=None, deltalim=None):
+def plot_mom_aper(
+    output_filepath, title='', add_mmap_info_to_title=True, deltalim=None,
+    slim=None, s_margin_m=0.5, show_mag_prof=True):
     """"""
 
     ret = {} # variable to be returned
@@ -1276,14 +1307,37 @@ def plot_mom_aper(output_filepath, title='', slim=None, deltalim=None):
         deltaNegative = g['deltaNegative']
         deltaPositive = g['deltaPositive']
         s = g['s']
-
+        try:
+            twi_arrays = d['data']['twi']['arrays']
+            param_arrays = d['data']['param']['arrays']
+        except:
+            show_mag_prof = False
     except:
         f = h5py.File(output_filepath, 'r')
         g = f['mmap']['arrays']
         deltaNegative = g['deltaNegative'][()]
         deltaPositive = g['deltaPositive'][()]
         s = g['s'][()]
+        try:
+            g = f['twi']['arrays']
+            twi_arrays = {}
+            for k in list(g):
+                twi_arrays[k] = g[k][()]
+            g = f['param']['arrays']
+            param_arrays = {}
+            for k in list(g):
+                param_arrays[k] = g[k][()]
+        except:
+            show_mag_prof = False
+
         f.close()
+
+    if slim is None:
+        slim = [np.min(s), np.max(s)]
+
+    slim = np.array(slim)
+
+    _vis = _get_visible_inds(s, slim, s_margin_m=s_margin_m)
 
     font_sz = 18
 
@@ -1300,13 +1354,18 @@ def plot_mom_aper(output_filepath, title='', slim=None, deltalim=None):
     ret['delta_percent'] = delta_percent
 
     plt.figure()
-    plt.plot(s, deltaNegative * 1e2, 'b-')
-    plt.plot(s, deltaPositive * 1e2, 'r-')
+    if show_mag_prof:
+        nrows = 6
+        ax1 = plt.subplot2grid((nrows, 1), (0, 0), rowspan=nrows-1)
+        ax2 = plt.subplot2grid((nrows, 1), (nrows-1, 0), rowspan=1, sharex=ax1)
+    else:
+        ax1 = plt.gca()
+    plt.sca(ax1)
+    plt.plot(s[_vis], deltaNegative[_vis] * 1e2, 'b-')
+    plt.plot(s[_vis], deltaPositive[_vis] * 1e2, 'r-')
     plt.axhline(0, color='k')
-    plt.xlabel(r'$s\, [\mathrm{m}]$', size=font_sz)
     plt.ylabel(r'$\delta_{+}, \delta_{-}\, [\%]$', size=font_sz)
-    if slim is not None:
-        plt.xlim([v for v in slim])
+    plt.xlim(slim)
     if deltalim is not None:
         plt.ylim([v * 1e2 for v in deltalim])
     mmap_info_title = r'${},\, {}\, [\%]$'.format(
@@ -1314,10 +1373,25 @@ def plot_mom_aper(output_filepath, title='', slim=None, deltalim=None):
         fr'{delta_percent["-"]["min"]:.2f} < \delta_{{-}} < {delta_percent["-"]["max"]:.2f}',
     )
     if title != '':
-        plt.title('\n'.join([title, mmap_info_title]), size=font_sz)
+        if add_mmap_info_to_title:
+            plt.title('\n'.join([title, mmap_info_title]), size=font_sz)
+        else:
+            plt.title(title, size=font_sz)
     else:
-        plt.title(mmap_info_title, size=font_sz)
+        if add_mmap_info_to_title:
+            plt.title(mmap_info_title, size=font_sz)
+    if show_mag_prof:
+        add_magnet_profiles(ax2, twi_arrays, param_arrays, slim,
+                            s_margin_m=s_margin_m)
+        plt.setp(ax1.get_xticklabels(), visible=False)
+        ax2.set_xlabel(r'$s\, [\mathrm{m}]$', size=font_sz)
+        ax1.spines['bottom'].set_visible(False)
+        ax2.spines['top'].set_visible(False)
+    else:
+        ax1.set_xlabel(r'$s\, [\mathrm{m}]$', size=font_sz)
     plt.tight_layout()
+    if show_mag_prof:
+        plt.subplots_adjust(hspace=0.0, wspace=0.0)
 
     return ret
 
@@ -1356,8 +1430,10 @@ def calc_Touschek_lifetime(
 
     tmp_filepaths = twiss.calc_ring_twiss(
         twi_pgz_filepath, LTE_filepath, E_MeV, use_beamline=use_beamline,
-        parameters=None, radiation_integrals=True, run_local=True,
+        parameters='%s.param', radiation_integrals=True, run_local=True,
         del_tmp_files=False)
+    # ^ "%s.param" is needed only for the purpose of showing magnet profiles
+    #   in the plotting function.
     tmp_filepaths['twi_pgz'] = twi_pgz_filepath
     #print(tmp_filepaths)
 
@@ -1413,7 +1489,8 @@ def calc_Touschek_lifetime(
         print('ERROR:')
         print(err)
 
-    output_tmp_filepaths = dict(life=life_filepath, twi=tmp_filepaths['twi'])
+    output_tmp_filepaths = dict(life=life_filepath, twi=tmp_filepaths['twi'],
+                                param=tmp_filepaths['param'])
     output, meta = {}, {}
     for k, v in output_tmp_filepaths.items():
         try:
@@ -1540,7 +1617,9 @@ def get_Touschek_F_interpolator():
 
     return interpolator
 
-def plot_Touschek_lifetime(output_filepath, title='', slim=None):
+def plot_Touschek_lifetime(
+    output_filepath, title='', add_tau_info_to_title=True,
+    slim=None, s_margin_m=0.5, show_mag_prof=True):
     """"""
 
     try:
@@ -1550,6 +1629,8 @@ def plot_Touschek_lifetime(output_filepath, title='', slim=None):
         FN = g['FN']
         FP = g['FP']
         s = g['s']
+        twi_arrays = d['data']['twi']['arrays']
+        param_arrays = d['data']['param']['arrays']
 
     except:
         f = h5py.File(output_filepath, 'r')
@@ -1558,25 +1639,228 @@ def plot_Touschek_lifetime(output_filepath, title='', slim=None):
         FN = g['FN'][()]
         FP = g['FP'][()]
         s = g['s'][()]
+        g = f['twi']['arrays']
+        twi_arrays = {}
+        for k in list(g):
+            twi_arrays[k] = g[k][()]
+        g = f['param']['arrays']
+        param_arrays = {}
+        for k in list(g):
+            param_arrays[k] = g[k][()]
         f.close()
+
+    if slim is None:
+        slim = [np.min(s), np.max(s)]
+
+    slim = np.array(slim)
+
+    _vis = _get_visible_inds(s, slim, s_margin_m=s_margin_m)
 
     font_sz = 18
 
     plt.figure()
-    plt.plot(s, FN, 'b-', label=r'$\delta < 0$')
-    plt.plot(s, FP, 'r-', label=r'$\delta > 0$')
-    plt.axhline(0, color='k')
-    plt.xlabel(r'$s\, [\mathrm{m}]$', size=font_sz)
-    plt.ylabel(r'$f_{+}, f_{-}\, [\mathrm{s}^{-1}]$', size=font_sz)
-    if slim is not None:
-        plt.xlim([v for v in slim])
-    tau_info_title = fr'$\tau_{{\mathrm{{Touschek}}}} = {tau_hr:.6g} [\mathrm{{hr}}]$'
-    if title != '':
-        plt.title('\n'.join([title, tau_info_title]), size=font_sz)
+    if show_mag_prof:
+        nrows = 6
+        ax1 = plt.subplot2grid((nrows, 1), (0, 0), rowspan=nrows-1)
+        ax2 = plt.subplot2grid((nrows, 1), (nrows-1, 0), rowspan=1, sharex=ax1)
     else:
-        plt.title(tau_info_title, size=font_sz)
-    plt.legend(loc='best')
+        ax1 = plt.gca()
+    plt.sca(ax1)
+    plt.plot(s[_vis], FN[_vis], 'b-', label=r'$\delta < 0$')
+    plt.plot(s[_vis], FP[_vis], 'r-', label=r'$\delta > 0$')
+    plt.axhline(0, color='k')
+    plt.ylabel(r'$f_{+}, f_{-}\, [\mathrm{s}^{-1}]$', size=font_sz)
+    plt.xlim(slim)
+    tau_info_title = fr'$\tau_{{\mathrm{{Touschek}}}} = {tau_hr:.3g}\, [\mathrm{{hr}}]$'
+    if title != '':
+        if add_tau_info_to_title:
+            plt.title('\n'.join([title, tau_info_title]), size=font_sz)
+        else:
+            plt.title(title, size=font_sz)
+    else:
+        if add_tau_info_to_title:
+            plt.title(tau_info_title, size=font_sz)
+    if show_mag_prof:
+        add_magnet_profiles(ax2, twi_arrays, param_arrays, slim,
+                            s_margin_m=s_margin_m)
+        plt.setp(ax1.get_xticklabels(), visible=False)
+        ax2.set_xlabel(r'$s\, [\mathrm{m}]$', size=font_sz)
+        ax1.spines['bottom'].set_visible(False)
+        ax2.spines['top'].set_visible(False)
+    else:
+        ax1.set_xlabel(r'$s\, [\mathrm{m}]$', size=font_sz)
+    plt.legend(loc='upper right', ncol=2, prop=dict(size=font_sz-4))
     plt.tight_layout()
+    if show_mag_prof:
+        plt.subplots_adjust(hspace=0.0, wspace=0.0)
+
+def _get_visible_inds(all_s_array, slim, s_margin_m=0.1):
+    """
+    s_margin_m [m]
+    """
+
+    shifted_slim = slim - slim[0]
+
+    _visible = np.logical_and(
+        all_s_array - slim[0] >= shifted_slim[0] - s_margin_m,
+        all_s_array - slim[0] <= shifted_slim[1] + s_margin_m
+    )
+
+    return _visible
+
+def _get_param_val(param_name, parameters_dict, elem_name, elem_occur):
+    """"""
+
+    parameters = parameters_dict
+
+    matched_elem_names = (parameters['ElementName'] == elem_name)
+    matched_elem_occurs = (parameters['ElementOccurence'] == elem_occur)
+    m = np.logical_and(matched_elem_names, matched_elem_occurs)
+    if np.sum(m) == 0:
+        m = np.where(matched_elem_names)[0]
+        u_elem_occurs_int = np.unique(parameters['ElementOccurence'][m])
+        if np.all(u_elem_occurs_int > elem_occur):
+            elem_occur = np.min(u_elem_occurs_int)
+        elif np.all(u_elem_occurs_int < elem_occur):
+            elem_occur = np.max(u_elem_occurs_int)
+        else:
+            elem_occur = np.min(
+                u_elem_occurs_int[u_elem_occurs_int >= elem_occur])
+        matched_elem_occurs = (parameters['ElementOccurence'] == elem_occur)
+        m = np.logical_and(matched_elem_names, matched_elem_occurs)
+    m = np.logical_and(m, parameters['ElementParameter'] == param_name)
+    assert np.sum(m) == 1
+
+    return parameters['ParameterValue'][m][0]
+
+def add_magnet_profiles(
+    ax, twi_arrays, parameters_arrays, slim, s_margin_m=0.1):
+    """"""
+
+    prof_center_y = 0.0
+    quad_height = 0.5
+    sext_height = quad_height * 1.5
+    oct_height = quad_height * 1.75
+    bend_half_height = quad_height/3.0
+
+    ax.set_yticks([])
+
+    ax.set_xlim(slim)
+    max_height = max([quad_height, sext_height, oct_height, bend_half_height])
+    ax.set_ylim(np.array([-max_height, +max_height]))
+
+    twi_ar = twi_arrays
+    parameters = parameters_arrays
+
+    s0_m = 0.0 # shift in s-coord.
+    prev_s = 0.0 - s0_m
+    assert len(twi_ar['s']) == len(twi_ar['ElementType']) == \
+           len(twi_ar['ElementName']) == len(twi_ar['ElementOccurence'])
+    for ei, (s, elem_type, elem_name, elem_occur) in enumerate(zip(
+        twi_ar['s'], twi_ar['ElementType'], twi_ar['ElementName'],
+        twi_ar['ElementOccurence'])):
+
+        cur_s = s - s0_m
+
+        if (s < slim[0] - s_margin_m) or (s > slim[1] + s_margin_m):
+            prev_s = cur_s
+            continue
+
+        elem_type = elem_type.upper()
+
+        if elem_type in ('QUAD', 'KQUAD'):
+
+            K1 = _get_param_val('K1', parameters, elem_name, elem_occur)
+            c = 'r'
+            if K1 >= 0.0: # Focusing Quad
+                bottom, top = 0.0, quad_height
+            else: # Defocusing Quad
+                bottom, top = -quad_height, 0.0
+
+            # Shift vertically
+            bottom += prof_center_y
+            top += prof_center_y
+
+            width = cur_s - prev_s
+            height = top - bottom
+
+            p = patches.Rectangle((prev_s, bottom), width, height, fill=True, color=c)
+            ax.add_patch(p)
+
+        elif elem_type in ('SEXT', 'KSEXT'):
+
+            K2 = _get_param_val('K2', parameters, elem_name, elem_occur)
+            c = 'b'
+            if K2 >= 0.0: # Focusing Sext
+                bottom, mid_h, top = 0.0, sext_height / 2, sext_height
+            else: # Defocusing Sext
+                bottom, mid_h, top = -sext_height, -sext_height / 2, 0.0
+
+            # Shift vertically
+            bottom += prof_center_y
+            mid_h += prof_center_y
+            top += prof_center_y
+
+            mid_s = (prev_s + cur_s) / 2
+
+            if K2 >= 0.0: # Focusing Sext
+                xy = np.array([
+                    [prev_s, bottom], [prev_s, mid_h], [mid_s, top],
+                    [cur_s, mid_h], [cur_s, bottom]
+                ])
+            else:
+                xy = np.array([
+                    [prev_s, top], [prev_s, mid_h], [mid_s, bottom],
+                    [cur_s, mid_h], [cur_s, top]
+                ])
+            p = patches.Polygon(xy, closed=True, fill=True, color=c)
+            ax.add_patch(p)
+
+        elif elem_type in ('OCTU', 'KOCT'):
+
+            K3 = _get_param_val('K3', parameters, elem_name, elem_occur)
+            c = 'g'
+            if K3 >= 0.0: # Focusing Octupole
+                bottom, mid_h, top = 0.0, oct_height / 2, oct_height
+            else: # Defocusing Octupole
+                bottom, mid_h, top = -oct_height, -oct_height / 2, 0.0
+
+            # Shift vertically
+            bottom += prof_center_y
+            mid_h += prof_center_y
+            top += prof_center_y
+
+            mid_s = (prev_s + cur_s) / 2
+
+            if K3 >= 0.0: # Focusing Octupole
+                xy = np.array([
+                    [prev_s, bottom], [prev_s, mid_h], [mid_s, top],
+                    [cur_s, mid_h], [cur_s, bottom]
+                ])
+            else:
+                xy = np.array([
+                    [prev_s, top], [prev_s, mid_h], [mid_s, bottom],
+                    [cur_s, mid_h], [cur_s, top]
+                ])
+            p = patches.Polygon(xy, closed=True, fill=True, color=c)
+            ax.add_patch(p)
+
+        elif elem_type in ('RBEND', 'SBEND', 'SBEN', 'CSBEND'):
+            bottom, top = -bend_half_height, bend_half_height
+
+            # Shift vertically
+            bottom += prof_center_y
+            top += prof_center_y
+
+            width = cur_s - prev_s
+            height = top - bottom
+
+            p = patches.Rectangle((prev_s, bottom), width, height, fill=True, color='k')
+            ax.add_patch(p)
+        else:
+            ax.plot([prev_s, cur_s], np.array([0.0, 0.0]) + prof_center_y, 'k-')
+
+        prev_s = cur_s
 
 def calc_chrom_twiss(
     output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, ndelta,
