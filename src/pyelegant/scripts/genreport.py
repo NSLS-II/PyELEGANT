@@ -221,6 +221,7 @@ class Report_NSLS2U_Default:
         self.add_pdf_lattice_props(twiss_plot_captions)
         self.add_xlsx_lattice_props()
 
+        self.add_pdf_geom_layout()
         self.add_xlsx_geom_layout()
 
         self.add_xlsx_LTE()
@@ -973,6 +974,46 @@ class Report_NSLS2U_Default:
             raise RuntimeError(f'Unhandled "pdf_table_order" key: {k}')
 
         return label + symbol + unit, val_str
+
+    def add_pdf_geom_layout(self):
+        """"""
+
+        flr_pdf_filepath = os.path.join(self.report_folderpath, 'floor.pdf')
+        if not os.path.exists(flr_pdf_filepath):
+            return
+
+        doc = self.doc
+
+        new_page_required = True
+
+        if new_page_required:
+            doc.append(plx.ClearPage())
+
+        with doc.create(plx.Section('Floor Layout')):
+
+            doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+            with doc.create(plx.FigureForMultiPagePDF(position='h!t')) as fig:
+                doc.append(plx.NoEscape(r'\centering'))
+                fig.add_image(os.path.basename(flr_pdf_filepath), page=1,
+                              width=plx.utils.NoEscape(r'\linewidth'))
+                doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                fig.add_caption(
+                    ('Floor layout comparison for one super-period with rays '
+                     'from bending magnet entry points.'))
+
+            doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+            with doc.create(plx.FigureForMultiPagePDF(position='h!t')) as fig:
+                for page, caption in [(2, 'Zoomed in around Short Straight (SS).'),
+                                      (3, 'Zoomed in around Short Straight (LS).')]:
+                    with doc.create(plx.SubFigureForMultiPagePDF(
+                        position='b', width=plx.utils.NoEscape(r'0.5\linewidth'))
+                                    ) as subfig:
+                        subfig.add_image(
+                            os.path.basename(flr_pdf_filepath), page=page,
+                            width=plx.utils.NoEscape(r'\linewidth'))
+                        doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                        subfig.add_caption(plx.NoEscape(caption))
+            fig.add_caption('Floor layout comparison around straights.')
 
     def add_pdf_nonlin(self):
         """"""
