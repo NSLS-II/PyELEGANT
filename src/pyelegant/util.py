@@ -170,6 +170,11 @@ def load_sdds_hdf5_file(hdf5_filepath):
         if k.startswith('_version_'):
             version[k[len('_version_'):]] = f[k][()]
             continue
+        elif k == 'input':
+            d2 = d[k] = {}
+            for k2, v2 in f[k].items():
+                d2[k2] = v2[()]
+            continue
         else:
             sdds_file_type = k
 
@@ -178,7 +183,8 @@ def load_sdds_hdf5_file(hdf5_filepath):
         try:
             'scalars' in g1
         except TypeError:
-            # Definitely not an SDDS file group
+            # not an HDF5 group, but an HDF5 dataset
+            d[k] = g1[()]
             continue
 
         d2 = d[sdds_file_type] = {}

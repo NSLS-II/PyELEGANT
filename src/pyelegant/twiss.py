@@ -205,19 +205,15 @@ def _calc_twiss(
                    print_stderr=std_print_enabled['err'],
                    output_filepaths=None)
 
-    #tmp_filepaths = ed.actual_output_filepath_list
-    #output, meta = {}, {}
-    #for k, v in tmp_filepaths.items():
-        #try:
-            #output[k], meta[k] = sdds.sdds2dicts(v)
-        #except:
-            #continue
     _d = ed.load_sdds_output_files()
     output, meta = _d['data'], _d['meta']
 
     if calc_matrix_lin_chrom:
+        twi_ext = twi_filepath.split('.')[-1]
+        param_ext = parameters.split('.')[-1]
+
         lin_chrom_nat = _calc_matrix_elem_linear_natural_chrom(
-            output['twi']['columns'], output['parameters']['columns'])
+            output[twi_ext]['columns'], output[param_ext]['columns'])
 
         output['lin_chrom_nat'] = dict(columns={})
         meta['lin_chrom_nat'] = dict(columns={})
@@ -438,6 +434,7 @@ def plot_twiss(
 
     if result_file_type in ('hdf5', 'h5'):
         d, meta, version = util.load_sdds_hdf5_file(result_filepath)
+        _d = {'input': d['input']}
     elif result_file_type == 'pgz':
         _d = util.load_pgz_file(result_filepath)
         d = _d['data']
@@ -445,6 +442,7 @@ def plot_twiss(
     elif result_file_type is None:
         try:
             d, meta, version = util.load_sdds_hdf5_file(result_filepath)
+            _d = {'input': d['input']}
         except OSError:
             _d = util.load_pgz_file(result_filepath)
             d = _d['data']
