@@ -2210,9 +2210,7 @@ class Report_NSLS2U_Default:
                     ws.write(row, col+1, keywords)
 
             elif k == 'lat_author':
-                if self._version == '1.1':
-                    authors = conf.get('lattice_author', '')
-                elif self._version == '1.0':
+                if self._version != '1.0':
                     authors = conf.get('lattice_authors', '')
                     if isinstance(authors, str):
                         pass
@@ -2220,6 +2218,9 @@ class Report_NSLS2U_Default:
                         authors = ', '.join(authors)
                     else:
                         raise ValueError
+                else:
+                    authors = conf.get('lattice_author', '')
+
                 if authors:
                     ws.write(row, col+1, authors)
             elif k == 'report_author':
@@ -6388,6 +6389,35 @@ class Report_NSLS2U_Default:
                      '1.1': self._get_default_config_v1_1}
 
         return func_dict
+
+    @staticmethod
+    def get_latest_config_version_str():
+        """"""
+
+        return '1.1'
+
+    @staticmethod
+    def upgrade_config(conf):
+        """"""
+
+        if conf['report_version'] == '1.0':
+            # Upgrade to '1.1'
+            conf['report_version'] = '1.1'
+
+            # Change the key "lattice_author" to "lattice_authors" to accept
+            # a list of authors.
+            i = list(conf).index('lattice_author')
+            conf.insert(i, 'lattice_authors', conf['lattice_author'],
+                        comment='REQUIRED')
+            del conf['lattice_author']
+
+        elif conf['report_version'] == '1.1':
+            pass # Latest version. No need to upgrade.
+
+        else:
+            raise NotImplementedError()
+
+        return conf
 
     def _get_default_config_v1_1(self, example=False):
         """"""
