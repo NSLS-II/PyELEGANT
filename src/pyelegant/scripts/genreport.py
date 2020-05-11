@@ -1906,6 +1906,9 @@ class Report_NSLS2U_Default:
                     meta = pe.util.load_pgz_file(plot_meta_filepath)
                     loss_plots_indexes = meta['loss_plots_indexes']
 
+                    if loss_plots_indexes['E_MeV'] == []:
+                        return
+
                     with doc.create(plx.Figure(position='h!t')) as fig:
 
                         doc.append(plx.NoEscape(r'\centering'))
@@ -3752,8 +3755,12 @@ class Report_NSLS2U_Default:
 
                 row += 2
                 img_height = 26
-                for iFig, fp in enumerate(
-                    sorted(Path(self.report_folderpath).glob('lifetime_*.png'))):
+                for iFig, (iEnergy, iCoup, iVolt) in enumerate(zip(
+                    loss_plots_indexes['E_MeV'], loss_plots_indexes['coupling'],
+                    loss_plots_indexes['rf_V'])):
+
+                    fp = Path(self.report_folderpath).joinpath(
+                        f'lifetime_{iFig:d}.png')
 
                     iEnergy = loss_plots_indexes['E_MeV'][iFig]
                     iCoup = loss_plots_indexes['coupling'][iFig]
