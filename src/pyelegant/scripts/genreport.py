@@ -177,23 +177,22 @@ class Report_NSLS2U_Default:
                 self.plot_nonlin_props(do_plot)
 
         # Compute RF-voltage-dependent properties
-        if 'rf_dep_calc_opts' in self.conf:
+        if 'rf' in self.conf:
             self.calc_rf_dep_props()
         else:
             self.rf_dep_props = None
 
         # Compute & plot lifetime-related properties
-        if 'lifetime_calc_opts' in self.conf:
-            lifetime_calc_opts = self.conf['lifetime_calc_opts']
-            recalc = lifetime_calc_opts.get('recalc', False)
+        if 'lifetime' in self.conf:
+            lifetime = self.conf['lifetime']
+            if not lifetime.get('include', False):
+                self.lifetime_props = None
+
+            recalc = lifetime.get('recalc', False)
             self.calc_lifetime_props(recalc)
 
-            if 'lifetime_plot_opts' in self.conf:
-                lifetime_plot_opts = self.conf['lifetime_plot_opts']
-                replot = lifetime_plot_opts.get('replot', False)
-                if recalc:
-                    replot = True
-                self.plot_lifetime_props(replot)
+            replot = lifetime.get('replot', False) or recalc
+            self.plot_lifetime_props(replot)
         else:
             self.lifetime_props = None
 
@@ -1635,6 +1634,11 @@ class Report_NSLS2U_Default:
 
         if self._version == '1.1':
 
+            if 'rf' not in self.conf:
+                return
+            if not self.conf['rf'].get('include', False):
+                return
+
             nEnergies = 1 + len(self.lin_data['extra_energy_data_list'])
 
             with doc.create(plx.Section('RF-related Properties & Beam Lifetime')):
@@ -1768,6 +1772,11 @@ class Report_NSLS2U_Default:
                                 row_list.append(plx.NoEscape(f'{v:.2f}'))
                             table.add_row(row_list)
 
+                if 'lifetime' not in self.conf:
+                    return
+                if not self.conf['lifetime'].get('include', False):
+                    return
+
                 if self.lifetime_props is not None:
 
                     table_spec = ' '.join(['l'] + ['l'] * nEnergies)
@@ -1884,14 +1893,18 @@ class Report_NSLS2U_Default:
                                     row_list.append(plx.NoEscape(fr'\textbf{{{tau_hr:.2f}}}'))
                                 table.add_row(row_list)
 
-                    lifetime_plot_opts = self.conf['lifetime_plot_opts']
-                    loss_plots_indexes = lifetime_plot_opts.get(
-                        'loss_plots_indexes', None)
-                    if loss_plots_indexes is None:
-                        return
+                    plot_meta_filepath = os.path.join(self.report_folderpath,
+                                                      'lifetime_plots.pgz')
 
                     lifetime_pdf_filepath = os.path.join(
                         self.report_folderpath, 'lifetime.pdf')
+
+                    if not (os.path.exists(plot_meta_filepath) and
+                            os.path.exists(lifetime_pdf_filepath)):
+                        return
+
+                    meta = pe.util.load_pgz_file(plot_meta_filepath)
+                    loss_plots_indexes = meta['loss_plots_indexes']
 
                     with doc.create(plx.Figure(position='h!t')) as fig:
 
@@ -3415,27 +3428,33 @@ class Report_NSLS2U_Default:
 
         if self.rf_dep_props is not None:
 
-            row += 1
-
-            ws.write(row, 0, 'Voltage-independent Property', bold)
-            ws.write(row, 1, 'Value', bold)
-            row += 1
-
-            ws.write(row, 0, 'Harmonic Number ()', normal)
-            ws.write(row, 1, self.rf_dep_props['h'], None)
-            row += 1
-
-            ws.write(row, 0, 'RF Frequency (MHz)', normal)
-            ws.write(row, 1, self.rf_dep_props['f_rf'] / 1e6, wb_num_fmts['0.000'])
-            row += 1
-
-            row += 1
-
-            ws.write(row, 0, 'Voltage-dependent Property', bold)
-            ws.write(row, 1, 'Values', bold)
-            row += 1
-
             if self._version != '1.0':
+
+                if 'rf' not in self.conf:
+                    return
+                if not self.conf['rf'].get('include', False):
+                    return
+
+                row += 1
+
+                ws.write(row, 0, 'Voltage-independent Property', bold)
+                ws.write(row, 1, 'Value', bold)
+                row += 1
+
+                ws.write(row, 0, 'Harmonic Number ()', normal)
+                ws.write(row, 1, self.rf_dep_props['h'], None)
+                row += 1
+
+                ws.write(row, 0, 'RF Frequency (MHz)', normal)
+                ws.write(row, 1, self.rf_dep_props['f_rf'] / 1e6, wb_num_fmts['0.000'])
+                row += 1
+
+                row += 1
+
+                ws.write(row, 0, 'Voltage-dependent Property', bold)
+                ws.write(row, 1, 'Values', bold)
+                row += 1
+
 
                 n_rf_volts = len(self.rf_dep_props['rf_volts'])
 
@@ -3494,6 +3513,28 @@ class Report_NSLS2U_Default:
                         ws.write(row, col+1, v, wb_num_fmts['0.00'])
                 row += 1
             else:
+
+                row += 1
+
+                ws.write(row, 0, 'Voltage-independent Property', bold)
+                ws.write(row, 1, 'Value', bold)
+                row += 1
+
+                ws.write(row, 0, 'Harmonic Number ()', normal)
+                ws.write(row, 1, self.rf_dep_props['h'], None)
+                row += 1
+
+                ws.write(row, 0, 'RF Frequency (MHz)', normal)
+                ws.write(row, 1, self.rf_dep_props['f_rf'] / 1e6, wb_num_fmts['0.000'])
+                row += 1
+
+                row += 1
+
+                ws.write(row, 0, 'Voltage-dependent Property', bold)
+                ws.write(row, 1, 'Values', bold)
+                row += 1
+
+
                 ws.write(row, 0, 'RF Voltage (MV)', normal)
                 for col, v in enumerate(self.rf_dep_props['rf_volts']):
                     ws.write(row, col+1, v / 1e6, wb_num_fmts['0.0'])
@@ -3532,16 +3573,21 @@ class Report_NSLS2U_Default:
 
         if self.lifetime_props is not None:
 
-            row += 1
-
-            ws.write(row, 0, 'Beam Current Property', bold)
-            if nEnergies == 1:
-                ws.write(row, 1, 'Value', bold)
-            else:
-                ws.write(row, 1, 'Values', bold)
-            row += 1
-
             if self._version != '1.0':
+
+                if 'lifetime' not in self.conf:
+                    return
+                if not self.conf['lifetime'].get('include', False):
+                    return
+
+                row += 1
+
+                ws.write(row, 0, 'Beam Current Property', bold)
+                if nEnergies == 1:
+                    ws.write(row, 1, 'Value', bold)
+                else:
+                    ws.write(row, 1, 'Values', bold)
+                row += 1
 
                 ws.write(row, 0, 'Beam Energy (GeV)', normal)
                 for iEnergy, E_GeV in enumerate(self.rf_dep_props['E_GeV_list']):
@@ -3584,6 +3630,15 @@ class Report_NSLS2U_Default:
                 row += 1
 
             else:
+
+                row += 1
+
+                ws.write(row, 0, 'Beam Current Property', bold)
+                if nEnergies == 1:
+                    ws.write(row, 1, 'Value', bold)
+                else:
+                    ws.write(row, 1, 'Values', bold)
+                row += 1
 
                 ws.write(row, 0, 'Number of Filled Bunches ()', normal)
                 ws.write(row, 1, self.lifetime_props['num_filled_bunches'],
@@ -3687,11 +3742,13 @@ class Report_NSLS2U_Default:
                         ws.write(row_elegant_bunchlen_mm, col+1, v,
                                  wb_num_fmts['0.00'])
 
-                lifetime_plot_opts = self.conf['lifetime_plot_opts']
-                loss_plots_indexes = lifetime_plot_opts.get(
-                    'loss_plots_indexes', None)
-                if loss_plots_indexes is None:
+                plot_meta_filepath = os.path.join(self.report_folderpath,
+                                                  'lifetime_plots.pgz')
+                if not os.path.exists(plot_meta_filepath):
                     return
+
+                meta = pe.util.load_pgz_file(plot_meta_filepath)
+                loss_plots_indexes = meta['loss_plots_indexes']
 
                 row += 2
                 img_height = 26
@@ -5641,9 +5698,12 @@ class Report_NSLS2U_Default:
     def calc_rf_dep_props(self):
         """"""
 
-        rf_dep_calc_opts = self.conf['rf_dep_calc_opts']
+        rf = self.conf['rf']
+        if not rf.get('include', False):
+            self.rf_dep_props = None
+            return
 
-        recalc = rf_dep_calc_opts.get('recalc', False)
+        recalc = rf.get('recalc', False)
 
         output_filepath = os.path.join(self.report_folderpath, 'rf_dep_props.pkl')
 
@@ -5651,8 +5711,13 @@ class Report_NSLS2U_Default:
             with open(output_filepath, 'rb') as f:
                 self.rf_dep_props = pickle.load(f)
         else:
-            rf_volts = np.array(rf_dep_calc_opts['rf_V']) # [V]
-            h = rf_dep_calc_opts['harmonic_number']
+            if 'calc_opts' not in rf:
+                self.rf_dep_props = None
+
+            calc_opts = rf['calc_opts']
+
+            rf_volts = np.array(calc_opts['rf_V']) # [V]
+            h = calc_opts['harmonic_number']
 
             c = scipy.constants.c
             m_e_eV = physical_constants[
@@ -5746,7 +5811,11 @@ class Report_NSLS2U_Default:
     def calc_lifetime_props(self, recalc):
         """"""
 
-        lifetime_calc_opts = self.conf['lifetime_calc_opts']
+        if 'calc_opts' not in self.conf['lifetime']:
+            self.lifetime_props = None
+            return
+
+        calc_opts = self.conf['lifetime']['calc_opts']
 
         output_filepath = os.path.join(self.report_folderpath, 'lifetime.pgz')
 
@@ -5776,7 +5845,7 @@ class Report_NSLS2U_Default:
             for _d in req_d['extra_Es']:
                 eps_0_list.append(_d['eps_x_pm'] * 1e-12)
 
-            total_beam_current_mA = lifetime_calc_opts['total_beam_current_mA']
+            total_beam_current_mA = calc_opts['total_beam_current_mA']
             if isinstance(total_beam_current_mA, list):
                 total_beam_current_mA_list = total_beam_current_mA
             else:
@@ -5815,9 +5884,9 @@ class Report_NSLS2U_Default:
                 # extension within this Python script.
                 raise NotImplementedError()
 
-            num_filled_bunches = lifetime_calc_opts['num_filled_bunches']
-            raw_coupling_specs = lifetime_calc_opts['coupling']
-            raw_max_mom_aper_percent = lifetime_calc_opts['max_mom_aper_percent']
+            num_filled_bunches = calc_opts['num_filled_bunches']
+            raw_coupling_specs = calc_opts['coupling']
+            raw_max_mom_aper_percent = calc_opts['max_mom_aper_percent']
 
             if raw_max_mom_aper_percent in (None, 'None', 'none'):
                 max_mom_aper_percent = None
@@ -5872,7 +5941,7 @@ class Report_NSLS2U_Default:
                             kappa = float(s[:-1].strip()) * 1e-2
                             eps_ys.append(kappa / (1+kappa) * eps_0)
                         else:
-                            raise ValueError(('Strings in "lifetime_calc_opts.coupling" '
+                            raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
                                               'must end with either "pm" or "%"'))
                     eps_ys = np.array(eps_ys) # [m-rad]
                     coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
@@ -6084,7 +6153,7 @@ class Report_NSLS2U_Default:
                         kappa = float(s[:-1].strip()) * 1e-2
                         eps_ys.append(kappa / (1+kappa) * eps_0)
                     else:
-                        raise ValueError(('Strings in "lifetime_calc_opts.coupling" '
+                        raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
                                           'must end with either "pm" or "%"'))
                 eps_ys = np.array(eps_ys) # [m-rad]
                 coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
@@ -6320,13 +6389,16 @@ class Report_NSLS2U_Default:
         if not replot:
             return
 
+        if 'plot_opts' not in self.conf['lifetime']:
+            return
+
+        plot_opts = self.conf['lifetime']['plot_opts']
+
         report_folderpath = self.report_folderpath
 
         existing_fignums = plt.get_fignums()
 
-        lifetime_plot_opts = self.conf['lifetime_plot_opts']
-
-        loss_plots_indexes = lifetime_plot_opts.get('loss_plots_indexes', None)
+        loss_plots_indexes = plot_opts.get('loss_plots_indexes', None)
         if loss_plots_indexes is None:
             return
 
@@ -6338,7 +6410,9 @@ class Report_NSLS2U_Default:
 
         self.lifetime_props = pe.util.load_pgz_file(output_filepath)
 
-        slim = [0.0, self.lin_data['circumf']/self.lin_data['n_periods_in_ring']]
+        slim = [0.0,
+                self.lin_data['circumf'] / self.lin_data['n_periods_in_ring']]
+
         for iEnergy, iCoup, iVolt in zip(
             loss_plots_indexes['E_MeV'], loss_plots_indexes['coupling'],
             loss_plots_indexes['rf_V']):
@@ -6372,6 +6446,16 @@ class Report_NSLS2U_Default:
 
         for fignum in fignums_to_delete:
             plt.close(fignum)
+
+        plot_meta_filepath = os.path.join(self.report_folderpath,
+                                          'lifetime_plots.pgz')
+        pe.util.robust_pgz_file_write(
+            plot_meta_filepath, dict(
+                E_MeV_list=self.lifetime_props['E_MeV_list'],
+                raw_coupling_specs=self.lifetime_props['raw_coupling_specs'],
+                rf_volts=self.rf_dep_props['rf_volts'],
+                loss_plots_indexes=loss_plots_indexes),
+            nMaxTry=10, sleep=10.0)
 
     def get_default_config(self, report_version, example=False):
         """"""
@@ -6476,17 +6560,47 @@ class Report_NSLS2U_Default:
         conf['lattice_props'].insert(i, 'twiss_plot_opts', twiss_plot_opts,
                                      comment='REQUIRED')
 
-        if example:
-            lifetime_plot_opts = yaml.comments.CommentedMap()
-            _yaml_append_map(lifetime_plot_opts, 'replot', False)
-            loss_plots_indexes = yaml.comments.CommentedMap()
-            for k in ['E_MeV', 'rf_V', 'coupling']:
-                seq = yaml.comments.CommentedSeq([0])
-                seq.fa.set_flow_style()
-                _yaml_append_map(loss_plots_indexes, k, seq)
-            _yaml_append_map(lifetime_plot_opts, 'loss_plots_indexes',
-                             loss_plots_indexes)
-            _yaml_append_map(conf, 'lifetime_plot_opts', lifetime_plot_opts)
+        # Modify "rf_dep_calc_opts" to "rf" and also add "include"
+        rf_V = com_seq([2e6, 2.5e6, 3e6])
+        rf_V.fa.set_flow_style()
+        calc_opts = com_map({'harmonic_number': 1320, 'rf_V': rf_V})
+        rf = com_map(
+            {'include': False, 'recalc': False, 'calc_opts': calc_opts})
+        if 'rf_dep_calc_opts' in conf:
+            i = list(conf).index('rf_dep_calc_opts')
+            conf.insert(i, 'rf', rf)
+            del conf['rf_dep_calc_opts']
+        else:
+            if example:
+                _yaml_append_map(conf, 'rf', rf)
+
+        # Modify "lifetime_calc_opts" to "lifetime" and add "plot_opts" & "include"
+        total_beam_current_mA = com_seq([5e2])
+        total_beam_current_mA.fa.set_flow_style()
+        coupling = com_seq(['8pm', '100%'])
+        coupling.fa.set_flow_style()
+        calc_opts = com_map(dict(
+            total_beam_current_mA=total_beam_current_mA,
+            num_filled_bunches=1200, max_mom_aper_percent=None,
+            coupling=coupling))
+        indexes = {}
+        for k in ['E_MeV', 'rf_V', 'coupling']:
+            indexes[k] = com_seq([0])
+            indexes[k].fa.set_flow_style()
+        loss_plots_indexes = com_map(dict(
+            E_MeV=indexes['E_MeV'], rf_V=indexes['rf_V'],
+            coupling=indexes['coupling']))
+        plot_opts = com_map({'loss_plots_indexes': loss_plots_indexes})
+        lifetime = com_map(
+            {'include': False, 'recalc': False, 'replot': False,
+             'calc_opts': calc_opts, 'plot_opts': plot_opts})
+        if 'lifetime_calc_opts' in conf:
+            i = list(conf).index('lifetime_calc_opts')
+            conf.insert(i, 'lifetime', lifetime)
+            del conf['lifetime_calc_opts']
+        else:
+            if example:
+                _yaml_append_map(conf, 'lifetime', lifetime)
 
         return conf
 
