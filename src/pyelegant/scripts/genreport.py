@@ -6495,6 +6495,60 @@ class Report_NSLS2U_Default:
                         comment='REQUIRED')
             del conf['lattice_author']
 
+            # Change the dict "rf_dep_calc_opts"
+            if 'rf_dep_calc_opts' in conf:
+                rf_dep_calc_opts = conf['rf_dep_calc_opts']
+                calc_opts = yaml.comments.CommentedMap({
+                    'harmonic_number': rf_dep_calc_opts.get(
+                        'harmonic_number', 1320)})
+                seq = yaml.comments.CommentedSeq([3e6])
+                seq.fa.set_flow_style()
+                rf_V = rf_dep_calc_opts.get('rf_V', seq)
+                _yaml_append_map(calc_opts, 'rf_V', rf_V)
+                rf = yaml.comments.CommentedMap({
+                    'include': False,
+                    'recalc': rf_dep_calc_opts.get('recalc', False),
+                    'calc_opts': calc_opts})
+
+                i = list(conf).index('rf_dep_calc_opts')
+                conf.insert(i, 'rf', rf)
+                del conf['rf_dep_calc_opts']
+
+            # Change the dict "lifetime_calc_opts"
+            if 'lifetime_calc_opts' in conf:
+                lifetime_calc_opts = conf['lifetime_calc_opts']
+
+                calc_opts = {}
+                for k, def_val in [('total_beam_current_mA', [5e2]),
+                                   ('num_filled_bunches', 1200),
+                                   ('max_mom_aper_percent', None),
+                                   ('coupling', ['8pm', '100%'])]:
+                    v = lifetime_calc_opts.get(k, def_val)
+                    if isinstance(v, str) and (v.lower() == 'none'):
+                        v = None
+                    calc_opts[k] = v
+                calc_opts = yaml.comments.CommentedMap(calc_opts)
+
+                loss_plots_indexes = {}
+                for k in ['E_MeV', 'rf_V', 'coupling']:
+                    seq = yaml.comments.CommentedSeq([0])
+                    seq.fa.set_flow_style()
+                    loss_plots_indexes[k] = seq
+                loss_plots_indexes = yaml.comments.CommentedMap(loss_plots_indexes)
+
+                plot_opts = yaml.comments.CommentedMap({
+                    'loss_plots_indexes': loss_plots_indexes})
+
+                lifetime = yaml.comments.CommentedMap({
+                    'include': False,
+                    'recalc': lifetime_calc_opts.get('recalc', False),
+                    'replot': False,
+                    'calc_opts': calc_opts, 'plot_opts': plot_opts})
+
+                i = list(conf).index('lifetime_calc_opts')
+                conf.insert(i, 'lifetime', lifetime)
+                del conf['lifetime_calc_opts']
+
         elif conf['report_version'] == '1.1':
             pass # Latest version. No need to upgrade.
 
