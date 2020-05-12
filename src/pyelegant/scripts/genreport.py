@@ -187,12 +187,12 @@ class Report_NSLS2U_Default:
             lifetime = self.conf['lifetime']
             if not lifetime.get('include', False):
                 self.lifetime_props = None
+            else:
+                recalc = lifetime.get('recalc', False)
+                self.calc_lifetime_props(recalc)
 
-            recalc = lifetime.get('recalc', False)
-            self.calc_lifetime_props(recalc)
-
-            replot = lifetime.get('replot', False) or recalc
-            self.plot_lifetime_props(replot)
+                replot = lifetime.get('replot', False) or recalc
+                self.plot_lifetime_props(replot)
         else:
             self.lifetime_props = None
 
@@ -1906,45 +1906,101 @@ class Report_NSLS2U_Default:
                     meta = pe.util.load_pgz_file(plot_meta_filepath)
                     loss_plots_indexes = meta['loss_plots_indexes']
 
+                    nMaxPlotsPerPage = 6
+
                     if loss_plots_indexes['E_MeV'] == []:
                         return
 
-                    with doc.create(plx.Figure(position='h!t')) as fig:
+                    elif len(loss_plots_indexes['E_MeV']) <= nMaxPlotsPerPage:
 
-                        doc.append(plx.NoEscape(r'\centering'))
+                        with doc.create(plx.Figure(position='h!t')) as fig:
 
-                        for iFig, (iEnergy, iCoup, iVolt) in enumerate(zip(
-                            loss_plots_indexes['E_MeV'], loss_plots_indexes['coupling'],
-                            loss_plots_indexes['rf_V'])):
-                            page = iFig + 1
-                            caption = (
-                                r'$E$ (GeV) = ${0:.2g}$, '
-                                r'$V_{{\mathrm{{RF}}}}$ (MV) = ${1:.2g}$, '
-                                r'$I_{{\mathrm{{bunch}}}}$ (mA) = ${2:.3g}$, '
-                                r'$(\epsilon_x, \epsilon_y)$ (pm) = '
-                                r'$({3:.1f}, {4:.1f})$').format(
-                                self.lifetime_props['E_MeV_list'][iEnergy] / 1e3,
-                                self.rf_dep_props['rf_volts'][iVolt] / 1e6,
-                                self.lifetime_props[
-                                    'beam_current_per_bunch_mA_list'][iEnergy],
-                                self.lifetime_props['eps_xs_list'][iEnergy][iCoup] * 1e12,
-                                self.lifetime_props['eps_ys_list'][iEnergy][iCoup] * 1e12)
-                            with doc.create(plx.SubFigureForMultiPagePDF(
-                                position='b', width=plx.utils.NoEscape(r'0.45\linewidth'))
-                                            ) as subfig:
-                                subfig.add_image(
-                                    os.path.basename(lifetime_pdf_filepath), page=page,
-                                    width=plx.utils.NoEscape(r'\linewidth'))
-                                doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
-                                subfig.add_caption(plx.NoEscape(caption))
+                            doc.append(plx.NoEscape(r'\centering'))
 
-                            doc.append(plx.HorizontalSpace(plx.NoEscape('+20pt')))
+                            for iFig, (iEnergy, iCoup, iVolt) in enumerate(zip(
+                                loss_plots_indexes['E_MeV'], loss_plots_indexes['coupling'],
+                                loss_plots_indexes['rf_V'])):
+                                page = iFig + 1
+                                caption = (
+                                    r'$E$ (GeV) = ${0:.2g}$, '
+                                    r'$V_{{\mathrm{{RF}}}}$ (MV) = ${1:.2g}$, '
+                                    r'$I_{{\mathrm{{bunch}}}}$ (mA) = ${2:.3g}$, '
+                                    r'$(\epsilon_x, \epsilon_y)$ (pm) = '
+                                    r'$({3:.1f}, {4:.1f})$').format(
+                                    self.lifetime_props['E_MeV_list'][iEnergy] / 1e3,
+                                    self.rf_dep_props['rf_volts'][iVolt] / 1e6,
+                                    self.lifetime_props[
+                                        'beam_current_per_bunch_mA_list'][iEnergy],
+                                    self.lifetime_props['eps_xs_list'][iEnergy][iCoup] * 1e12,
+                                    self.lifetime_props['eps_ys_list'][iEnergy][iCoup] * 1e12)
+                                with doc.create(plx.SubFigureForMultiPagePDF(
+                                    position='b', width=plx.utils.NoEscape(r'0.45\linewidth'))
+                                                ) as subfig:
+                                    subfig.add_image(
+                                        os.path.basename(lifetime_pdf_filepath), page=page,
+                                        width=plx.utils.NoEscape(r'\linewidth'))
+                                    doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                                    subfig.add_caption(plx.NoEscape(caption))
 
-                            if np.mod(iFig, 2) == 1:
-                                doc.append(plx.NewLine())
+                                doc.append(plx.HorizontalSpace(plx.NoEscape('+20pt')))
 
-                        #doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
-                        fig.add_caption('Local Particle Loss Rate')
+                                if np.mod(iFig, 2) == 1:
+                                    doc.append(plx.NewLine())
+
+                            #doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                            fig.add_caption('Local Particle Loss Rate')
+
+                    else:
+                        nFigPages = int(np.ceil(
+                            len(loss_plots_indexes['E_MeV']) / nMaxPlotsPerPage))
+                        for iFigPage in range(nFigPages):
+
+                            if iFigPage != 0:
+                                doc.append(plx.ClearPage())
+
+                            iOffset = iFigPage * nMaxPlotsPerPage
+
+                            with doc.create(plx.Figure(position='h!t')) as fig:
+
+                                doc.append(plx.NoEscape(r'\centering'))
+
+                                _slice = slice(iOffset, iOffset + nMaxPlotsPerPage)
+
+                                for iFig, (iEnergy, iCoup, iVolt) in enumerate(zip(
+                                    loss_plots_indexes['E_MeV'][_slice],
+                                    loss_plots_indexes['coupling'][_slice],
+                                    loss_plots_indexes['rf_V'][_slice])):
+                                    page = iFig + iOffset + 1
+                                    caption = (
+                                        r'$E$ (GeV) = ${0:.2g}$, '
+                                        r'$V_{{\mathrm{{RF}}}}$ (MV) = ${1:.2g}$, '
+                                        r'$I_{{\mathrm{{bunch}}}}$ (mA) = ${2:.3g}$, '
+                                        r'$(\epsilon_x, \epsilon_y)$ (pm) = '
+                                        r'$({3:.1f}, {4:.1f})$').format(
+                                        self.lifetime_props['E_MeV_list'][iEnergy] / 1e3,
+                                        self.rf_dep_props['rf_volts'][iVolt] / 1e6,
+                                        self.lifetime_props[
+                                            'beam_current_per_bunch_mA_list'][iEnergy],
+                                        self.lifetime_props['eps_xs_list'][iEnergy][iCoup] * 1e12,
+                                        self.lifetime_props['eps_ys_list'][iEnergy][iCoup] * 1e12)
+                                    with doc.create(plx.SubFigureForMultiPagePDF(
+                                        position='b', width=plx.utils.NoEscape(r'0.45\linewidth'))
+                                                    ) as subfig:
+                                        subfig.add_image(
+                                            os.path.basename(lifetime_pdf_filepath), page=page,
+                                            width=plx.utils.NoEscape(r'\linewidth'))
+                                        doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                                        subfig.add_caption(plx.NoEscape(caption))
+
+                                    doc.append(plx.HorizontalSpace(plx.NoEscape('+20pt')))
+
+                                    if np.mod(iFig, 2) == 1:
+                                        doc.append(plx.NewLine())
+
+                                #doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                                fig.add_caption(
+                                    (f'Local Particle Loss Rate for '
+                                     f'Case Group {iFigPage+1:d}'))
 
 
         elif self._version == '1.0':
