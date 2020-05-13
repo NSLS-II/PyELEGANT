@@ -761,7 +761,11 @@ class Report_NSLS2U_Default:
         """"""
 
         lin_data = self.lin_data
-        opt_props = self.conf['lattice_props']['opt_props']
+
+        try:
+            opt_props = self.conf['lattice_props']['opt_props']
+        except:
+            opt_props = None
 
         if self._version != '1.0':
             extra_Es = self.lin_data['extra_energy_data_list']
@@ -3098,7 +3102,11 @@ class Report_NSLS2U_Default:
         italic_sub = wb_txt_fmts.italic_sub
 
         lin_data = self.lin_data
-        opt_props = self.conf['lattice_props']['opt_props']
+
+        try:
+            opt_props = self.conf['lattice_props']['opt_props']
+        except:
+            opt_props = None
 
         if self._version != '1.0':
             extra_Es = self.lin_data['extra_energy_data_list']
@@ -5487,7 +5495,8 @@ class Report_NSLS2U_Default:
         n_matched = len([
             elem_name for elem_name in elem_names
             if fnmatch.fnmatch(elem_name, calc_opts['include_name_pattern'])])
-        assert n_matched >= 1
+        if not (n_matched >= 1):
+            raise ValueError('No matching element name found. Check "include_name_pattern".')
         remote_opts['ntasks'] = min([remote_opts['ntasks'], n_matched])
         assert remote_opts['ntasks'] >= 1
 
@@ -7293,15 +7302,27 @@ class Report_NSLS2U_Default:
                              eol_comment='If True, will send email at the end of job.')
             _yaml_append_map(common_remote_opts, 'mail_user', sqss('your_username@bnl.gov'),
                              eol_comment='REQUIRED only if "mail_type_end" is True.')
-            nodelist = com_seq(
-                ['apcpu-001', 'apcpu-002', 'apcpu-003', 'apcpu-004', 'apcpu-005'])
-            nodelist.fa.set_flow_style()
+            #nodelist = com_seq(
+                #['apcpu-001', 'apcpu-002', 'apcpu-003', 'apcpu-004', 'apcpu-005'])
+            #nodelist.fa.set_flow_style()
+            #_yaml_append_map(
+                #common_remote_opts, 'nodelist', nodelist,
+                #eol_comment='list of strings for worker node names that will be used for the job')
             _yaml_append_map(
-                common_remote_opts, 'nodelist', nodelist,
-                eol_comment='list of strings for worker node names that will be used for the job')
+                common_remote_opts, 'nodelist', None,
+                eol_comment=(
+                    "list of strings for worker node names that will be used "
+                    "for the job (e.g., ['apcpu-001', 'apcpu-002', 'apcpu-003'])")
+            )
+            #_yaml_append_map(
+                #common_remote_opts, 'time', sqss('2:00:00'),
+                #eol_comment='Specify max job run time in SLURM time string format')
             _yaml_append_map(
-                common_remote_opts, 'time', sqss('2:00:00'),
-                eol_comment='Specify max job run time in SLURM time string format')
+                common_remote_opts, 'time', None,
+                eol_comment=(
+                    "Specify max job run time in SLURM time string format "
+                    "'days-hours:minutes:seconds' (e.g., '2:00:00'). 'days' and "
+                    "'hours' are optional."))
         comment = '''
         Common parallel options (can be overwritten in the options block
         for each specific calculation type):
@@ -7364,7 +7385,7 @@ class Report_NSLS2U_Default:
         production.yaml_set_anchor('map_xy_production')
         anchors['map_xy_production'] = production
         #
-        test = com_map(n_turns = 256, nx = 21, ny = 21)
+        test = com_map(n_turns = 128, nx = 21, ny = 21)
         #test.fa.set_flow_style()
         test.add_yaml_merge([(0, anchors['map_xy_production'])])
         test.yaml_set_anchor('map_xy_test')
@@ -7390,7 +7411,7 @@ class Report_NSLS2U_Default:
         production.yaml_set_anchor('map_px_production')
         anchors['map_px_production'] = production
         #
-        test = com_map(n_turns = 256, ndelta = 21, nx = 21)
+        test = com_map(n_turns = 128, ndelta = 21, nx = 21)
         #test.fa.set_flow_style()
         test.add_yaml_merge([(0, anchors['map_px_production'])])
         test.yaml_set_anchor('map_px_test')
@@ -7457,7 +7478,7 @@ class Report_NSLS2U_Default:
         # ### Option sets for "nonlin_chrom" ###
 
         production = com_map(
-            n_turns = 1024, delta_min = -4e-2, delta_max = +3e-2, ndelta = 100)
+            n_turns = 1024, delta_min = -3e-2, delta_max = +3e-2, ndelta = 100)
         if example:
             _yaml_append_map(production, 'x_offset', 1e-6,
                              before_comment='Optional (below)', before_indent=6)
@@ -7483,7 +7504,7 @@ class Report_NSLS2U_Default:
             delta_negative_start = 0.0, delta_negative_limit = -10e-2,
             delta_positive_start = 0.0, delta_positive_limit = +10e-2,
             init_delta_step_size = 5e-3,
-            include_name_pattern = sqss('[QSO]*'),
+            include_name_pattern = sqss('[BQSO]*'),
         )
         if example:
             _yaml_append_map(production, 'steps_back', 1,
@@ -7495,7 +7516,7 @@ class Report_NSLS2U_Default:
         #
         test = com_map(
             n_turns = 16, init_delta_step_size=2e-2,
-            include_name_pattern = sqss('S*'), splits = 1,
+            include_name_pattern = sqss('[BQSO]*'), splits = 1,
             split_step_divisor = 2, verbosity = 4)
         remote_opts = com_map(partition = sqss('short'), time = sqss('30:00'),
                               diag_mode = False)
