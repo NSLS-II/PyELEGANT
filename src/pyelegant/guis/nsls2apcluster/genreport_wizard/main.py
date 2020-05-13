@@ -39,9 +39,13 @@ class SkipPageSelector(QtWidgets.QDialog):
         if isinstance(w, ReportWizard):
             pass
 
-        cur_page_suffix = w.currentPage().objectName()[len('wizardPage_'):]
-        self.avail_page_suffixes = w.page_name_list[
-            w.page_name_list.index(cur_page_suffix)+1:]
+        if False: # only allows forward jumping
+            cur_page_suffix = w.currentPage().objectName()[len('wizardPage_'):]
+            self.avail_page_suffixes = w.page_name_list[
+                w.page_name_list.index(cur_page_suffix)+1:]
+        else: # allows both forward & backward jumping
+            self.avail_page_suffixes = w.page_name_list[:]
+
         data = [w.page_links[suffix].title()
                 for suffix in self.avail_page_suffixes]
 
@@ -75,7 +79,7 @@ class ReportWizard(QtWidgets.QWizard):
         self.conf = None
         self.LTE = None
         self.model_elem_list = None
-        self.common_remote_opts = CommentedMap({})
+        self.common_remote_opts = {}
 
         self.page_name_list = [
             'LTE', 'straight_centers', 'phase_adv', 'straight_length',
@@ -95,7 +99,7 @@ class ReportWizard(QtWidgets.QWizard):
                 suffix = obj_name[len('wizardPage_'):]
                 self.page_indexes[suffix] = i
 
-        self.setButtonText(QtWidgets.QWizard.CustomButton1, 'Skip to...')
+        self.setButtonText(QtWidgets.QWizard.CustomButton1, 'Jump to...')
         self.showSkipButton(False)
         self.customButtonClicked.connect(self.skip_to)
 
@@ -107,6 +111,14 @@ class ReportWizard(QtWidgets.QWizard):
             self.setGeometry(x0, y0, 600, 400)
         else:
             self.setGeometry(self._settings['MainWindow']['geometry'])
+
+    def update_conf_on_all_pages(self, mod_conf):
+        """"""
+
+        self.conf = mod_conf
+
+        for k, v in self.page_links.items():
+            v.conf = mod_conf
 
     def loadSettings(self):
         """"""
@@ -128,6 +140,8 @@ class ReportWizard(QtWidgets.QWizard):
         self._settings['seed_config_filepath'] = \
             self.settings.value('seed_config_filepath', '')
 
+        self.currentIdChanged.connect(self.set_jump_button_visibility)
+
     def saveSettings(self):
         """"""
 
@@ -148,6 +162,18 @@ class ReportWizard(QtWidgets.QWizard):
 
         super().closeEvent(event)
 
+    def set_jump_button_visibility(self, new_id):
+        """"""
+
+        page = self.page(new_id)
+
+        if page is None: # Last page
+            self.showSkipButton(False)
+        elif page.objectName()[len('wizardPage_'):] in self.page_name_list:
+            self.showSkipButton(True)
+        else:
+            self.showSkipButton(False)
+
     def showSkipButton(self, TF):
         """"""
 
@@ -166,6 +192,14 @@ class ReportWizard(QtWidgets.QWizard):
             cur_page.setNextId(sel_page_index)
             self.next() # Click "Next" button
             cur_page.setNextId(None)
+
+    def update_common_remote_opts(self):
+        """"""
+
+        if (self.common_remote_opts == {}) and (
+            'common_remote_opts' in self.conf['nonlin']):
+            self.common_remote_opts.update(
+                self.conf['nonlin']['common_remote_opts'])
 
 if __name__ == '__main__':
 

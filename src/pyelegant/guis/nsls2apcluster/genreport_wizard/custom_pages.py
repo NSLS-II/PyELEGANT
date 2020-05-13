@@ -16,6 +16,7 @@ from subprocess import Popen, PIPE
 from copy import deepcopy
 
 from qtpy import QtCore, QtGui, QtWidgets
+from qtpy import uic
 Qt = QtCore.Qt
 
 import numpy as np
@@ -27,7 +28,7 @@ from ruamel.yaml.scalarfloat import ScalarFloat
 import pyelegant as pe
 from pyelegant.scripts import genreport
 
-TEST_MODE = True
+TEST_MODE = False
 
 def _check_if_yaml_writable(yaml_object):
     """"""
@@ -37,6 +38,21 @@ def _check_if_yaml_writable(yaml_object):
     yml.width = 70
     yml.boolean_representation = ['False', 'True']
     yml.dump(yaml_object, sys.stdout)
+
+def _test_write_yaml_config(yaml_object, config_filepath):
+    """"""
+
+    yml = yaml.YAML()
+    yml.preserve_quotes = True
+    yml.width = 70
+    yml.boolean_representation = ['False', 'True']
+    with open(config_filepath, 'w') as f:
+        yml.dump(yaml_object, f)
+
+def yaml_append_map(*args, **kwargs):
+    """"""
+
+    genreport._yaml_append_map(*args, **kwargs)
 
 def duplicate_yaml_conf(orig_conf):
     """"""
@@ -90,6 +106,42 @@ def convert_to_ScalarFloat(float_val):
 
     return yaml.YAML().load(float_str)
 
+def get_all_anchor_names(root_commented_obj):
+    """"""
+
+    d = root_commented_obj
+
+    anchor_names = []
+
+    if isinstance(d, dict):
+        for k, v in d.items():
+            if hasattr(v, 'anchor') and (v.anchor.value is not None):
+                anchor_names.append(v.anchor.value)
+            anchor_names.extend(get_all_anchor_names(v))
+    elif isinstance(d, list):
+        for idx, item in enumerate(d):
+            if hasattr(item, 'anchor') and (item.anchor.value is not None):
+                anchor_names.append(item.anchor.value)
+            anchor_names.extend(get_all_anchor_names(item))
+
+    return np.unique(anchor_names).tolist()
+
+def recurse_anchor_find_replace(root_commented_obj, find_name, replace_name):
+    """"""
+
+    d = root_commented_obj
+
+    if isinstance(d, dict):
+        for k, v in d.items():
+            if hasattr(v, 'anchor') and (v.anchor.value == find_name):
+                v.anchor.value = replace_name
+            recurse_anchor_find_replace(v, find_name, replace_name)
+    elif isinstance(d, list):
+        for idx, item in enumerate(d):
+            if hasattr(item, 'anchor') and (item.anchor.value == find_name):
+                item.anchor.value = replace_name
+            recurse_anchor_find_replace(item, find_name, replace_name)
+
 def update_aliased_scalar(data, parent_obj, key_or_index, val):
     """
     Based on an answer on "https://stackoverflow.com/questions/55716068/how-to-change-an-anchored-scalar-in-a-sequence-without-destroying-the-anchor-in"
@@ -135,19 +187,26 @@ def update_aliased_scalar(data, parent_obj, key_or_index, val):
                 new_obj = duplicate_yaml_conf(val)
             elif isinstance(val, float):
                 new_obj = convert_to_ScalarFloat(val)
+            elif isinstance(val, CommentedSeq):
+                new_obj = val
+            elif isinstance(val, list):
+                new_obj = CommentedSeq(val)
             else:
                 raise ValueError
             new_obj.yaml_set_anchor(obj.anchor.value)
         else:
-            new_obj = type(obj)(val, anchor=obj.anchor.value)
+            if isinstance(obj, str) and isinstance(val, list):
+                if isinstance(val, CommentedSeq):
+                    new_obj = val
+                else:
+                    new_obj = CommentedSeq(val)
+                new_obj.yaml_set_anchor(obj.anchor.value)
+            else:
+                new_obj = type(obj)(val, anchor=obj.anchor.value)
         recurse(data, parent_obj, key_or_index, obj, new_obj)
     elif obj is None:
         recurse(data, parent_obj, key_or_index, obj, val)
     else:
-        #if isinstance(obj, ScalarFloat):
-            #new_obj = convert_to_ScalarFloat(val)
-        #else:
-            #new_obj = type(obj)(val)
         if isinstance(val, ScalarFloat): # This condition must come before
             # the condition check for "isinstance(val, float)", as
             # ScalarFloat() is also an instance of "float"
@@ -217,7 +276,7 @@ class ListModelStdLogger(QtCore.QAbstractListModel):
         self.flush()
 
 def realtime_updated_Popen(
-    cmd, view_stdout=None, view_stderr=None, robust_tail=True):
+    cmd, view_stdout=None, view_stderr=None, robust_tail=True, cwd=None):
     """
     If "robust_tail" is False, occasionally, you may see the tail part of the
     output texts missing. Setting "robust_tail" True resolves this issue.
@@ -232,7 +291,7 @@ def realtime_updated_Popen(
     masters, slaves = zip(pty.openpty(), pty.openpty())
     if not robust_tail:
         p = Popen(shlex.split(cmd), stdin=slaves[0], stdout=slaves[0],
-                  stderr=slaves[1])
+                  stderr=slaves[1], cwd=cwd)
     else:
         stdout_tmp_file = tempfile.NamedTemporaryFile(
             suffix='.log', dir=None, delete=True)
@@ -244,7 +303,7 @@ def realtime_updated_Popen(
             f'(({cmd}) | tee {stdout_filename}) 3>&1 1>&2 2>&3 | '
             f'tee {stderr_filename}')
         p = Popen(new_cmd, stdin=slaves[0], stdout=slaves[0],
-                  stderr=slaves[1], shell=True)
+                  stderr=slaves[1], cwd=cwd, shell=True)
     for fd in slaves: os.close(fd)
 
     #readable = { masters[0]: sys.stdout, masters[1]: sys.stderr }
@@ -431,7 +490,7 @@ def openDirNameDialog(widget, caption='', directory=''):
     return dir_path
 
 def generate_report(
-    config_filename, view_stdout=None, view_stderr=None):
+    config_filename, view_stdout=None, view_stderr=None, cwd=None):
     """"""
 
     cmd = f'pyele_report {config_filename}'
@@ -458,7 +517,7 @@ def generate_report(
     #view_stderr.update()
 
     realtime_updated_Popen(
-        cmd, view_stdout=view_stdout, view_stderr=view_stderr)
+        cmd, view_stdout=view_stdout, view_stderr=view_stderr, cwd=cwd)
 
     QtWidgets.QApplication.restoreOverrideCursor()
 
@@ -482,9 +541,10 @@ class PageStandard(QtWidgets.QWizardPage):
 
         super().__init__(*args, **kwargs)
 
+        self._pageInitialized = False
+
         self._registeredFields = []
-        self.orig_conf = None
-        self.mod_conf = None
+        self.conf = None
 
         self._next_id = None
 
@@ -494,18 +554,6 @@ class PageStandard(QtWidgets.QWizardPage):
         if name not in self._registeredFields:
             self.registerField(name, widget, *args, **kwargs)
             self._registeredFields.append(name)
-
-    def set_orig_conf(self, this_page_name):
-        """"""
-
-        page_name_list = self.wizardObj.page_name_list
-        this_page_index = page_name_list.index(this_page_name)
-        for page_name in page_name_list[:this_page_index][::-1]:
-            if self.wizardObj.page_links[page_name].mod_conf is not None:
-                self.orig_conf = self.wizardObj.page_links[page_name].mod_conf
-                break
-        else:
-            self.orig_conf = self.wizardObj.conf
 
     def setNextId(self, next_id):
         """"""
@@ -520,6 +568,11 @@ class PageStandard(QtWidgets.QWizardPage):
         else:
             return self._next_id
 
+    def cleanupPage(self):
+        """"""
+
+        self.initializePage()
+
 class PageGenReport(PageStandard):
     """"""
 
@@ -527,6 +580,8 @@ class PageGenReport(PageStandard):
         """Constructor"""
 
         super().__init__(*args, **kwargs)
+
+        self._connections_established = False
 
         self.all_calc_types = [
             'xy_aper', 'fmap_xy', 'fmap_px', 'cmap_xy', 'cmap_px',
@@ -555,6 +610,9 @@ class PageGenReport(PageStandard):
                 get = lambda v: v if v.strip() != '' else None),
             'check': dict(set = lambda v: v, get = lambda v: v),
             'combo': dict(set = lambda v: v, get = lambda v: v),
+            'edit_list_int': dict(
+                set = lambda v_list: ', '.join([f'{v:d}' for v in v_list]),
+                get = lambda v: [int(s) for s in v.split(',')]),
             'edit_list_float': dict(
                 set = lambda v_list: ', '.join([f'{v:.6g}' for v in v_list]),
                 get = lambda v: [float(s.strip()) for s in v.split(',')]),
@@ -620,6 +678,9 @@ class PageGenReport(PageStandard):
     def establish_connections(self):
         """"""
 
+        if self._connections_established:
+            return
+
         config_filepath = self.wizardObj.config_filepath
         pdf_filepath = self.wizardObj.pdf_filepath
 
@@ -653,17 +714,21 @@ class PageGenReport(PageStandard):
                               QtCore.QRegExp('pushButton_open_pdf_.+'))[0]
         b.clicked.connect(partial(open_pdf_report, pdf_filepath))
 
+        self._connections_established = True
+
     def generate_report(
         self, config_filepath, view_stdout=None, view_stderr=None,
         recalc_replot=None):
         """"""
 
-        config_filename = Path(config_filepath).name
+        config_file = Path(config_filepath)
+        config_filename = config_file.name
+        config_filedirpath = str(config_file.parent)
 
         if recalc_replot is None:
-            mod_conf = self.modify_conf(self.orig_conf)
+            mod_conf = self.modify_conf(self.conf)
         else:
-            mod_conf = self.modify_conf(self.orig_conf,
+            mod_conf = self.modify_conf(self.conf,
                                         recalc_replot=recalc_replot)
 
         yml = yaml.YAML()
@@ -674,7 +739,7 @@ class PageGenReport(PageStandard):
             yml.dump(mod_conf, f)
 
         generate_report(config_filename, view_stdout=view_stdout,
-                        view_stderr=view_stderr)
+                        view_stderr=view_stderr, cwd=config_filedirpath)
 
     def modify_conf(self, orig_conf, recalc_replot=None):
         """"""
@@ -728,7 +793,7 @@ class PageNonlinCalcTest(PageGenReport):
 
         for mode in ['test', 'production']:
             try:
-                opts = self.orig_conf['nonlin']['calc_opts'][self.calc_type][mode]
+                opts = self.conf['nonlin']['calc_opts'][self.calc_type][mode]
             except:
                 opts = None
             if opts is not None:
@@ -760,9 +825,9 @@ class PageNonlinCalcTest(PageGenReport):
         if reply == QMessageBox.No:
             return False
 
-        mod_conf = self.modify_conf(self.orig_conf)
+        mod_conf = self.modify_conf(self.conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return True
 
@@ -777,8 +842,11 @@ class PageNonlinCalcTest(PageGenReport):
 
         f = partial(update_aliased_scalar, mod_conf)
 
-        mod_conf['lattice_props']['recalc'] = False
-        mod_conf['lattice_props']['replot'] = False
+        for k in ['recalc', 'replot']:
+            mod_conf['lattice_props'][k] = False
+        for k in ['rf', 'lifetime']:
+            if k in mod_conf:
+                mod_conf[k]['include'] = False
 
         ncf = mod_conf['nonlin']
 
@@ -797,120 +865,73 @@ class PageNonlinCalcTest(PageGenReport):
 
         common_remote_opts = self.wizardObj.common_remote_opts
 
-        if False:
-            new_calc_opts = {}
-            for mode in ['test', 'production']:
-                del ncf['calc_opts'][self.calc_type][mode]
+        new_calc_opts = CommentedMap({})
+        for mode in ['test', 'production']:
+            calc_opts = ncf['calc_opts'][self.calc_type][mode]
 
-                new_calc_opts[mode] = {}
-                for k, conv_type in self.setter_getter[mode].items():
-                    conv = self.converters[conv_type]['get']
-                    wtype = conv_type.split('_')[0]
-                    v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
-                    if k in ('partition', 'ntasks', 'time'):
-                        if k in common_remote_opts:
-                            if common_remote_opts[k] == v:
-                                continue
-                            else:
-                                if 'remote_opts' not in new_calc_opts[mode]:
-                                    new_calc_opts[mode]['remote_opts'] = {}
-                                new_calc_opts[mode]['remote_opts'][k] = v
+            new_calc_opts[mode] = CommentedMap({})
+            for k, conv_type in self.setter_getter[mode].items():
+                conv = self.converters[conv_type]['get']
+                wtype = conv_type.split('_')[0]
+                v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
+                if k in ('partition', 'ntasks', 'time'):
+                    if k in common_remote_opts:
+                        if common_remote_opts[k] == v:
+                            continue
                         else:
                             if 'remote_opts' not in new_calc_opts[mode]:
-                                new_calc_opts[mode]['remote_opts'] = {}
-                            new_calc_opts[mode]['remote_opts'][k] = v
+                                yaml_append_map(
+                                    new_calc_opts[mode], 'remote_opts',
+                                    CommentedMap({}))
+                            yaml_append_map(
+                                new_calc_opts[mode]['remote_opts'], k, v)
                     else:
-                        new_calc_opts[mode][k] = v
+                        if 'remote_opts' not in new_calc_opts[mode]:
+                            yaml_append_map(
+                                new_calc_opts[mode], 'remote_opts',
+                                CommentedMap({}))
+                        yaml_append_map(
+                            new_calc_opts[mode]['remote_opts'], k, v)
+                else:
+                    yaml_append_map(new_calc_opts[mode], k, v)
 
-            mode = 'test'
-            calc_opts = CommentedMap(new_calc_opts[mode])
-            if self.calc_type.startswith('cmap_'):
-                calc_opts.add_yaml_merge([
-                    (0, ncf['calc_opts'][self.calc_type.replace(
-                        'cmap_', 'fmap_')][mode])])
-            calc_opts.yaml_set_anchor(f'{self.calc_type}_{mode}')
-            genreport._yaml_append_map(ncf['calc_opts'][self.calc_type], mode,
-                                       calc_opts)
-            test_calc_opts = calc_opts
+        mode = 'test'
+        calc_opts = new_calc_opts[mode]
+        new_anchor_name = f'{self.calc_type}_{mode}'
+        calc_opts.yaml_set_anchor(new_anchor_name)
+        recurse_anchor_find_replace(ncf['calc_opts'],
+                                    new_anchor_name, f'{new_anchor_name}_2')
+        if self.calc_type.startswith('cmap_'):
+            fmap_calc_type = self.calc_type.replace('cmap_', 'fmap_')
+            fmap_test_calc_opts = ncf['calc_opts'][fmap_calc_type]['test']
+            if fmap_test_calc_opts.anchor.value is None:
+                fmap_test_calc_opts.yaml_set_anchor(f'{fmap_calc_type}_test')
+            calc_opts.add_yaml_merge([(0, fmap_test_calc_opts)])
+        del ncf['calc_opts'][self.calc_type][mode]
+        yaml_append_map(ncf['calc_opts'][self.calc_type], mode, calc_opts)
+        test_calc_opts = calc_opts
 
-            mode = 'production'
-            calc_opts = CommentedMap(new_calc_opts[mode])
-            if self.calc_type.startswith('cmap_'):
-                fmap_prod_calc_opts = ncf['calc_opts'][self.calc_type.replace(
-                    'cmap_', 'fmap_')]['production']
-                calc_opts.add_yaml_merge([(0, fmap_prod_calc_opts)])
-            else:
-                calc_opts.add_yaml_merge([(0, test_calc_opts)])
-            calc_opts.yaml_set_anchor(f'{self.calc_type}_{mode}')
-            genreport._yaml_append_map(ncf['calc_opts'][self.calc_type], mode,
-                                       calc_opts)
-
+        mode = 'production'
+        calc_opts = new_calc_opts[mode]
+        new_anchor_name = f'{self.calc_type}_{mode}'
+        calc_opts.yaml_set_anchor(new_anchor_name)
+        recurse_anchor_find_replace(ncf['calc_opts'],
+                                    new_anchor_name, f'{new_anchor_name}_2')
+        if self.calc_type.startswith('cmap_'):
+            fmap_calc_type = self.calc_type.replace('cmap_', 'fmap_')
+            fmap_prod_calc_opts = ncf['calc_opts'][fmap_calc_type]['production']
+            if fmap_prod_calc_opts.anchor.value is None:
+                fmap_prod_calc_opts.yaml_set_anchor(f'{fmap_calc_type}_production')
+            calc_opts.add_yaml_merge([(0, fmap_prod_calc_opts)])
         else:
-            for mode in ['test', 'production']:
-                calc_opts = ncf['calc_opts'][self.calc_type][mode]
-                prop_names_from_wizard = list(self.setter_getter[mode])
-                for k in list(calc_opts):
-                    if k != 'remote_opts':
-                        if k not in prop_names_from_wizard:
-                            del calc_opts[k]
-                if 'remote_opts' in calc_opts:
-                    for k in list(calc_opts['remote_opts']):
-                        if k not in prop_names_from_wizard:
-                            del calc_opts[k]
-                for k, conv_type in self.setter_getter[mode].items():
-                    conv = self.converters[conv_type]['get']
-                    wtype = conv_type.split('_')[0]
-                    v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
-                    if k in ('partition', 'ntasks', 'time'):
-                        if k in common_remote_opts:
-                            if common_remote_opts[k] == v:
-                                continue
-                            else:
-                                if 'remote_opts' not in calc_opts:
-                                    calc_opts['remote_opts'] = CommentedMap({})
-                                f(calc_opts['remote_opts'], k, v)
-                        else:
-                            if 'remote_opts' not in calc_opts:
-                                calc_opts['remote_opts'] = CommentedMap({})
-                            f(calc_opts['remote_opts'], k, v)
-                    else:
-                        f(calc_opts, k, v)
-
-                if mode == 'test':
-                    if self.calc_type.startswith('cmap_'):
-                        fmap_test_calc_opts = ncf['calc_opts'][
-                            self.calc_type.replace('cmap_', 'fmap_')]['test']
-                        calc_opts.merge.clear()
-                        calc_opts.add_yaml_merge([(0, fmap_test_calc_opts)])
-                    if hasattr(calc_opts, 'anchor'):
-                        anchor_name = f'{self.calc_type}_{mode}'
-                        if calc_opts.anchor.value != anchor_name:
-                            calc_opts.yaml_set_anchor(anchor_name)
-                    else:
-                        raise ValueError
-                elif mode == 'production':
-                    if self.calc_type.startswith('cmap_'):
-                        fmap_prod_calc_opts = ncf['calc_opts'][
-                            self.calc_type.replace('cmap_', 'fmap_')
-                            ]['production']
-                        calc_opts.merge.clear()
-                        calc_opts.add_yaml_merge([(0, fmap_prod_calc_opts)])
-                    else:
-                        test_calc_opts = ncf['calc_opts'][self.calc_type]['test']
-                        calc_opts.merge.clear()
-                        calc_opts.add_yaml_merge([(0, test_calc_opts)])
-                    if hasattr(calc_opts, 'anchor'):
-                        anchor_name = f'{self.calc_type}_{mode}'
-                        if calc_opts.anchor.value != anchor_name:
-                            calc_opts.yaml_set_anchor(anchor_name)
-                    else:
-                        raise ValueError
-
+            calc_opts.add_yaml_merge([(0, test_calc_opts)])
+        del ncf['calc_opts'][self.calc_type][mode]
+        yaml_append_map(ncf['calc_opts'][self.calc_type], mode, calc_opts)
 
 
         #_check_if_yaml_writable(mod_conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return mod_conf
 
@@ -959,7 +980,7 @@ class PageNonlinCalcPlot(PageGenReport):
 
         assert self.calc_type in ('tswa', 'nonlin_chrom')
 
-        ncf = self.orig_conf['nonlin']
+        ncf = self.conf['nonlin']
 
         for mode in ['calc', 'plot']:
             try:
@@ -983,10 +1004,10 @@ class PageNonlinCalcPlot(PageGenReport):
     def validatePage(self):
         """"""
 
-        mod_conf = self.modify_conf(self.orig_conf,
+        mod_conf = self.modify_conf(self.conf,
                                     recalc_replot='no_recalc_replot')
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return True
 
@@ -1006,8 +1027,11 @@ class PageNonlinCalcPlot(PageGenReport):
 
         f = partial(update_aliased_scalar, mod_conf)
 
-        mod_conf['lattice_props']['recalc'] = False
-        mod_conf['lattice_props']['replot'] = False
+        for k in ['recalc', 'replot']:
+            mod_conf['lattice_props'][k] = False
+        for k in ['rf', 'lifetime']:
+            if k in mod_conf:
+                mod_conf[k]['include'] = False
 
         ncf = mod_conf['nonlin']
 
@@ -1063,7 +1087,7 @@ class PageNonlinCalcPlot(PageGenReport):
                 else:
                     new_calc_opts[k] = v
 
-            genreport._yaml_append_map(
+            yaml_append_map(
                 ncf['calc_opts'][self.calc_type], 'production',
                 CommentedMap(new_calc_opts))
         else:
@@ -1076,15 +1100,15 @@ class PageNonlinCalcPlot(PageGenReport):
                     m1 = CommentedMap({})
                     m2 = CommentedMap({'production': m1})
                     m3 = CommentedMap({self.calc_type: m2})
-                    genreport._yaml_append_map(ncf, 'calc_opts', m3)
+                    yaml_append_map(ncf, 'calc_opts', m3)
                 elif self.calc_type not in ncf['calc_opts']:
                     m1 = CommentedMap({})
                     m2 = CommentedMap({'production': m1})
-                    genreport._yaml_append_map(
+                    yaml_append_map(
                         ncf['calc_opts'], self.calc_type, m2)
                 elif 'production' not in ncf['calc_opts'][self.calc_type]:
                     m1 = CommentedMap({})
-                    genreport._yaml_append_map(
+                    yaml_append_map(
                         ncf['calc_opts'][self.calc_type], 'production', m1)
                 else:
                     raise ValueError
@@ -1169,7 +1193,7 @@ class PageNonlinCalcPlot(PageGenReport):
                 seq.fa.set_flow_style()
                 new_plot_opts[k] = seq
 
-            genreport._yaml_append_map(
+            yaml_append_map(
                 ncf, f'{self.calc_type}_plot_opts', CommentedMap(new_plot_opts))
         else:
             mode = 'plot'
@@ -1178,8 +1202,7 @@ class PageNonlinCalcPlot(PageGenReport):
                 plot_opts = ncf[f'{self.calc_type}_plot_opts']
             else:
                 plot_opts = CommentedMap({})
-                genreport._yaml_append_map(
-                    ncf, f'{self.calc_type}_plot_opts', plot_opts)
+                yaml_append_map(ncf, f'{self.calc_type}_plot_opts', plot_opts)
 
             prop_names_from_wizard = list(self.setter_getter[mode])
             for k in list(plot_opts):
@@ -1195,8 +1218,7 @@ class PageNonlinCalcPlot(PageGenReport):
                     if 'footprint_nuxlim' not in plot_opts:
                         seq = CommentedSeq([np.nan, np.nan])
                         seq.fa.set_flow_style()
-                        genreport._yaml_append_map(
-                            plot_opts, 'footprint_nuxlim', seq)
+                        yaml_append_map(plot_opts, 'footprint_nuxlim', seq)
 
                     if k == 'footprint_nux_min':
                         #f(plot_opts['footprint_nuxlim'], 0, v)
@@ -1210,8 +1232,7 @@ class PageNonlinCalcPlot(PageGenReport):
                     if 'footprint_nuylim' not in plot_opts:
                         seq = CommentedSeq([np.nan, np.nan])
                         seq.fa.set_flow_style()
-                        genreport._yaml_append_map(
-                            plot_opts, 'footprint_nuylim', seq)
+                        yaml_append_map(plot_opts, 'footprint_nuylim', seq)
 
                     if k == 'footprint_nuy_min':
                         #f(plot_opts['footprint_nuylim'], 0, v)
@@ -1225,8 +1246,7 @@ class PageNonlinCalcPlot(PageGenReport):
                     if 'fit_deltalim' not in plot_opts:
                         seq = CommentedSeq([np.nan, np.nan])
                         seq.fa.set_flow_style()
-                        genreport._yaml_append_map(
-                            plot_opts, 'fit_deltalim', seq)
+                        yaml_append_map(plot_opts, 'fit_deltalim', seq)
 
                     if k == 'fit_delta_min':
                         #f(plot_opts['fit_deltalim'], 0, v)
@@ -1241,7 +1261,7 @@ class PageNonlinCalcPlot(PageGenReport):
 
         #_check_if_yaml_writable(mod_conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return mod_conf
 
@@ -1252,6 +1272,8 @@ class PageNewSetup(QtWidgets.QWizardPage):
         """Constructor"""
 
         super().__init__(*args, **kwargs)
+
+        self._pageInitialized = False
 
         self._registeredFields = []
 
@@ -1265,8 +1287,10 @@ class PageNewSetup(QtWidgets.QWizardPage):
     def initializePage(self):
         """"""
 
+        if self._pageInitialized:
+            return
+
         self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(False)
 
         # Register fields
 
@@ -1311,6 +1335,8 @@ class PageNewSetup(QtWidgets.QWizardPage):
 
         self.edit_obj.setText(self.wizardObj._settings['config_folderpath'])
         self.update_paths_on_folder(self.edit_obj.text())
+
+        self._pageInitialized = True
 
     def isComplete(self):
         """"""
@@ -1414,6 +1440,8 @@ class PageLoadSeedConfig(QtWidgets.QWizardPage):
 
         super().__init__(*args, **kwargs)
 
+        self._pageInitialized = False
+
         self._registeredFields = []
 
     def registerFieldOnFirstShow(self, name, widget, *args, **kwargs):
@@ -1426,8 +1454,10 @@ class PageLoadSeedConfig(QtWidgets.QWizardPage):
     def initializePage(self):
         """"""
 
+        if self._pageInitialized:
+            return
+
         self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(False)
 
         self.edit_obj = self.findChild(
             QtWidgets.QLineEdit, 'lineEdit_seed_config_filepath')
@@ -1438,6 +1468,8 @@ class PageLoadSeedConfig(QtWidgets.QWizardPage):
         b.clicked.connect(self.browse_yaml_config_file)
 
         self.edit_obj.setText(self.wizardObj._settings['seed_config_filepath'])
+
+        self._pageInitialized = True
 
     def browse_yaml_config_file(self):
         """"""
@@ -1490,6 +1522,16 @@ class PageLoadSeedConfig(QtWidgets.QWizardPage):
 
             return False
 
+        report_class = genreport.Report_NSLS2U_Default
+        latest_config_ver = report_class.get_latest_config_version_str()
+        while self.wizardObj.conf['report_version'] != latest_config_ver:
+            self.wizardObj.conf = report_class.upgrade_config(
+                self.wizardObj.conf)
+
+        self.wizardObj.update_conf_on_all_pages(self.wizardObj.conf)
+
+        self.wizardObj.update_common_remote_opts()
+
         return True
 
 class PageLTE(PageStandard):
@@ -1503,10 +1545,11 @@ class PageLTE(PageStandard):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self._update_fields()
+            return
 
-        self.set_orig_conf('LTE')
+        self.wizardObj = self.wizard()
 
         # Register fields
 
@@ -1525,40 +1568,7 @@ class PageLTE(PageStandard):
             self.findChild(QtWidgets.QCheckBox, 'checkBox_pyelegant_stdout'))
 
         # Set fields
-
-        self.setField('edit_report_author',
-                      str(self.orig_conf.get('report_author', '').strip()))
-
-        self.setField(
-            'edit_orig_LTE_path',
-            convert_multiline_yaml_str_to_oneline_str(
-                self.orig_conf.get('orig_LTE_filepath', '')))
-
-        self.setField('edit_LTE_authors',
-                      str(self.orig_conf.get('lattice_author', '').strip()))
-
-        self.setField('edit_parent_LTE_hash',
-                      str(self.orig_conf.get('parent_LTE_hash', '').strip()))
-
-        date = self.orig_conf.get('lattice_received_date', None)
-        if date is None:
-            date = QtCore.QDateTime().currentDateTime()
-        else:
-            month, day, year = [int(s) for s in date.split('/')]
-            date = QtCore.QDateTime(datetime.date(year, month, day))
-        self.setField('date_LTE_received', date)
-
-        E_GeV = self.orig_conf.get('E_MeV', 3e3) / 1e3
-        self.setField('edit_E_GeV', f'{E_GeV:.3g}')
-
-        self.setField('edit_use_beamline_cell',
-                      str(self.orig_conf.get('use_beamline_cell', '').strip()))
-
-        self.setField('edit_use_beamline_ring',
-                      str(self.orig_conf.get('use_beamline_ring', '').strip()))
-
-        self.setField('check_pyele_stdout',
-                      self.orig_conf.get('enable_pyelegant_stdout', False))
+        self._update_fields()
 
         # Establish connections
 
@@ -1571,6 +1581,57 @@ class PageLTE(PageStandard):
             k_wo_star = (k[:-1] if k.endswith('*') else k)
             w = self.findChild(QtWidgets.QLineEdit, f'lineEdit_{k_wo_star}')
             w.textChanged.connect(self.completeChanged)
+
+        self._pageInitialized = True
+
+    def _update_fields(self):
+        """"""
+
+        self.setField('edit_report_author',
+                      str(self.conf.get('report_author', '').strip()))
+
+        self.setField(
+            'edit_orig_LTE_path',
+            convert_multiline_yaml_str_to_oneline_str(
+                self.conf.get('orig_LTE_filepath', '')))
+
+        lattice_authors = self.conf.get('lattice_authors', '')
+        if isinstance(lattice_authors, str):
+            # Convet to Python str from YAML's commented string object
+            lattice_authors = str(lattice_authors.strip())
+        elif isinstance(lattice_authors, list):
+            lattice_authors = ', '.join([str(v).strip() for v in lattice_authors])
+        else:
+            raise ValueError
+        self.setField('edit_LTE_authors', lattice_authors)
+
+        self.setField('edit_parent_LTE_hash',
+                      str(self.conf.get('parent_LTE_hash', '').strip()))
+
+        date = self.conf.get('lattice_received_date', None)
+        if date is None:
+            date = QtCore.QDateTime().currentDateTime()
+        else:
+            month, day, year = [int(s) for s in date.split('/')]
+            date = QtCore.QDateTime(datetime.date(year, month, day))
+        self.setField('date_LTE_received', date)
+
+        E_MeV = self.conf.get('E_MeV', 3e3)
+        if not isinstance(E_MeV, list):
+            E_MeV_list = [E_MeV]
+        else:
+            E_MeV_list = E_MeV
+        E_GeV_str = ', '.join([f'{E_MeV / 1e3:.3g}' for E_MeV in E_MeV_list])
+        self.setField('edit_E_GeV', E_GeV_str)
+
+        self.setField('edit_use_beamline_cell',
+                      str(self.conf.get('use_beamline_cell', '').strip()))
+
+        self.setField('edit_use_beamline_ring',
+                      str(self.conf.get('use_beamline_ring', '').strip()))
+
+        self.setField('check_pyele_stdout',
+                      self.conf.get('enable_pyelegant_stdout', False))
 
     def browse_LTE_file(self):
         """"""
@@ -1651,7 +1712,7 @@ class PageLTE(PageStandard):
                 showInvalidPageInputDialog(text, info_text)
                 return False
 
-        mod_conf = duplicate_yaml_conf(self.orig_conf)
+        mod_conf = duplicate_yaml_conf(self.conf)
 
         f = partial(update_aliased_scalar, mod_conf)
         #
@@ -1685,12 +1746,24 @@ class PageLTE(PageStandard):
         f(mod_conf['input_LTE'], 'parent_LTE_hash',
           self.field('edit_parent_LTE_hash').strip())
         #
-        f(mod_conf, 'lattice_author', self.field('edit_LTE_authors').strip())
+        lattice_authors = self.field('edit_LTE_authors').strip()
+        seq = CommentedSeq([yaml.scalarstring.SingleQuotedScalarString(v)
+                            for v in lattice_authors.split(',')])
+        seq.fa.set_flow_style()
+        f(mod_conf, 'lattice_authors', seq)
         #
         f(mod_conf, 'lattice_received_date',
           self.field('date_LTE_received').toString('MM/dd/yyyy'))
         #
-        f(mod_conf, 'E_MeV', float(self.field('edit_E_GeV')) * 1e3)
+        E_GeV = self.field('edit_E_GeV')
+        try:
+            E_MeV = float(E_GeV) * 1e3
+            E_MeV_list = [E_MeV]
+        except ValueError:
+            E_MeV_list = [float(v) * 1e3 for v in E_GeV.split(',')]
+        seq = CommentedSeq(E_MeV_list)
+        seq.fa.set_flow_style()
+        f(mod_conf, 'E_MeV', seq)
         if False:
             _check_if_yaml_writable(mod_conf)
         #
@@ -1699,7 +1772,7 @@ class PageLTE(PageStandard):
         #
         f(mod_conf, 'enable_pyelegant_stdout', self.field('check_pyele_stdout'))
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         flat_used_elem_names = LTE.flat_used_elem_names
         all_elem_names = [name for name, _, _ in LTE.elem_defs]
@@ -1808,10 +1881,11 @@ class PageStraightCenters(PageStandard):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self._update_fields()
+            return
 
-        self.set_orig_conf('straight_centers')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -1827,9 +1901,28 @@ class PageStraightCenters(PageStandard):
         self.registerFieldOnFirstShow('edit_SS_center_name*', edit)
 
         # Set fields
+        self._update_fields()
+
+        # Establish connections
+
+        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
+        edit.textChanged.connect(self.synchronize_LS_elem_names)
+
+        b = self.findChild(QtWidgets.QPushButton, 'pushButton_reload_LTE')
+        b.clicked.connect(self.update_LTE_table)
+
+        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
+        edit.textChanged.connect(self.completeChanged)
+        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_1st_center_name')
+        edit.textChanged.connect(self.completeChanged)
+
+        self._pageInitialized = True
+
+    def _update_fields(self):
+        """"""
 
         try:
-            beta = self.orig_conf['lattice_props']['req_props']['beta']
+            beta = self.conf['lattice_props']['req_props']['beta']
             LS_elem_name = str(beta['LS']['name'])
         except:
             if TEST_MODE:
@@ -1847,19 +1940,6 @@ class PageStraightCenters(PageStandard):
                 self.setField('edit_SS_center_name', 'M_SS')
             else:
                 self.setField('edit_SS_center_name', '')
-
-        # Establish connections
-
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
-        edit.textChanged.connect(self.synchronize_LS_elem_names)
-
-        b = self.findChild(QtWidgets.QPushButton, 'pushButton_reload_LTE')
-        b.clicked.connect(self.update_LTE_table)
-
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
-        edit.textChanged.connect(self.completeChanged)
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_1st_center_name')
-        edit.textChanged.connect(self.completeChanged)
 
     def isComplete(self):
         """"""
@@ -1934,7 +2014,7 @@ class PageStraightCenters(PageStandard):
         else:
             raise ValueError()
 
-        mod_conf = duplicate_yaml_conf(self.orig_conf)
+        mod_conf = duplicate_yaml_conf(self.conf)
 
         f = partial(update_aliased_scalar, mod_conf)
         #
@@ -1961,7 +2041,7 @@ class PageStraightCenters(PageStandard):
         f(d['floor_comparison']['SS']['cur_elem'], 'name', M_SS_name)
         f(d['floor_comparison']['SS']['cur_elem'], 'occur', 0)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return True
 
@@ -1976,10 +2056,11 @@ class PagePhaseAdv(PageStandard):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self._update_fields()
+            return
 
-        self.set_orig_conf('phase_adv')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -1997,9 +2078,21 @@ class PagePhaseAdv(PageStandard):
         self.registerFieldOnFirstShow('combo_n_disp_bumps', obj, property='currentText')
 
         # Set fields
+        self._update_fields()
+
+        # Establish connections
+
+        b = self.findChild(QtWidgets.QPushButton,
+                           'pushButton_reload_LTE_phase_adv')
+        b.clicked.connect(self.update_LTE_table)
+
+        self._pageInitialized = True
+
+    def _update_fields(self):
+        """"""
 
         try:
-            phase_adv = self.orig_conf['lattice_props']['opt_props']['phase_adv']
+            phase_adv = self.conf['lattice_props']['opt_props']['phase_adv']
         except:
             if TEST_MODE:
                 elem_name = 'MDISP'
@@ -2007,6 +2100,9 @@ class PagePhaseAdv(PageStandard):
                 elem_name = ''
             self.setField('edit_disp_bump_marker_name', elem_name)
             self.setField('combo_n_disp_bumps', '2')
+
+            return
+
         try:
             if 'MDISP across LS' in phase_adv:
                 elem_name = str(phase_adv['MDISP across LS']['elem2']['name'])
@@ -2023,12 +2119,6 @@ class PagePhaseAdv(PageStandard):
                 elem_name = ''
             self.setField('edit_disp_bump_marker_name', elem_name)
             self.setField('combo_n_disp_bumps', '2')
-
-        # Establish connections
-
-        b = self.findChild(QtWidgets.QPushButton,
-                           'pushButton_reload_LTE_phase_adv')
-        b.clicked.connect(self.update_LTE_table)
 
     def update_LTE_table(self):
         """"""
@@ -2047,12 +2137,17 @@ class PagePhaseAdv(PageStandard):
         marker_name = self.field('edit_disp_bump_marker_name').strip()
         n_disp_bumps = int(self.field('combo_n_disp_bumps'))
 
+        mod_conf = duplicate_yaml_conf(self.conf)
+
         if marker_name == '':
-            conf = self.wizardObj.conf
-            d = conf['lattice_props']
+            d = mod_conf['lattice_props']
             if 'opt_props' in d:
-                if 'phase_adv' in d['opt_props']:
-                    del d['opt_props']['phase_adv']
+                # This wizard only allows "phase_adv" as part of "opt_props". If the
+                # other types of "opt_props" exist (for example, from the default
+                # full example config), then those are deleted.
+                del d['opt_props']
+
+            self.wizardObj.update_conf_on_all_pages(mod_conf)
 
             return True
 
@@ -2072,7 +2167,16 @@ class PagePhaseAdv(PageStandard):
             showInvalidPageInputDialog(text, info_text)
             return False
 
-        mod_conf = duplicate_yaml_conf(self.orig_conf)
+        # This wizard only allows "phase_adv" as part of "opt_props". If the
+        # other types of "opt_props" exist (for example, from the default
+        # full example config), then those are deleted.
+        if 'opt_props' in mod_conf['lattice_props']:
+            for k in list(mod_conf['lattice_props']['opt_props']):
+                if k != 'phase_adv':
+                    del mod_conf['lattice_props']['opt_props'][k]
+        else:
+            mod_conf['lattice_props']['opt_props'] = CommentedMap(
+                {'phase_adv': CommentedMap({})})
 
         d = mod_conf['lattice_props']['opt_props']['phase_adv']
         #
@@ -2081,6 +2185,13 @@ class PagePhaseAdv(PageStandard):
         sqss = SingleQuotedScalarString
 
         if n_disp_bumps == 2:
+
+            for _k in list(d):
+                if _k not in ['MDISP across LS', 'MDISP across SS']:
+                    del d[_k]
+
+            if 'MDISP across LS' not in d:
+                d['MDISP across LS'] = CommentedMap({})
             d2 = d['MDISP across LS']
             f(d2, 'pdf_label', (
                 r'Phase Advance btw. Disp. Bumps\n across LS '
@@ -2091,6 +2202,8 @@ class PagePhaseAdv(PageStandard):
                 "italic_greek", sqss('Delta'), "italic_greek", sqss('nu'),
                 "italic_sub", sqss('x')])
             seq.fa.set_flow_style()
+            if 'xlsx_label' not in d2:
+                d2['xlsx_label'] = CommentedMap({})
             f(d2['xlsx_label'], 'x', seq)
             seq = CommentedSeq([
                 "normal", sqss('Vertical Phase Advance btw. Disp. Bumps across LS '),
@@ -2098,12 +2211,18 @@ class PagePhaseAdv(PageStandard):
                 "italic_sub", sqss('y')])
             seq.fa.set_flow_style()
             f(d2['xlsx_label'], 'y', seq)
+            if 'elem1' not in d2:
+                d2['elem1'] = CommentedMap({})
             f(d2['elem1'], 'name',
               mod_conf['lattice_props']['req_props']['beta']['LS']['name'])
             f(d2['elem1'], 'occur', 0)
+            if 'elem2' not in d2:
+                d2['elem2'] = CommentedMap({})
             f(d2['elem2'], 'name', marker_name)
             f(d2['elem2'], 'occur', 0)
             #
+            if 'MDISP across SS' not in d:
+                d['MDISP across SS'] = CommentedMap({})
             d2 = d['MDISP across SS']
             f(d2, 'pdf_label', (
                 r'Phase Advance btw. Disp. Bumps\n across SS '
@@ -2114,6 +2233,8 @@ class PagePhaseAdv(PageStandard):
                 "italic_greek", sqss('Delta'), "italic_greek", sqss('nu'),
                 "italic_sub", sqss('x')])
             seq.fa.set_flow_style()
+            if 'xlsx_label' not in d2:
+                d2['xlsx_label'] = CommentedMap({})
             f(d2['xlsx_label'], 'x', seq)
             seq = CommentedSeq([
                 "normal", sqss(
@@ -2122,12 +2243,23 @@ class PagePhaseAdv(PageStandard):
                 "italic_sub", sqss('y')])
             seq.fa.set_flow_style()
             f(d2['xlsx_label'], 'y', seq)
+            if 'elem1' not in d2:
+                d2['elem1'] = CommentedMap({})
             f(d2['elem1'], 'name', marker_name)
             f(d2['elem1'], 'occur', 0)
+            if 'elem2' not in d2:
+                d2['elem2'] = CommentedMap({})
             f(d2['elem2'], 'name', marker_name)
             f(d2['elem2'], 'occur', 1)
 
         elif n_disp_bumps == 4:
+
+            for _k in list(d):
+                if _k not in ['MDISP 0&1']:
+                    del d[_k]
+
+            if 'MDISP 0&1' not in d:
+                d['MDISP 0&1'] = CommentedMap({})
             d2 = d['MDISP 0&1']
             f(d2, 'pdf_label', (
                 r'Phase Advance btw. Dispersion Bumps\n '
@@ -2137,6 +2269,8 @@ class PagePhaseAdv(PageStandard):
                 "italic_greek", sqss('Delta'), "italic_greek", sqss('nu'),
                 "italic_sub", sqss('x')])
             seq.fa.set_flow_style()
+            if 'xlsx_label' not in d2:
+                d2['xlsx_label'] = CommentedMap({})
             f(d2['xlsx_label'], 'x', seq)
             seq = CommentedSeq([
                 "normal", sqss('Vertical Phase Advance btw. Disp. Bumps '),
@@ -2144,15 +2278,19 @@ class PagePhaseAdv(PageStandard):
                 "italic_sub", sqss('y')])
             seq.fa.set_flow_style()
             f(d2['xlsx_label'], 'y', seq)
+            if 'elem1' not in d2:
+                d2['elem1'] = CommentedMap({})
             f(d2['elem1'], 'name', marker_name)
             f(d2['elem1'], 'occur', 0)
+            if 'elem2' not in d2:
+                d2['elem2'] = CommentedMap({})
             f(d2['elem2'], 'name', marker_name)
             f(d2['elem2'], 'occur', 1)
 
         else:
             raise ValueError()
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return True
 
@@ -2167,10 +2305,11 @@ class PageStraightDrifts(PageStandard):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self._update_fields()
+            return
 
-        self.set_orig_conf('straight_length')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -2187,9 +2326,22 @@ class PageStraightDrifts(PageStandard):
         self.registerFieldOnFirstShow('edit_half_SS_drifts*', edit)
 
         # Set fields
+        self._update_fields()
+
+        # Establish connections
+
+        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_drift_names')
+        edit.textChanged.connect(self.completeChanged)
+        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_drift_names')
+        edit.textChanged.connect(self.completeChanged)
+
+        self._pageInitialized = True
+
+    def _update_fields(self):
+        """"""
 
         try:
-            length = self.orig_conf['lattice_props']['req_props']['length']
+            length = self.conf['lattice_props']['req_props']['length']
             self.setField(
                 'edit_half_LS_drifts',
                 ', '.join([s.strip() for s in length['LS']['name_list']]))
@@ -2203,13 +2355,6 @@ class PageStraightDrifts(PageStandard):
             else:
                 self.setField('edit_half_LS_drifts', '')
                 self.setField('edit_half_SS_drifts', '')
-
-        # Establish connections
-
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_drift_names')
-        edit.textChanged.connect(self.completeChanged)
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_drift_names')
-        edit.textChanged.connect(self.completeChanged)
 
     def validatePage(self):
         """"""
@@ -2255,7 +2400,7 @@ class PageStraightDrifts(PageStandard):
                 showInvalidPageInputDialog(text, info_text)
                 return False
 
-        mod_conf = duplicate_yaml_conf(self.orig_conf)
+        mod_conf = duplicate_yaml_conf(self.conf)
 
         d = mod_conf['lattice_props']['req_props']
         f = partial(update_aliased_scalar, mod_conf)
@@ -2268,7 +2413,7 @@ class PageStraightDrifts(PageStandard):
 
         #_check_if_yaml_writable(mod_conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return True
 
@@ -2283,19 +2428,21 @@ class PageGenReportTest1(PageGenReport):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            return
 
-        self.set_orig_conf('test1')
+        self.wizardObj = self.wizard()
 
         self.establish_connections()
+
+        self._pageInitialized = True
 
     def validatePage(self):
         """"""
 
-        mod_conf = self.modify_conf(self.orig_conf)
+        mod_conf = self.modify_conf(self.conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return True
 
@@ -2306,7 +2453,13 @@ class PageGenReportTest1(PageGenReport):
 
         f = partial(update_aliased_scalar, mod_conf)
 
-        f(mod_conf['lattice_props'], 'recalc', True)
+        for k in ['recalc', 'replot']:
+            mod_conf['lattice_props'][k] = True
+        for k, v in mod_conf['nonlin']['include'].items():
+            mod_conf['nonlin']['include'][k] = False
+        for k in ['rf', 'lifetime']:
+            if k in mod_conf:
+                mod_conf[k]['include'] = False
 
         if 'pdf_table_order' in mod_conf['lattice_props']:
             del mod_conf['lattice_props']['pdf_table_order']
@@ -2345,15 +2498,18 @@ class PageGenReportTest1(PageGenReport):
                     ]
                     for L in Ls: L.fa.set_flow_style()
                     f(d, 'append_opt_props_to_xlsx_table', Ls)
+            else:
+                if 'append_opt_props_to_pdf_table' in d:
+                    del d['append_opt_props_to_pdf_table']
+                if 'append_opt_props_to_xlsx_table' in d:
+                    del d['append_opt_props_to_xlsx_table']
+        else:
+            if 'append_opt_props_to_pdf_table' in d:
+                del d['append_opt_props_to_pdf_table']
+            if 'append_opt_props_to_xlsx_table' in d:
+                del d['append_opt_props_to_xlsx_table']
 
-        for k, v in mod_conf['nonlin']['include'].items():
-            f(mod_conf['nonlin']['include'], k, False)
-
-        for k in ['rf_dep_calc_opts', 'lifetime_calc_opts']:
-            if k in mod_conf:
-                del mod_conf[k]
-
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return mod_conf
 
@@ -2368,10 +2524,11 @@ class PageTwissPlots(PageGenReport):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self._update_fields()
+            return
 
-        self.set_orig_conf('twiss_plots')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -2395,16 +2552,78 @@ class PageTwissPlots(PageGenReport):
                 self.registerFieldOnFirstShow(f'edit_{sec}_{suffix}', w)
 
         # Set fields
+        self._update_fields()
 
         # Establish connections
         self.establish_connections()
 
+        self._pageInitialized = True
+
+    def _update_fields(self):
+        """"""
+
+        try:
+            twiss_calc_opts = self.conf['lattice_props']['twiss_calc_opts']
+            element_divisions = \
+                twiss_calc_opts['one_period']['element_divisions']
+        except:
+            element_divisions = None
+
+        if element_divisions:
+            self.setField('spin_element_divisions', element_divisions)
+
+        try:
+            twiss_plot_opts = self.conf['lattice_props']['twiss_plot_opts'][
+                'one_period']
+        except:
+            twiss_plot_opts = None
+
+        if twiss_plot_opts is None:
+            return
+
+        try:
+            self.setField(
+                'edit_full_r_margin',
+                '{:.2g}'.format(twiss_plot_opts[0]['right_margin_adj']))
+        except:
+            pass
+
+        for iSec, sec in enumerate(['sec1', 'sec2', 'sec3']):
+            for suffix in ['smin', 'smax', 'r_margin']:
+                try:
+                    _d = twiss_plot_opts[iSec+1]
+                    if suffix == 'r_margin':
+                        value = _d['right_margin_adj']
+                        value = '{:.3g}'.format(value)
+                    elif suffix == 'smin':
+                        value = '{:.3g}'.format(_d['slim'][0])
+                    elif suffix == 'smax':
+                        value = '{:.3g}'.format(_d['slim'][1])
+
+                    self.setField(f'edit_{sec}_{suffix}', value)
+                except:
+                    pass
+
+        try:
+            disp_elem_names = twiss_plot_opts[1]['disp_elem_names']
+            try:
+                self.setField('spin_font_size', disp_elem_names['font_size'])
+            except:
+                pass
+            try:
+                self.setField('edit_extra_dy_frac',
+                              '{:.3g}'.format(disp_elem_names['extra_dy_frac']))
+            except:
+                pass
+        except:
+            pass
+
     def validatePage(self):
         """"""
 
-        mod_conf = self.modify_conf(self.orig_conf)
+        mod_conf = self.modify_conf(self.conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return True
 
@@ -2415,11 +2634,14 @@ class PageTwissPlots(PageGenReport):
 
         f = partial(update_aliased_scalar, mod_conf)
 
-        #f(mod_conf['lattice_props'], 'recalc', True)
-        mod_conf['lattice_props']['recalc'] = True
+        for k in ['recalc', 'replot']:
+            mod_conf['lattice_props'][k] = True
+        for k, v in mod_conf['nonlin']['include'].items():
+            mod_conf['nonlin']['include'][k] = False
+        for k in ['rf', 'lifetime']:
+            if k in mod_conf:
+                mod_conf[k]['include'] = False
 
-        #f(mod_conf['lattice_props']['twiss_calc_opts']['one_period'],
-          #'element_divisions', self.field('spin_element_divisions'))
         mod_conf['lattice_props']['twiss_calc_opts']['one_period'
             ]['element_divisions'] = self.field('spin_element_divisions')
 
@@ -2473,7 +2695,7 @@ class PageTwissPlots(PageGenReport):
 
         #_check_if_yaml_writable(mod_conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return mod_conf
 
@@ -2488,10 +2710,11 @@ class PageParagraphs(PageGenReport):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self._update_fields()
+            return
 
-        self.set_orig_conf('paragraphs')
+        self.wizardObj = self.wizard()
 
         # Adjust initial splitter ratio
         w = self.findChild(QtWidgets.QSplitter, 'splitter_paragraphs')
@@ -2514,27 +2737,7 @@ class PageParagraphs(PageGenReport):
         self.registerFieldOnFirstShow('edit_lattice_properties', w, 'plainText')
 
         # Set fields
-
-        try:
-            text_list = self.orig_conf['lattice_keywords']
-        except:
-            text_list = None
-        if text_list is not None:
-            self.setField('edit_keywords', ', '.join(text_list))
-
-        try:
-            text_list = self.orig_conf['report_paragraphs']['lattice_description']
-        except:
-            text_list = None
-        if text_list is not None:
-            self.setField('edit_lattice_description', '\n'.join(text_list))
-
-        try:
-            text_list = self.orig_conf['report_paragraphs']['lattice_properties']
-        except:
-            text_list = None
-        if text_list is not None:
-            self.setField('edit_lattice_properties', '\n'.join(text_list))
+        self._update_fields()
 
         # Establish connections
 
@@ -2546,6 +2749,32 @@ class PageParagraphs(PageGenReport):
         w = self.findChild(QtWidgets.QPlainTextEdit,
                            'plainTextEdit_lattice_description')
         w.textChanged.connect(self.completeChanged)
+
+        self._pageInitialized = True
+
+    def _update_fields(self):
+        """"""
+
+        try:
+            text_list = self.conf['lattice_keywords']
+        except:
+            text_list = None
+        if text_list is not None:
+            self.setField('edit_keywords', ', '.join(text_list))
+
+        try:
+            text_list = self.conf['report_paragraphs']['lattice_description']
+        except:
+            text_list = None
+        if text_list is not None:
+            self.setField('edit_lattice_description', '\n'.join(text_list))
+
+        try:
+            text_list = self.conf['report_paragraphs']['lattice_properties']
+        except:
+            text_list = None
+        if text_list is not None:
+            self.setField('edit_lattice_properties', '\n'.join(text_list))
 
     def isComplete(self):
         """"""
@@ -2561,9 +2790,9 @@ class PageParagraphs(PageGenReport):
     def validatePage(self):
         """"""
 
-        mod_conf = self.modify_conf(self.orig_conf)
+        mod_conf = self.modify_conf(self.conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return True
 
@@ -2573,6 +2802,14 @@ class PageParagraphs(PageGenReport):
         mod_conf = duplicate_yaml_conf(orig_conf)
 
         #f = partial(update_aliased_scalar, mod_conf)
+
+        for k in ['recalc', 'replot']:
+            mod_conf['lattice_props'][k] = False
+        for k, v in mod_conf['nonlin']['include'].items():
+            mod_conf['nonlin']['include'][k] = False
+        for k in ['rf', 'lifetime']:
+            if k in mod_conf:
+                mod_conf[k]['include'] = False
 
         keywords = CommentedSeq(
             [s.strip() for s in self.field('edit_keywords').split(',')])
@@ -2584,12 +2821,9 @@ class PageParagraphs(PageGenReport):
         mod_conf['report_paragraphs']['lattice_properties'] = self.field(
             'edit_lattice_properties').splitlines()
 
-        mod_conf['lattice_props']['recalc'] = False
-        mod_conf['lattice_props']['replot'] = False
-
         #_check_if_yaml_writable(mod_conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return mod_conf
 
@@ -2604,14 +2838,11 @@ class PageNKicks(PageGenReport):
     def initializePage(self):
         """"""
 
+        if self._pageInitialized:
+            self._update_fields()
+            return
+
         self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
-
-        self.set_orig_conf('N_KICKS')
-
-        if 'common_remote_opts' in self.wizardObj.conf['nonlin']:
-            self.wizardObj.common_remote_opts.update(
-                self.wizardObj.conf['nonlin']['common_remote_opts'])
 
         # Hook up models to views
 
@@ -2622,23 +2853,29 @@ class PageNKicks(PageGenReport):
             self.registerFieldOnFirstShow(f'spin_{k}', w)
 
         # Set fields
+        self._update_fields()
+
+        # Establish connections
+
+        self._pageInitialized = True
+
+    def _update_fields(self):
+        """"""
 
         try:
-            N_KICKS = self.orig_conf['nonlin']['N_KICKS']
+            N_KICKS = self.conf['nonlin']['N_KICKS']
         except:
             N_KICKS = None
         if N_KICKS is not None:
             for k, v in N_KICKS.items():
                 self.setField(f'spin_{k}', v)
 
-        # Establish connections
-
     def validatePage(self):
         """"""
 
-        mod_conf = self.modify_conf(self.orig_conf)
+        mod_conf = self.modify_conf(self.conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return True
 
@@ -2649,13 +2886,21 @@ class PageNKicks(PageGenReport):
 
         #f = partial(update_aliased_scalar, mod_conf)
 
+        for k in ['recalc', 'replot']:
+            mod_conf['lattice_props'][k] = False
+        for k, v in mod_conf['nonlin']['include'].items():
+            mod_conf['nonlin']['include'][k] = False
+        for k in ['rf', 'lifetime']:
+            if k in mod_conf:
+                mod_conf[k]['include'] = False
+
         for k in ['CSBEND', 'KQUAD', 'KSEXT', 'KOCT']:
             mod_conf['nonlin']['N_KICKS'][k] = self.field(
                 f'spin_{k}')
 
         #_check_if_yaml_writable(mod_conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return mod_conf
 
@@ -2670,10 +2915,11 @@ class PageXYAperTest(PageNonlinCalcTest):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self.set_test_prod_option_fields()
+            return
 
-        self.set_orig_conf('xy_aper_test')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -2709,6 +2955,8 @@ class PageXYAperTest(PageNonlinCalcTest):
         # Establish connections
         self.establish_connections()
 
+        self._pageInitialized = True
+
 class PageFmapXYTest(PageNonlinCalcTest):
     """"""
 
@@ -2720,10 +2968,11 @@ class PageFmapXYTest(PageNonlinCalcTest):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self.set_test_prod_option_fields()
+            return
 
-        self.set_orig_conf('fmap_xy_test')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -2762,6 +3011,8 @@ class PageFmapXYTest(PageNonlinCalcTest):
         # Establish connections
         self.establish_connections()
 
+        self._pageInitialized = True
+
 class PageFmapPXTest(PageNonlinCalcTest):
     """"""
 
@@ -2773,10 +3024,11 @@ class PageFmapPXTest(PageNonlinCalcTest):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self.set_test_prod_option_fields()
+            return
 
-        self.set_orig_conf('fmap_px_test')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -2817,6 +3069,8 @@ class PageFmapPXTest(PageNonlinCalcTest):
         # Establish connections
         self.establish_connections()
 
+        self._pageInitialized = True
+
 class PageCmapXYTest(PageNonlinCalcTest):
     """"""
 
@@ -2828,10 +3082,11 @@ class PageCmapXYTest(PageNonlinCalcTest):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self.set_test_prod_option_fields()
+            return
 
-        self.set_orig_conf('cmap_xy_test')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -2865,6 +3120,8 @@ class PageCmapXYTest(PageNonlinCalcTest):
         # Establish connections
         self.establish_connections()
 
+        self._pageInitialized = True
+
 class PageCmapPXTest(PageNonlinCalcTest):
     """"""
 
@@ -2876,10 +3133,11 @@ class PageCmapPXTest(PageNonlinCalcTest):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self.set_test_prod_option_fields()
+            return
 
-        self.set_orig_conf('cmap_px_test')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -2913,6 +3171,8 @@ class PageCmapPXTest(PageNonlinCalcTest):
         # Establish connections
         self.establish_connections()
 
+        self._pageInitialized = True
+
 class PageMomAperTest(PageNonlinCalcTest):
     """"""
 
@@ -2924,10 +3184,11 @@ class PageMomAperTest(PageNonlinCalcTest):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self.set_test_prod_option_fields()
+            return
 
-        self.set_orig_conf('mom_aper_test')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -2973,6 +3234,8 @@ class PageMomAperTest(PageNonlinCalcTest):
         # Establish connections
         self.establish_connections()
 
+        self._pageInitialized = True
+
 class PageTswa(PageNonlinCalcPlot):
     """"""
 
@@ -2984,10 +3247,11 @@ class PageTswa(PageNonlinCalcPlot):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self.set_calc_plot_option_fields()
+            return
 
-        self.set_orig_conf('tswa')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -3027,6 +3291,8 @@ class PageTswa(PageNonlinCalcPlot):
         # Establish connections
         self.establish_connections()
 
+        self._pageInitialized = True
+
 class PageNonlinChrom(PageNonlinCalcPlot):
     """"""
 
@@ -3038,10 +3304,11 @@ class PageNonlinChrom(PageNonlinCalcPlot):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(True)
+        if self._pageInitialized:
+            self.set_calc_plot_option_fields()
+            return
 
-        self.set_orig_conf('nonlin_chrom')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -3083,6 +3350,8 @@ class PageNonlinChrom(PageNonlinCalcPlot):
         # Establish connections
         self.establish_connections()
 
+        self._pageInitialized = True
+
 class PageNonlinProduction(PageGenReport):
     """"""
 
@@ -3094,9 +3363,11 @@ class PageNonlinProduction(PageGenReport):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
+        if self._pageInitialized:
+            self._update_fields()
+            return
 
-        self.set_orig_conf('nonlin_prod')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -3128,26 +3399,7 @@ class PageNonlinProduction(PageGenReport):
                     raise ValueError()
 
         # Set fields
-
-        ncf = self.orig_conf['nonlin']
-
-        for opt_type in ['include', 'recalc', 'replot']:
-            all_true = True
-            for calc_type in self.all_calc_types:
-                v = ncf[opt_type][calc_type]
-                self.setField(f'check_{opt_type}_{calc_type}', v)
-                if not v:
-                    all_true = False
-            self._checkboxes[f'{opt_type}:all'].setChecked(all_true)
-
-        for calc_type in ['cmap_xy', 'cmap_px']:
-            if f'{calc_type}_plot_opts' in ncf:
-                opts = ncf[f'{calc_type}_plot_opts']
-                for k, v in opts.items():
-                    conv_type = self.setter_getter[calc_type][k]
-                    conv = self.converters[conv_type]['set']
-                    wtype = conv_type.split('_')[0]
-                    self.setField(f'{wtype}_{calc_type}_{k}', conv(v))
+        self._update_fields()
 
         # Establish connections
 
@@ -3172,6 +3424,31 @@ class PageNonlinProduction(PageGenReport):
 
             obj = self._checkboxes[f'replot:{calc_type}']
             obj.clicked.connect(partial(self.uncheck_all, 'replot'))
+
+        self._pageInitialized = True
+
+    def _update_fields(self):
+        """"""
+
+        ncf = self.conf['nonlin']
+
+        for opt_type in ['include', 'recalc', 'replot']:
+            all_true = True
+            for calc_type in self.all_calc_types:
+                v = ncf[opt_type][calc_type]
+                self.setField(f'check_{opt_type}_{calc_type}', v)
+                if not v:
+                    all_true = False
+            self._checkboxes[f'{opt_type}:all'].setChecked(all_true)
+
+        for calc_type in ['cmap_xy', 'cmap_px']:
+            if f'{calc_type}_plot_opts' in ncf:
+                opts = ncf[f'{calc_type}_plot_opts']
+                for k, v in opts.items():
+                    conv_type = self.setter_getter[calc_type][k]
+                    conv = self.converters[conv_type]['set']
+                    wtype = conv_type.split('_')[0]
+                    self.setField(f'{wtype}_{calc_type}_{k}', conv(v))
 
     def change_all_nonlin_calc_type_checkbox_states(self, opt_type, checked):
         """"""
@@ -3202,9 +3479,9 @@ class PageNonlinProduction(PageGenReport):
     def validatePage(self):
         """"""
 
-        mod_conf = self.modify_conf(self.orig_conf)
+        mod_conf = self.modify_conf(self.conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return True
 
@@ -3219,8 +3496,11 @@ class PageNonlinProduction(PageGenReport):
 
         f = partial(update_aliased_scalar, mod_conf)
 
-        mod_conf['lattice_props']['recalc'] = False
-        mod_conf['lattice_props']['replot'] = False
+        for k in ['recalc', 'replot']:
+            mod_conf['lattice_props'][k] = False
+        for k in ['rf', 'lifetime']:
+            if k in mod_conf:
+                mod_conf[k]['include'] = False
 
         ncf = mod_conf['nonlin']
 
@@ -3245,7 +3525,7 @@ class PageNonlinProduction(PageGenReport):
 
         #_check_if_yaml_writable(mod_conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return mod_conf
 
@@ -3260,10 +3540,11 @@ class PageRfTau(PageGenReport):
     def initializePage(self):
         """"""
 
-        self.wizardObj = self.wizard()
-        self.wizardObj.showSkipButton(False)
+        if self._pageInitialized:
+            self._update_fields()
+            return
 
-        self.set_orig_conf('rf_tau')
+        self.wizardObj = self.wizard()
 
         # Hook up models to views
 
@@ -3275,23 +3556,30 @@ class PageRfTau(PageGenReport):
             ('rf_include', check), ('rf_recalc', check),
             ('harmonic_number', spin), ('rf_voltages', edit),
         ]
-        self.tau_list = [
-            ('tau_include', check), ('tau_recalc', check),
-            ('total_beam_current', edit), ('num_filled_bunches', spin),
-            ('max_mom_aper', combo), ('coupling_list', edit),
+        self.tau_calc_list = [
+            ('tau_calc_include', check), ('tau_recalc', check),
+            ('num_filled_bunches', spin), ('max_mom_aper', combo),
+            ('coupling_list', edit),
+        ]
+        self.tau_plot_list = [
+            ('tau_plot_include', check), ('tau_replot', check),
         ]
 
         self.setter_getter = {
             'rf': dict(
                 rf_include='check', rf_recalc='check', harmonic_number='spin',
                 rf_voltages='edit_special'),
-            'tau': dict(
-                tau_include='check', tau_recalc='check',
-                total_beam_current='edit_float', num_filled_bunches='spin',
+            'tau_calc': dict(
+                tau_calc_include='check', tau_recalc='check',
+                num_filled_bunches='spin',
                 max_mom_aper='combo_special', coupling_list='edit_special'),
+            'tau_plot': dict(
+                tau_plot_include='check', tau_replot='check',
+            )
         }
 
-        for k_wtype_list in [self.rf_list, self.tau_list]:
+        for k_wtype_list in [self.rf_list, self.tau_calc_list,
+                             self.tau_plot_list]:
             for k, wtype in k_wtype_list:
                 w_suffix = f_suffix = k
                 if wtype == spin:
@@ -3310,62 +3598,23 @@ class PageRfTau(PageGenReport):
                 else:
                     raise ValueError()
 
+        self.tau_special_data = dict(
+            total_beam_current=[],
+            loss_plots_set={'E_MeV': [], 'rf_V': [], 'coupling': []})
+        for k in list(self.tau_special_data):
+            w = self.findChild(edit, f'lineEdit_{k}')
+            self.registerFieldOnFirstShow(f'edit_{k}', w)
+        self.tau_calc_special_widgets = [
+            self.findChild(edit, 'lineEdit_total_beam_current'),
+            self.findChild(QtWidgets.QPushButton,
+                           'pushButton_edit_total_beam_current'),]
+        self.tau_plot_special_widgets = [
+            self.findChild(edit, 'lineEdit_loss_plots_set'),
+            self.findChild(QtWidgets.QPushButton,
+                           'pushButton_edit_loss_plots_set'),]
+
         # Set fields
-
-        if 'rf_dep_calc_opts' in self.orig_conf:
-            rf = self.orig_conf['rf_dep_calc_opts']
-            #
-            self.setField('check_rf_include', True)
-            self.enable_opts(self.rf_list, True)
-            #
-            conv_type = self.setter_getter['rf']['rf_recalc']
-            conv = self.converters[conv_type]['set']
-            self.setField('check_rf_recalc', conv(rf.get('recalc', False)))
-            #
-            conv_type = self.setter_getter['rf']['harmonic_number']
-            conv = self.converters[conv_type]['set']
-            self.setField('spin_harmonic_number',
-                          conv(rf.get('harmonic_number', 1320)))
-            #
-            conv_type = self.setter_getter['rf']['rf_voltages']
-            conv = partial(self.converters[conv_type]['set'], 'rf_voltages')
-            self.setField('edit_rf_voltages', conv(rf.get('rf_V', [3e6])))
-        else:
-            self.setField('check_rf_include', False)
-            self.enable_opts(self.rf_list, False)
-
-        if 'lifetime_calc_opts' in self.orig_conf:
-            tau = self.orig_conf['lifetime_calc_opts']
-            #
-            self.setField('check_tau_include', True)
-            self.enable_opts(self.tau_list, True)
-            #
-            conv_type = self.setter_getter['tau']['tau_recalc']
-            conv = self.converters[conv_type]['set']
-            self.setField('check_tau_recalc', conv(tau.get('recalc', False)))
-            #
-            conv_type = self.setter_getter['tau']['total_beam_current']
-            conv = self.converters[conv_type]['set']
-            self.setField('edit_total_beam_current',
-                          conv(tau.get('total_beam_current_mA', 5e2)))
-            #
-            conv_type = self.setter_getter['tau']['num_filled_bunches']
-            conv = self.converters[conv_type]['set']
-            self.setField('spin_num_filled_bunches',
-                          conv(tau.get('num_filled_bunches', 1200)))
-            #
-            conv_type = self.setter_getter['tau']['max_mom_aper']
-            conv = partial(self.converters[conv_type]['set'], 'max_mom_aper')
-            self.setField('combo_max_mom_aper', conv(
-                tau.get('max_mom_aper_percent', None)))
-            #
-            conv_type = self.setter_getter['tau']['coupling_list']
-            conv = partial(self.converters[conv_type]['set'], 'coupling_list')
-            self.setField('edit_coupling_list', conv(
-                tau.get('coupling', ['8pm', '100%'])))
-        else:
-            self.setField('check_tau_include', False)
-            self.enable_opts(self.tau_list, False)
+        self._update_fields()
 
         # Establish connections
 
@@ -3374,13 +3623,242 @@ class PageRfTau(PageGenReport):
         w = self.findChild(check, 'checkBox_rf_include')
         w.stateChanged.connect(partial(self.enable_opts, self.rf_list))
 
-        w = self.findChild(check, 'checkBox_tau_include')
-        w.stateChanged.connect(partial(self.enable_opts, self.tau_list))
+        w = self.findChild(check, 'checkBox_tau_calc_include')
+        w.stateChanged.connect(partial(self.enable_opts, self.tau_calc_list))
+        w.stateChanged.connect(partial(self.enable_special_opts,
+                                       self.tau_calc_special_widgets))
+
+        w = self.findChild(check, 'checkBox_tau_plot_include')
+        w.stateChanged.connect(partial(self.enable_opts, self.tau_plot_list))
+        w.stateChanged.connect(partial(self.enable_special_opts,
+                                       self.tau_plot_special_widgets))
 
         w = self.findChild(combo, 'comboBox_max_mom_aper')
         w.currentTextChanged.connect(self.setEditable_comboBox_max_mom_aper)
         self.setEditable_comboBox_max_mom_aper(w.currentText())
 
+        w = self.findChild(QtWidgets.QPushButton,
+                           f'pushButton_edit_total_beam_current')
+        w.clicked.connect(self.edit_total_beam_current)
+
+        w = self.findChild(QtWidgets.QPushButton,
+                           f'pushButton_edit_loss_plots_set')
+        w.clicked.connect(self.edit_loss_plots_set)
+
+        self._pageInitialized = True
+
+    def edit_total_beam_current(self):
+        """"""
+
+        data = []
+        for i, E_MeV in enumerate(self.E_MeV_list):
+            try:
+                mA = self.tau_special_data['total_beam_current'][i]
+            except:
+                mA = None
+            data.append([E_MeV / 1e3, mA])
+
+        dialog = TotalBeamCurrentEditor(data)
+        dialog.exec()
+
+        if dialog.result() == QtWidgets.QDialog.Accepted:
+            total_beam_current_mA_list = [a[1] for a in data]
+            self.update_total_beam_current_view(total_beam_current_mA_list)
+
+    def update_total_beam_current_view(self, total_beam_current_mA_list):
+        """"""
+
+        self.tau_special_data['total_beam_current'] = total_beam_current_mA_list
+
+        self.setField(
+            'edit_total_beam_current', ', '.join([
+                f'{mA:.1f} ({E_MeV/1e3:.2g} GeV)' for E_MeV, mA
+                in zip(self.E_MeV_list, total_beam_current_mA_list)])
+        )
+
+    def edit_loss_plots_set(self):
+        """"""
+
+        loss_plots_set = self.tau_special_data['loss_plots_set']
+        assert len(loss_plots_set['E_MeV']) == len(loss_plots_set['rf_V']) == \
+               len(loss_plots_set['coupling'])
+        data = {'loss_plots_set': list(zip(loss_plots_set['E_MeV'],
+                                           loss_plots_set['rf_V'],
+                                           loss_plots_set['coupling']))}
+
+        data['E_GeV'] = np.array(self.E_MeV_list) / 1e3
+
+        rf_volts = self._get_rf_volts()
+        data['rf_MV'] = np.array(rf_volts) / 1e6
+
+        coupling_list = self._get_coupling_list()
+        data['coupling'] = coupling_list
+
+        dialog = LossPlotsSetEditor(data)
+        dialog.exec()
+
+        if dialog.result() == QtWidgets.QDialog.Accepted:
+            loss_plots_set = data['loss_plots_set']
+            loss_plots_indexes = {'E_MeV': [], 'rf_V': [], 'coupling': []}
+            for iGeV, iVolt, iCoup in data['loss_plots_set']:
+                loss_plots_indexes['E_MeV'].append(iGeV)
+                loss_plots_indexes['rf_V'].append(iVolt)
+                loss_plots_indexes['coupling'].append(iCoup)
+            self.update_loss_plots_set_view(
+                loss_plots_indexes, rf_volts, coupling_list)
+
+    def _get_rf_volts(self):
+        """"""
+        conv_type = self.setter_getter['rf']['rf_voltages']
+        conv = partial(self.converters[conv_type]['get'], 'rf_voltages')
+        rf_volts = conv(self.field('edit_rf_voltages'))
+
+        return rf_volts
+
+    def _get_coupling_list(self):
+        """"""
+
+        conv_type = self.setter_getter['tau_calc']['coupling_list']
+        conv = partial(self.converters[conv_type]['get'], 'coupling_list')
+        coupling_list = conv(self.field('edit_coupling_list'))
+
+        return coupling_list
+
+    def update_loss_plots_set_view(
+        self, loss_plots_indexes, rf_volts, coupling_list):
+        """"""
+
+        self.tau_special_data['loss_plots_set'] = loss_plots_indexes
+
+        try:
+            s = ', '.join([
+                (f'({self.E_MeV_list[iGeV]/1e3:.2g}GeV, '
+                 f'{rf_volts[iVolt]/1e6:.2g}MV, {coupling_list[iCoup]})')
+                for iGeV, iVolt, iCoup in zip(
+                    loss_plots_indexes['E_MeV'], loss_plots_indexes['rf_V'],
+                    loss_plots_indexes['coupling'])])
+        except:
+            s = ''
+            for k, v in self.tau_special_data['loss_plots_set'].items():
+                v.clear()
+
+        self.setField('edit_loss_plots_set', s)
+
+    def _update_fields(self):
+        """"""
+
+        if 'rf' in self.conf:
+            rf = self.conf['rf']
+            #
+            if rf.get('include', True):
+                self.setField('check_rf_include', True)
+                self.enable_opts(self.rf_list, True)
+            else:
+                self.setField('check_rf_include', False)
+                self.enable_opts(self.rf_list, False)
+            #
+            conv_type = self.setter_getter['rf']['rf_recalc']
+            conv = self.converters[conv_type]['set']
+            self.setField('check_rf_recalc', conv(rf.get('recalc', False)))
+            #
+            if 'calc_opts' in rf:
+                calc_opts = rf['calc_opts']
+                conv_type = self.setter_getter['rf']['harmonic_number']
+                conv = self.converters[conv_type]['set']
+                self.setField('spin_harmonic_number',
+                              conv(calc_opts.get('harmonic_number', 1320)))
+                #
+                conv_type = self.setter_getter['rf']['rf_voltages']
+                conv = partial(self.converters[conv_type]['set'], 'rf_voltages')
+                self.setField('edit_rf_voltages', conv(calc_opts.get('rf_V', [3e6])))
+        else:
+            self.setField('check_rf_include', False)
+            self.enable_opts(self.rf_list, False)
+
+        if 'lifetime' not in self.conf:
+
+            self.setField('check_tau_calc_include', False)
+            self.enable_opts(self.tau_calc_list, False)
+            self.enable_special_opts(self.tau_calc_special_widgets, False)
+
+            self.setField('check_tau_plot_include', False)
+            self.enable_opts(self.tau_plot_list, False)
+            self.enable_special_opts(self.tau_plot_special_widgets, False)
+
+        else:
+
+            lifetime = self.conf['lifetime']
+
+            if lifetime.get('include', True):
+                self.setField('check_tau_calc_include', True)
+                self.enable_opts(self.tau_calc_list, True)
+                self.enable_special_opts(self.tau_calc_special_widgets, True)
+
+                if 'plot_opts' in lifetime:
+                    self.setField('check_tau_plot_include', True)
+                    self.enable_opts(self.tau_plot_list, True)
+                    self.enable_special_opts(self.tau_plot_special_widgets, True)
+                else:
+                    self.setField('check_tau_plot_include', False)
+                    self.enable_opts(self.tau_plot_list, False)
+                    self.enable_special_opts(self.tau_plot_special_widgets, False)
+            else:
+                self.setField('check_tau_calc_include', False)
+                self.enable_opts(self.tau_calc_list, False)
+                self.enable_special_opts(self.tau_calc_special_widgets, False)
+
+                self.setField('check_tau_plot_include', False)
+                self.enable_opts(self.tau_plot_list, False)
+                self.enable_special_opts(self.tau_plot_special_widgets, False)
+
+            conv_type = self.setter_getter['tau_calc']['tau_recalc']
+            conv = self.converters[conv_type]['set']
+            self.setField('check_tau_recalc', conv(lifetime.get('recalc', False)))
+
+            conv_type = self.setter_getter['tau_plot']['tau_replot']
+            conv = self.converters[conv_type]['set']
+            self.setField('check_tau_replot', conv(lifetime.get('replot', False)))
+
+            E_MeV_list = self.conf['E_MeV']
+            if not isinstance(E_MeV_list, list):
+                E_MeV_list = [E_MeV_list]
+            n_E_MeV = len(E_MeV_list)
+            #
+            self.E_MeV_list = E_MeV_list
+
+            if 'calc_opts' in lifetime:
+                calc_opts = lifetime['calc_opts']
+
+                total_beam_current_mA_list = calc_opts.get(
+                    'total_beam_current_mA', 5e2)
+                if not isinstance(total_beam_current_mA_list, list):
+                    total_beam_current_mA_list = \
+                        [total_beam_current_mA_list] * n_E_MeV
+                if len(total_beam_current_mA_list) == n_E_MeV:
+                    self.update_total_beam_current_view(total_beam_current_mA_list)
+
+                conv_type = self.setter_getter['tau_calc']['num_filled_bunches']
+                conv = self.converters[conv_type]['set']
+                self.setField('spin_num_filled_bunches',
+                              conv(calc_opts.get('num_filled_bunches', 1200)))
+                #
+                conv_type = self.setter_getter['tau_calc']['max_mom_aper']
+                conv = partial(self.converters[conv_type]['set'], 'max_mom_aper')
+                self.setField('combo_max_mom_aper', conv(
+                    calc_opts.get('max_mom_aper_percent', None)))
+                #
+                conv_type = self.setter_getter['tau_calc']['coupling_list']
+                conv = partial(self.converters[conv_type]['set'], 'coupling_list')
+                self.setField('edit_coupling_list', conv(
+                    calc_opts.get('coupling', ['8pm', '100%'])))
+
+            if 'plot_opts' in lifetime:
+                plot_opts = lifetime['plot_opts']
+                loss_plots_indexes = plot_opts.get(
+                    'loss_plots_indexes', dict(E_MeV=[], rf_V=[], coupling=[]))
+                self.update_loss_plots_set_view(
+                    loss_plots_indexes, self._get_rf_volts(),
+                    self._get_coupling_list())
 
     def setEditable_comboBox_max_mom_aper(self, new_text):
         """"""
@@ -3429,6 +3907,12 @@ class PageRfTau(PageGenReport):
 
         return super().eventFilter(widget, event)
 
+    def enable_special_opts(self, widget_list, enabled):
+        """"""
+
+        for w in widget_list:
+            w.setEnabled(enabled)
+
     def enable_opts(self, k_wtype_list, enabled):
         """"""
 
@@ -3458,11 +3942,11 @@ class PageRfTau(PageGenReport):
         """"""
 
         try:
-            mod_conf = self.modify_conf(self.orig_conf)
+            mod_conf = self.modify_conf(self.conf)
         except AssertionError:
             return False
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return True
 
@@ -3477,54 +3961,80 @@ class PageRfTau(PageGenReport):
 
         f = partial(update_aliased_scalar, mod_conf)
 
+        for k in ['recalc', 'replot']:
+            mod_conf['lattice_props'][k] = False
+
+        ncf = mod_conf['nonlin']
+        for opt_type in ['recalc', 'replot']:
+            for calc_type in self.all_calc_types:
+                ncf[opt_type][calc_type] = False
+
         conv_type = self.setter_getter['rf']['rf_include']
         conv = self.converters[conv_type]['get']
         if conv(self.field('check_rf_include')):
-            if 'rf_dep_calc_opts' not in mod_conf:
-                f(mod_conf, 'rf_dep_calc_opts', CommentedMap({}))
+            if 'rf' not in mod_conf:
+                yaml_append_map(mod_conf, 'rf', CommentedMap({}))
             #
-            rf = mod_conf['rf_dep_calc_opts']
+            rf = mod_conf['rf']
+            rf['include'] = True
             #
             conv_type = self.setter_getter['rf']['rf_recalc']
             conv = self.converters[conv_type]['get']
-            f(rf, 'recalc', conv(self.field('check_rf_recalc')))
+            rf['recalc'] = conv(self.field('check_rf_recalc'))
+            #
+            if 'calc_opts' not in rf:
+                yaml_append_map(rf, 'calc_opts', CommentedMap({}))
+            #
+            calc_opts = rf['calc_opts']
             #
             conv_type = self.setter_getter['rf']['harmonic_number']
             conv = self.converters[conv_type]['get']
-            f(rf, 'harmonic_number', conv(self.field('spin_harmonic_number')))
+            calc_opts['harmonic_number'] = conv(self.field('spin_harmonic_number'))
             #
             conv_type = self.setter_getter['rf']['rf_voltages']
             conv = partial(self.converters[conv_type]['get'], 'rf_voltages')
             v = conv(self.field('edit_rf_voltages'))
             seq = CommentedSeq(v)
             seq.fa.set_flow_style()
-            f(rf, 'rf_V', seq)
+            calc_opts['rf_V'] = seq
         else:
-            if 'rf_dep_calc_opts' in mod_conf:
-                del mod_conf['rf_dep_calc_opts']
+            if 'rf' in mod_conf:
+                mod_conf['rf']['include'] = False
 
-        conv_type = self.setter_getter['tau']['tau_include']
+        conv_type = self.setter_getter['tau_calc']['tau_calc_include']
         conv = self.converters[conv_type]['get']
-        if conv(self.field('check_tau_include')):
-            if 'lifetime_calc_opts' not in mod_conf:
-                f(mod_conf, 'lifetime_calc_opts', CommentedMap({}))
+        if conv(self.field('check_tau_calc_include')):
+            if 'lifetime' not in mod_conf:
+                yaml_append_map(mod_conf, 'lifetime', CommentedMap({}))
             #
-            tau = mod_conf['lifetime_calc_opts']
+            lifetime = mod_conf['lifetime']
+            lifetime['include'] = True
             #
-            conv_type = self.setter_getter['tau']['tau_recalc']
+            conv_type = self.setter_getter['tau_calc']['tau_recalc']
             conv = self.converters[conv_type]['get']
-            f(tau, 'recalc', conv(self.field('check_tau_recalc')))
+            lifetime['recalc'] = conv(self.field('check_tau_recalc'))
             #
-            conv_type = self.setter_getter['tau']['total_beam_current']
+            if 'calc_opts' not in lifetime:
+                yaml_append_map(lifetime, 'calc_opts', CommentedMap({}))
+            #
+            calc_opts = lifetime['calc_opts']
+            #
+            n_E_MeV = len(self.E_MeV_list)
+            if len(self.tau_special_data['total_beam_current']) != n_E_MeV:
+                raise AssertionError(
+                    (f'Since you specified {n_E_MeV} energy values, you must '
+                     f'also specify the same number of total beam current '
+                     f'values for lifetime computation.'))
+            seq = CommentedSeq(self.tau_special_data['total_beam_current'])
+            seq.fa.set_flow_style()
+            calc_opts['total_beam_current_mA'] = seq
+            #
+            conv_type = self.setter_getter['tau_calc']['num_filled_bunches']
             conv = self.converters[conv_type]['get']
-            f(tau, 'total_beam_current_mA',
-              conv(self.field('edit_total_beam_current')))
+            calc_opts['num_filled_bunches'] = conv(
+                self.field('spin_num_filled_bunches'))
             #
-            conv_type = self.setter_getter['tau']['num_filled_bunches']
-            conv = self.converters[conv_type]['get']
-            f(tau, 'num_filled_bunches', conv(self.field('spin_num_filled_bunches')))
-            #
-            conv_type = self.setter_getter['tau']['max_mom_aper']
+            conv_type = self.setter_getter['tau_calc']['max_mom_aper']
             conv = partial(self.converters[conv_type]['get'], 'max_mom_aper')
             v = conv(self.field('combo_max_mom_aper'))
             if v not in (None, 'auto') and not isinstance(v, float):
@@ -3533,9 +4043,9 @@ class PageRfTau(PageGenReport):
                     f'"max_mom_aper" must be None, "auto", or a float')
                 showInvalidPageInputDialog(text, info_text)
                 raise AssertionError
-            f(tau, 'max_mom_aper_percent', v)
+            calc_opts['max_mom_aper_percent'] = v
             #
-            conv_type = self.setter_getter['tau']['coupling_list']
+            conv_type = self.setter_getter['tau_calc']['coupling_list']
             conv = partial(self.converters[conv_type]['get'], 'coupling_list')
             v = conv(self.field('edit_coupling_list'))
             def _coupling_list_error_msg():
@@ -3562,14 +4072,202 @@ class PageRfTau(PageGenReport):
                     raise AssertionError
             seq = CommentedSeq(v)
             seq.fa.set_flow_style()
-            f(tau, 'coupling', seq)
-        else:
-            if 'lifetime_calc_opts' in mod_conf:
-                del mod_conf['lifetime_calc_opts']
+            calc_opts['coupling'] = seq
 
+            conv_type = self.setter_getter['tau_plot']['tau_plot_include']
+            conv = self.converters[conv_type]['get']
+            if conv(self.field('check_tau_plot_include')):
+                conv_type = self.setter_getter['tau_plot']['tau_replot']
+                conv = self.converters[conv_type]['get']
+                lifetime['replot'] = conv(self.field('check_tau_replot'))
+                #
+                if 'plot_opts' not in lifetime:
+                    loss_plots_indexes = CommentedMap({})
+                    for _k in ['E_MeV', 'rf_V', 'coupling']:
+                        seq = CommentedSeq([])
+                        seq.fa.set_flow_style()
+                        yaml_append_map(loss_plots_indexes, _k, seq)
+                    yaml_append_map(
+                        lifetime, 'plot_opts',
+                        CommentedMap({'loss_plots_indexes': loss_plots_indexes}))
+                #
+                plot_opts = lifetime['plot_opts']
+                if 'loss_plots_indexes' not in plot_opts:
+                    loss_plots_indexes = CommentedMap({})
+                    for _k in ['E_MeV', 'rf_V', 'coupling']:
+                        seq = CommentedSeq([])
+                        seq.fa.set_flow_style()
+                        yaml_append_map(loss_plots_indexes, _k, seq)
+                    yaml_append_map(plot_opts, 'loss_plots_indexes',
+                                    loss_plots_indexes)
+                #
+                loss_plots_indexes = plot_opts['loss_plots_indexes']
+                #
+                for _k, _v in self.tau_special_data['loss_plots_set'].items():
+                    loss_plots_indexes[_k].clear()
+                    loss_plots_indexes[_k].extend(_v)
+
+        else:
+            if 'lifetime' in mod_conf:
+                mod_conf['lifetime']['include'] = False
 
         #_check_if_yaml_writable(mod_conf)
 
-        self.mod_conf = mod_conf
+        self.wizardObj.update_conf_on_all_pages(mod_conf)
 
         return mod_conf
+
+class TotalBeamCurrentEditor(QtWidgets.QDialog):
+    """"""
+
+    def __init__(self, data, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+        ui_file = os.path.join(os.path.dirname(__file__),
+                               'total_beam_current_editor.ui')
+        uic.loadUi(ui_file, self)
+
+        self.data = data
+
+        QTableWidgetItem = QtWidgets.QTableWidgetItem
+
+        t = self.tableWidget
+
+        t.setRowCount(len(data))
+        t.setColumnCount(2)
+        self.iGeV, self.iCurrent = 0, 1
+        t.setHorizontalHeaderItem(self.iGeV, QTableWidgetItem('E [GeV]'))
+        t.setHorizontalHeaderItem(self.iCurrent,
+                                  QTableWidgetItem('Total Beam Current [mA]'))
+        for iRow, (E_GeV, I_total_mA) in enumerate(data):
+            item = QTableWidgetItem(f'{E_GeV:.2g}')
+            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            t.setItem(iRow, self.iGeV, item)
+            if I_total_mA is None:
+                text = ''
+            else:
+                text = f'{I_total_mA:.0f}'
+            t.setItem(iRow, self.iCurrent, QTableWidgetItem(text))
+
+        self.tableWidget.resizeColumnsToContents()
+
+        self.accepted.connect(self.apply_changes)
+
+    def apply_changes(self):
+        """"""
+
+        t = self.tableWidget
+
+        for iRow in range(t.rowCount()):
+            self.data[iRow][self.iCurrent] = float(
+                t.item(iRow, self.iCurrent).text())
+
+class LossPlotsSetEditor(QtWidgets.QDialog):
+    """"""
+
+    def __init__(self, data, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+        ui_file = os.path.join(os.path.dirname(__file__),
+                               'total_beam_current_editor.ui')
+        uic.loadUi(ui_file, self)
+
+        self.setWindowTitle('Index Set for Loss Plots')
+        self.label.setText('Check sets for which you want loss plots:')
+
+        self.data = data
+
+        loss_plots_set = data['loss_plots_set']
+        E_GeV_list = data['E_GeV']
+        rf_MV_list = data['rf_MV']
+        coupling_list = data['coupling']
+
+        QTableWidgetItem = QtWidgets.QTableWidgetItem
+
+        t = self.tableWidget
+
+        t.setRowCount(len(E_GeV_list) * len(rf_MV_list) * len(coupling_list) + 1)
+        t.setColumnCount(4)
+        self.iSel, self.iGeV, self.iVolt, self.iCoup = 0, 1, 2, 3
+        t.setHorizontalHeaderItem(self.iSel, QTableWidgetItem('Plot'))
+        t.setHorizontalHeaderItem(self.iGeV, QTableWidgetItem('E [GeV]'))
+        t.setHorizontalHeaderItem(self.iVolt, QTableWidgetItem('V_RF [MV]'))
+        t.setHorizontalHeaderItem(self.iCoup, QTableWidgetItem('Couplng'))
+        iRow = 0
+        check_all_item = QTableWidgetItem('All')
+        check_all_item.setFlags(check_all_item.flags() | Qt.ItemIsUserCheckable)
+        t.setItem(iRow, self.iSel, check_all_item)
+        iRow += 1
+        all_checked = True
+        for iGeV, E_GeV in enumerate(E_GeV_list):
+            for iVolt, MV in enumerate(rf_MV_list):
+                for iCoup, coupling in enumerate(coupling_list):
+                    item = QTableWidgetItem()
+                    item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                    if (iGeV, iVolt, iCoup) in loss_plots_set:
+                        item.setCheckState(Qt.Checked)
+                    else:
+                        item.setCheckState(Qt.Unchecked)
+                        all_checked = False
+                    t.setItem(iRow, self.iSel, item)
+
+                    item = QTableWidgetItem(f'{E_GeV:.2g}')
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                    t.setItem(iRow, self.iGeV, item)
+
+                    item = QTableWidgetItem(f'{MV:.3g}')
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                    t.setItem(iRow, self.iVolt, item)
+
+                    item = QTableWidgetItem(f'{coupling}')
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                    t.setItem(iRow, self.iCoup, item)
+
+                    iRow += 1
+
+        if all_checked:
+            check_all_item.setCheckState(Qt.Checked)
+        else:
+            check_all_item.setCheckState(Qt.Unchecked)
+
+        self.tableWidget.resizeColumnsToContents()
+        self.tableWidget.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectRows)
+
+        self.accepted.connect(self.apply_changes)
+
+        self.tableWidget.itemChanged.connect(
+            partial(self.check_all, check_all_item))
+
+    def check_all(self, check_all_item, changed_item):
+        """"""
+
+        if changed_item is check_all_item:
+            new_state = check_all_item.checkState()
+            for iRow in range(1, self.tableWidget.rowCount()):
+                self.tableWidget.item(iRow, self.iSel).setCheckState(new_state)
+
+    def apply_changes(self):
+        """"""
+
+        data = self.data
+
+        E_GeV_list = data['E_GeV']
+        rf_MV_list = data['rf_MV']
+        coupling_list = data['coupling']
+
+        t = self.tableWidget
+
+        data['loss_plots_set'].clear()
+
+        iRow = 1
+        for iGeV, E_GeV in enumerate(E_GeV_list):
+            for iVolt, MV in enumerate(rf_MV_list):
+                for iCoup, coupling in enumerate(coupling_list):
+
+                    if t.item(iRow, self.iSel).checkState() == Qt.Checked:
+                        data['loss_plots_set'].append((iGeV, iVolt, iCoup))
+
+                    iRow += 1

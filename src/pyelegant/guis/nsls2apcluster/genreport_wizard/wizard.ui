@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Lattice Report Generator Wizard</string>
+   <string>Lattice Report Generator Wizard v1.1</string>
   </property>
   <property name="wizardStyle">
    <enum>QWizard::ModernStyle</enum>
@@ -465,7 +465,7 @@ p, li { white-space: pre-wrap; }
        <widget class="QLineEdit" name="lineEdit_E_GeV">
         <property name="maximumSize">
          <size>
-          <width>41</width>
+          <width>100</width>
           <height>16777215</height>
          </size>
         </property>
@@ -2452,6 +2452,9 @@ p, li { white-space: pre-wrap; }
                     <height>16777215</height>
                    </size>
                   </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
+                  </property>
                   <property name="text">
                    <string>15:00</string>
                   </property>
@@ -2645,6 +2648,9 @@ p, li { white-space: pre-wrap; }
                     <width>100</width>
                     <height>16777215</height>
                    </size>
+                  </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
                   </property>
                  </widget>
                 </item>
@@ -3293,6 +3299,9 @@ n_lines</string>
                     <height>16777215</height>
                    </size>
                   </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
+                  </property>
                   <property name="text">
                    <string>15:00</string>
                   </property>
@@ -3553,6 +3562,9 @@ n_lines</string>
                     <height>16777215</height>
                    </size>
                   </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -3714,7 +3726,7 @@ delta_offset</string>
         <item>
          <widget class="QTabWidget" name="tabWidget_fmap_px">
           <property name="currentIndex">
-           <number>1</number>
+           <number>0</number>
           </property>
           <widget class="QWidget" name="tab_19">
            <attribute name="title">
@@ -4203,6 +4215,9 @@ delta_offset</string>
                     <height>16777215</height>
                    </size>
                   </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
+                  </property>
                   <property name="text">
                    <string>15:00</string>
                   </property>
@@ -4462,6 +4477,9 @@ delta_offset</string>
                     <width>100</width>
                     <height>16777215</height>
                    </size>
+                  </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
                   </property>
                  </widget>
                 </item>
@@ -4799,6 +4817,9 @@ delta_offset</string>
                     <height>16777215</height>
                    </size>
                   </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
+                  </property>
                   <property name="text">
                    <string>15:00</string>
                   </property>
@@ -5006,6 +5027,9 @@ delta_offset</string>
                     <height>16777215</height>
                    </size>
                   </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -5169,7 +5193,7 @@ delta_offset
         <item>
          <widget class="QTabWidget" name="tabWidget_cmap_px">
           <property name="currentIndex">
-           <number>1</number>
+           <number>0</number>
           </property>
           <widget class="QWidget" name="tab_29">
            <attribute name="title">
@@ -5343,6 +5367,9 @@ delta_offset
                     <width>100</width>
                     <height>16777215</height>
                    </size>
+                  </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
                   </property>
                   <property name="text">
                    <string>15:00</string>
@@ -5550,6 +5577,9 @@ delta_offset
                     <width>100</width>
                     <height>16777215</height>
                    </size>
+                  </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
                   </property>
                  </widget>
                 </item>
@@ -6371,9 +6401,12 @@ delta_offset</string>
                  <widget class="QLineEdit" name="lineEdit_time_mom_aper_test">
                   <property name="maximumSize">
                    <size>
-                    <width>51</width>
+                    <width>100</width>
                     <height>16777215</height>
                    </size>
+                  </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
                   </property>
                   <property name="text">
                    <string>15:00</string>
@@ -6791,9 +6824,12 @@ delta_offset</string>
                  <widget class="QLineEdit" name="lineEdit_time_mom_aper_prod">
                   <property name="maximumSize">
                    <size>
-                    <width>51</width>
+                    <width>100</width>
                     <height>16777215</height>
                    </size>
+                  </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
                   </property>
                   <property name="text">
                    <string/>
@@ -7351,6 +7387,9 @@ delta_positive_limit</string>
                     <width>91</width>
                     <height>16777215</height>
                    </size>
+                  </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
                   </property>
                   <property name="text">
                    <string>15:00</string>
@@ -8294,6 +8333,9 @@ nx, ny:= 50</string>
                     <width>91</width>
                     <height>16777215</height>
                    </size>
+                  </property>
+                  <property name="toolTip">
+                   <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
                   </property>
                   <property name="text">
                    <string>15:00</string>
@@ -9582,7 +9624,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
       <widget class="QWidget" name="">
        <layout class="QVBoxLayout" name="verticalLayout_192">
         <item>
-         <widget class="QTabWidget" name="tabWidget_nonlin_plot_opts_2">
+         <widget class="QTabWidget" name="tabWidget_rf_tau_opts">
           <property name="currentIndex">
            <number>0</number>
           </property>
@@ -9687,7 +9729,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                    </size>
                   </property>
                   <property name="text">
-                   <string>1, 1.5, 2, 2.5, 3</string>
+                   <string>1.5, 2, 2.5, 3</string>
                   </property>
                  </widget>
                 </item>
@@ -9712,13 +9754,13 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
           </widget>
           <widget class="QWidget" name="tab_54">
            <attribute name="title">
-            <string>Lifetime</string>
+            <string>Lifetime Calc</string>
            </attribute>
            <layout class="QVBoxLayout" name="verticalLayout_191">
             <item>
-             <layout class="QHBoxLayout" name="horizontalLayout_107">
+             <layout class="QHBoxLayout" name="horizontalLayout_108">
               <item>
-               <widget class="QCheckBox" name="checkBox_tau_include">
+               <widget class="QCheckBox" name="checkBox_tau_calc_include">
                 <property name="maximumSize">
                  <size>
                   <width>51</width>
@@ -9730,51 +9772,6 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                 </property>
                 <property name="checked">
                  <bool>false</bool>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QCheckBox" name="checkBox_tau_recalc">
-                <property name="maximumSize">
-                 <size>
-                  <width>51</width>
-                  <height>16777215</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Re-calc</string>
-                </property>
-                <property name="checked">
-                 <bool>false</bool>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QLabel" name="label_195">
-                <property name="maximumSize">
-                 <size>
-                  <width>300</width>
-                  <height>16777215</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Total Beam Current [mA]:</string>
-                </property>
-                <property name="alignment">
-                 <set>Qt::AlignCenter</set>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QLineEdit" name="lineEdit_total_beam_current">
-                <property name="maximumSize">
-                 <size>
-                  <width>51</width>
-                  <height>16777215</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>500</string>
                 </property>
                </widget>
               </item>
@@ -9814,22 +9811,64 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                </widget>
               </item>
               <item>
-               <spacer name="horizontalSpacer_77">
-                <property name="orientation">
-                 <enum>Qt::Horizontal</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
+               <widget class="QLabel" name="label_195">
+                <property name="maximumSize">
                  <size>
-                  <width>40</width>
-                  <height>20</height>
+                  <width>300</width>
+                  <height>16777215</height>
                  </size>
                 </property>
-               </spacer>
+                <property name="text">
+                 <string>Total Beam Current [mA]:</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLineEdit" name="lineEdit_total_beam_current">
+                <property name="text">
+                 <string/>
+                </property>
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_edit_total_beam_current">
+                <property name="maximumSize">
+                 <size>
+                  <width>31</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Edit</string>
+                </property>
+               </widget>
               </item>
              </layout>
             </item>
             <item>
-             <layout class="QHBoxLayout" name="horizontalLayout_108">
+             <layout class="QHBoxLayout" name="horizontalLayout_107">
+              <item>
+               <widget class="QCheckBox" name="checkBox_tau_recalc">
+                <property name="maximumSize">
+                 <size>
+                  <width>51</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Re-calc</string>
+                </property>
+                <property name="checked">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
               <item>
                <widget class="QLabel" name="label_198">
                 <property name="maximumSize">
@@ -9895,6 +9934,105 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                 </property>
                 <property name="text">
                  <string>8pm, 100%</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="tab_55">
+           <attribute name="title">
+            <string>Lifetime Plots</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="verticalLayout_195">
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_110">
+              <item>
+               <widget class="QCheckBox" name="checkBox_tau_plot_include">
+                <property name="maximumSize">
+                 <size>
+                  <width>51</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Include</string>
+                </property>
+                <property name="checked">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="checkBox_tau_replot">
+                <property name="maximumSize">
+                 <size>
+                  <width>51</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Re-plot</string>
+                </property>
+                <property name="checked">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="horizontalSpacer_77">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_111">
+              <item>
+               <widget class="QLabel" name="label_200">
+                <property name="maximumSize">
+                 <size>
+                  <width>71</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Loss Plots Set:</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLineEdit" name="lineEdit_loss_plots_set">
+                <property name="text">
+                 <string/>
+                </property>
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_edit_loss_plots_set">
+                <property name="maximumSize">
+                 <size>
+                  <width>31</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Edit</string>
                 </property>
                </widget>
               </item>
@@ -10399,12 +10537,12 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
   <tabstop>tabWidget_std_nonlin_prod</tabstop>
   <tabstop>listView_stdout_nonlin_prod</tabstop>
   <tabstop>listView_stderr_nonlin_prod</tabstop>
-  <tabstop>tabWidget_nonlin_plot_opts_2</tabstop>
+  <tabstop>tabWidget_rf_tau_opts</tabstop>
   <tabstop>checkBox_rf_include</tabstop>
   <tabstop>checkBox_rf_recalc</tabstop>
   <tabstop>spinBox_harmonic_number</tabstop>
   <tabstop>lineEdit_rf_voltages</tabstop>
-  <tabstop>checkBox_tau_include</tabstop>
+  <tabstop>checkBox_tau_calc_include</tabstop>
   <tabstop>checkBox_tau_recalc</tabstop>
   <tabstop>lineEdit_total_beam_current</tabstop>
   <tabstop>spinBox_num_filled_bunches</tabstop>
