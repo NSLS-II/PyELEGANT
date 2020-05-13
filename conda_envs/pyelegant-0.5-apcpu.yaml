@@ -17,7 +17,8 @@
 # --- Notes on how this environment was exported into this YAML file.
 # $ conda env export --no-builds -n pyelegant-0.5 > pyelegant-0.5-apcpu.yaml
 # --- Notes on how this environment can be reproduced from this YAML file.
-
+# $ rm -r ~/.cache/pip
+# $ conda env create -f pyelegant-0.5-apcpu.yaml -n test_env
 name: pyelegant
 channels:
   - https://conda.anaconda.org/conda-forge
