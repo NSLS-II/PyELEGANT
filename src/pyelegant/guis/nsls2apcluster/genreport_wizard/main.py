@@ -201,9 +201,14 @@ class ReportWizard(QtWidgets.QWizard):
             self.common_remote_opts.update(
                 self.conf['nonlin']['common_remote_opts'])
 
-if __name__ == '__main__':
+def main():
+    """"""
 
     app = QtWidgets.QApplication(sys.argv)
     window = ReportWizard()
     window.show()
     app.exec_()
+
+if __name__ == '__main__':
+
+    main()

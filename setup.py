@@ -86,6 +86,7 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
 
     entry_points = {}
     if facility_name == 'nsls2apcluster':
+        gui_folderpath = 'pyelegant.guis.nsls2apcluster'
         entry_points = dict(
             console_scripts = [
                 'pyele_report = pyelegant.scripts.genreport:main',
@@ -95,12 +96,14 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
             ],
             gui_scripts = [
                 # GUI
-                'pyele_gui_slurm = pyelegant.guis.nsls2apcluster.cluster_status.main:main',
+                f'pyele_gui_slurm = {gui_folderpath}.cluster_status.main:main',
+                f'pyele_gui_report_wiz = {gui_folderpath}.genreport_wizard.main:main',
             ],
         )
 
     if facility_name == 'nsls2apcluster':
-        package_data['pyelegant.guis.nsls2apcluster.cluster_status'] = ['*.ui']
+        package_data[f'{gui_folderpath}.cluster_status'] = ['*.ui']
+        package_data[f'{gui_folderpath}.genreport_wizard'] = ['*.ui']
 
     other_setup_opts = dict(
         install_requires=req_pakcages,

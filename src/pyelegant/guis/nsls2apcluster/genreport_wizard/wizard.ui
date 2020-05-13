@@ -10129,121 +10129,121 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
   <customwidget>
    <class>PageLoadSeedConfig</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageLTE</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageNewSetup</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageStraightCenters</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageStraightDrifts</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PagePhaseAdv</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageGenReportTest1</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageTwissPlots</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageParagraphs</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageNKicks</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageXYAperTest</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageFmapXYTest</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageFmapPXTest</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageCmapXYTest</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageCmapPXTest</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageMomAperTest</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageTswa</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageNonlinChrom</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageNonlinProduction</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>PageRfTau</class>
    <extends>QWizardPage</extends>
-   <header>custom_pages</header>
+   <header>pyelegant.guis.nsls2apcluster.genreport_wizard.custom_pages</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
