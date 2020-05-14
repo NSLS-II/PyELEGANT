@@ -1,5 +1,5 @@
 program_name = 'pyelegant'
-version = '0.5.0'
+version = '0.6.0'
 
 from setuptools import setup, find_packages
 from setuptools.command.install import install
