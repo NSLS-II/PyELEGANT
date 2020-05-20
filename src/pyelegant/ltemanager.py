@@ -18,7 +18,7 @@ class Lattice():
             'KSEXT', 'SEXT',
             'KOCT', 'OCTU',
             'MULT',
-            #'UKICKMAP',
+            'UKICKMAP',
             #'HKICK','VKICK','KICKER',
             'EHKICK','EVKICK','EKICKER',
             'MARK', 'MONI',
@@ -30,10 +30,18 @@ class Lattice():
         if LTE_filepath != '':
             self.load_LTE(LTE_filepath, used_beamline_name=used_beamline_name)
 
-    def load_LTE(self, LTE_filepath, used_beamline_name=''):
+    def load_LTE(self, LTE_filepath, used_beamline_name='',
+                 elem_files_root_folderpath=None):
         """"""
 
-        self.LTE_text = Path(LTE_filepath).read_text()
+        LTE_file = Path(LTE_filepath)
+
+        if elem_files_root_folderpath is None:
+            self.elem_files_root_folder = LTE_file.parent
+        else:
+            self.elem_files_root_folder = Path(elem_files_root_folderpath)
+
+        self.LTE_text = LTE_file.read_text()
         self.LTE_filepath = LTE_filepath
 
         self.cleaned_LTE_text = '\n' + self.LTE_text
@@ -49,10 +57,39 @@ class Lattice():
         self.elem_defs = d['elem_defs']
         self.flat_used_elem_names = d['flat_used_elem_names']
 
+        abs_kickmap_filepaths = self.get_kickmap_filepaths()['abs']
+        for name, _fp in abs_kickmap_filepaths.items():
+            abs_kickmap_f = Path(_fp)
+            if not abs_kickmap_f.exists():
+                print((f'Kickmap elment "{name}": File "{abs_kickmap_f}" '
+                       f'does not exist.'))
+
         inconvertible_types = self.get_inconvertible_element_types(self.elem_defs)
         if inconvertible_types != []:
             print('Element types that cannot be converted:')
             print(inconvertible_types)
+
+    def get_kickmap_filepaths(self):
+        """"""
+
+        kickmap_filepaths = {'raw': {}, 'abs': {}}
+
+        for name, elem_type, prop_str in self.elem_defs:
+            name = name.upper()
+            if elem_type == 'UKICKMAP':
+                kickmap_fp = self.parse_elem_properties(prop_str)['INPUT_FILE']
+                if (kickmap_fp.startswith('"') and kickmap_fp.endswith('"')) or \
+                   (kickmap_fp.startswith("'") and kickmap_fp.endswith("'")):
+                    kickmap_fp = kickmap_fp[1:-1]
+
+                kickmap_filepaths['raw'][name] = kickmap_fp
+
+                abs_kickmap_f = self.elem_files_root_folder.joinpath(
+                    Path(kickmap_fp)).resolve()
+
+                kickmap_filepaths['abs'][name] = str(abs_kickmap_f)
+
+        return kickmap_filepaths
 
     def remove_comments(self, text):
         """"""
