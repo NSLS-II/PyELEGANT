@@ -65,7 +65,7 @@ class Lattice():
     def delete_ampersands(self, text):
         """"""
 
-        pattern = r'&.*[\n\r]+'
+        pattern = r'&.*[\n\r\s]+'
         return re.sub(pattern, '', text)
 
     def get_all_elem_defs(self, LTE_text):
