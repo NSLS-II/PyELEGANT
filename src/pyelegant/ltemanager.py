@@ -96,6 +96,22 @@ class Lattice():
 
         comment_char = '!'
 
+        # Check if the comment character is the first character for comment
+        # lines, as ELEGANT will not correctly parse the LTE file, even though
+        # it may not crash.
+        possibly_commented_lines_and_linenums = [
+            (i, line) for i, line in enumerate(text.splitlines())
+            if comment_char in line]
+        for lineIndex, line in possibly_commented_lines_and_linenums:
+            if not line.startswith(comment_char):
+                print(
+                    (f'\n** CRITICAL WARNING ** The character "{comment_char}" '
+                     f'must be the first character on the comment line at '
+                     f'Line {lineIndex}:')) # Line number here should not be
+                # incremented by 1, as the passes "text" has an extra line added
+                # to the top.
+                print(line)
+
         pattern = comment_char + '.*'
         return re.sub(pattern, '', text)
 
