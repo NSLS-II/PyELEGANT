@@ -4335,9 +4335,10 @@ class Report_NSLS2U_Default:
             {'E_GeV': _E_MeV / 1e3} for _E_MeV in E_MeV_list[1:]]
 
         raw_keys = dict(
-            one_period=dict(eps_x='ex0', Jx='Jx', Jy='Jy', Jdelta='Jdelta',
-                            taux='taux', tauy='tauy', taudelta='taudelta'),
+            one_period=dict(),
             ring=dict(
+                eps_x='ex0', Jx='Jx', Jy='Jy', Jdelta='Jdelta',
+                taux='taux', tauy='tauy', taudelta='taudelta',
                 nux='nux', nuy='nuy', ksi_x_cor='dnux/dp', ksi_y_cor='dnuy/dp',
                 alphac='alphac', U0_MeV='U0', dE_E='Sdelta0'),
             ring_natural=dict(ksi_x_nat='dnux/dp', ksi_y_nat='dnuy/dp'),
@@ -4383,9 +4384,10 @@ class Report_NSLS2U_Default:
             _kwargs = dict(one_period={'use_beamline': use_beamline_cell},
                            ring={'use_beamline': use_beamline_ring})
             _raw_keys = dict(
-                one_period=dict(
-                    eps_x='ex0', taux='taux', tauy='tauy', taudelta='taudelta'),
-                ring=dict(U0_MeV='U0', dE_E='Sdelta0'))
+                one_period=dict(),
+                ring=dict(
+                    eps_x='ex0', taux='taux', tauy='tauy', taudelta='taudelta',
+                    U0_MeV='U0', dE_E='Sdelta0'))
             tmp = tempfile.NamedTemporaryFile(suffix='.pgz')
             for lat_type in ('one_period', 'ring'):
                 pe.calc_ring_twiss(
