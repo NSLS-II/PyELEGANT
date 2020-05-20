@@ -1020,7 +1020,8 @@ proc SubmitRunScript {args} {
     #catch {{exec sbatch -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] $tmpFile }} result
 
     #catch {{exec srun -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] --ntasks=1 bash $tmpFile & }} result
-    catch {{exec srun -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] {slurm_switches} bash $tmpFile & }} result
+    #catch {{exec srun -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] {slurm_switches} bash $tmpFile & }} result
+    catch {{exec srun -o [pwd]/$rootname.slog -J [file root [file tail $rootname]] --ntasks=2 {slurm_switches} bash $tmpFile & }} result
 '''.format(slurm_switches=' '.join([v for v in slurm_opts.values()]))
 
     contents += '''
