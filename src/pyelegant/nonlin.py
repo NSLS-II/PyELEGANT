@@ -130,6 +130,16 @@ def _calc_cmap(
 
     ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
+    # Not all types of elements are capable of back-tracking. So, convert
+    # those elements here.
+    _def_transmute_elements = dict(
+        MULT='EDRIFT', KICKER='EKICKER', HKICK='EHKICK', VKICK='EVKICK')
+    if transmute_elements is None:
+        transmute_elements = _def_transmute_elements
+    else:
+        _def_transmute_elements.update(transmute_elements)
+        transmute_elements = _def_transmute_elements
+
     elebuilder.add_transmute_blocks(ed, transmute_elements)
 
     ed.add_newline()
