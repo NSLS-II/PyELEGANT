@@ -14,6 +14,7 @@ from select import select
 import errno
 from subprocess import Popen, PIPE
 from copy import deepcopy
+import re
 
 from qtpy import QtCore, QtGui, QtWidgets
 from qtpy import uic
@@ -1534,6 +1535,41 @@ class PageLoadSeedConfig(QtWidgets.QWizardPage):
 
         return True
 
+def adjust_input_LTE_kickmap_filepaths(
+    orig_LTE_filepath, altered_LTE_filepath, alter_elements):
+    """"""
+
+    use_elegant_alter_elements = False
+
+    if use_elegant_alter_elements:
+
+        pe.eleutil.save_lattice_after_alter_elements(
+            orig_LTE_filepath, altered_LTE_filepath, alter_elements)
+
+    else:
+        LTE_contents = Path(orig_LTE_filepath).read_text()
+
+        def sub_kickmap_filepath(new_filepath, matchobj):
+            s0, s1, s2, s3, s4 = matchobj.groups()
+            new_s = f'{s0}{s1}{s2}{s3}"{new_filepath}"'
+            return new_s
+
+        for ae in alter_elements:
+            name = ae['name']
+            pattern = f'({name})(\s*:\s*UKICKMAP\s*,)([^:]*)(INPUT_FILE\s*=\s*)"(.+)"'
+            LTE_contents = re.sub(
+                pattern, partial(sub_kickmap_filepath, ae['string_value']),
+                LTE_contents, flags=re.IGNORECASE)
+
+        if False:
+            for ae in alter_elements:
+                name = ae['name']
+                pattern = f'({name})\s*:\s*UKICKMAP\s*,([^:]*)INPUT_FILE\s*=\s*"(.+)"'
+                out = re.findall(pattern, LTE_contents, flags=re.IGNORECASE)
+                print(out)
+
+        Path(altered_LTE_filepath).write_text(LTE_contents)
+
 class PageLTE(PageStandard):
     """"""
 
@@ -1669,6 +1705,12 @@ class PageLTE(PageStandard):
         use_beamline_cell = self.field('edit_use_beamline_cell').strip()
         use_beamline_ring = self.field('edit_use_beamline_ring').strip()
 
+        report_folder = Path(self.wizardObj.pdf_filepath).parent
+
+        kickmap_filepaths = {'raw': {}, 'abs': {}}
+        # ^ This dict will contain the raw/absolute paths to the kickmap files,
+        #   if kickmap elements exist.
+
         try:
             LTE = pe.ltemanager.Lattice(LTE_filepath=orig_LTE_filepath)
         except:
@@ -1688,6 +1730,10 @@ class PageLTE(PageStandard):
             #traceback.print_exc()
             return False
 
+        new_km_fps = LTE.get_kickmap_filepaths()
+        for typ in list(new_km_fps):
+            kickmap_filepaths[typ].update(new_km_fps[typ])
+
         try:
             LTE = pe.ltemanager.Lattice(LTE_filepath=orig_LTE_filepath,
                                         used_beamline_name=use_beamline_cell)
@@ -1697,6 +1743,33 @@ class PageLTE(PageStandard):
             showInvalidPageInputDialog(text, info_text)
             #traceback.print_exc()
             return False
+
+        new_km_fps = LTE.get_kickmap_filepaths()
+        for typ in list(new_km_fps):
+            kickmap_filepaths[typ].update(new_km_fps[typ])
+
+        # Since the input LTE file will reside in the report folder, and if the
+        # kickmap files are specified with relative paths, the kickmap files
+        # will need to be copied into the report folder.
+        alter_elements = []
+        for name, _fp in kickmap_filepaths['abs'].items():
+            abs_kickmap_f = Path(_fp)
+            if not abs_kickmap_f.exists():
+                text = f'Non-existing kickmap file for Element "{name}"'
+                info_text = f'Specified file "{_fp}" does not exist!'
+                showInvalidPageInputDialog(text, info_text)
+                #traceback.print_exc()
+                return False
+
+            dst = report_folder.joinpath(abs_kickmap_f.name).resolve()
+
+            alter_elements.append(
+                dict(name=name, item='INPUT_FILE', string_value=str(dst)))
+
+            if not dst.exists():
+                print((f'Kickmap elment "{name}": Copying file "{abs_kickmap_f}" '
+                       f'into {dst}.'))
+                shutil.copy(str(abs_kickmap_f), str(dst))
 
         self.wizardObj.LTE = LTE
 
@@ -1725,22 +1798,46 @@ class PageLTE(PageStandard):
         input_LTE_Path = Path(input_LTE_filepath)
         input_LTE_Path.parent.mkdir(parents=True, exist_ok=True)
         if not input_LTE_Path.exists():
-            shutil.copy(orig_LTE_filepath, input_LTE_filepath)
+            if alter_elements:
+                pe.eleutil.save_lattice_after_alter_elements(
+                    orig_LTE_filepath, input_LTE_filepath, alter_elements)
+            else:
+                shutil.copy(orig_LTE_filepath, input_LTE_filepath)
             f(mod_conf['input_LTE'], 'regenerate_zeroSexts', True)
         else:
             sha = hashlib.sha1()
             sha.update(input_LTE_Path.read_text().encode('utf-8'))
             existing_SHA1 = sha.hexdigest()
 
-            sha = hashlib.sha1()
-            sha.update(orig_LTE_Path.read_text().encode('utf-8'))
-            orig_SHA1 = sha.hexdigest()
+            if alter_elements:
 
-            if orig_SHA1 != existing_SHA1:
-                shutil.copy(orig_LTE_filepath, input_LTE_filepath)
-                f(mod_conf['input_LTE'], 'regenerate_zeroSexts', True)
+                altered_LTE_filepath = input_LTE_filepath + '.tmp'
+
+                adjust_input_LTE_kickmap_filepaths(
+                    orig_LTE_filepath, altered_LTE_filepath, alter_elements)
+
+                sha = hashlib.sha1()
+                sha.update(Path(altered_LTE_filepath).read_text().encode('utf-8'))
+                altered_SHA1 = sha.hexdigest()
+
+                if altered_SHA1 != existing_SHA1:
+                    shutil.move(altered_LTE_filepath, input_LTE_filepath)
+                    f(mod_conf['input_LTE'], 'regenerate_zeroSexts', True)
+                else:
+                    f(mod_conf['input_LTE'], 'regenerate_zeroSexts', False)
+
             else:
-                f(mod_conf['input_LTE'], 'regenerate_zeroSexts', False)
+
+                sha = hashlib.sha1()
+                sha.update(orig_LTE_Path.read_text().encode('utf-8'))
+                orig_SHA1 = sha.hexdigest()
+
+                if orig_SHA1 != existing_SHA1:
+                    shutil.copy(orig_LTE_filepath, input_LTE_filepath)
+                    f(mod_conf['input_LTE'], 'regenerate_zeroSexts', True)
+                else:
+                    f(mod_conf['input_LTE'], 'regenerate_zeroSexts', False)
+
         f(mod_conf['input_LTE'], 'filepath', input_LTE_filepath)
         #
         f(mod_conf['input_LTE'], 'parent_LTE_hash',
