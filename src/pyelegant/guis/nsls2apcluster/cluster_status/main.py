@@ -267,6 +267,25 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
 
         self.partition_info = parsed
 
+    def _expand_node_range_pattern(self, index_str):
+        """
+        Examples for "index_str":
+            '[019-025]'
+        """
+
+        tokens = index_str[1:-1].split(',')
+        pat_list = []
+        for tok in tokens:
+            if '-' in tok:
+                iStart, iEnd = tok.split('-')
+                pat_list.extend([f'{i:03d}' for i in range(
+                    int(iStart), int(iEnd)+1)])
+            else:
+                pat_list.append(tok)
+        pat = '|'.join(pat_list)
+
+        return pat
+
     def update_load_table(self):
         """"""
 
@@ -311,16 +330,9 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
                 #print((prefix, index_str))
                 if ',' in index_str:
                     assert index_str.startswith('[') and index_str.endswith(']')
-                    tokens = index_str[1:-1].split(',')
-                    pat_list = []
-                    for tok in tokens:
-                        if '-' in tok:
-                            iStart, iEnd = tok.split('-')
-                            pat_list.extend([f'{i:03d}' for i in range(
-                                int(iStart), int(iEnd)+1)])
-                        else:
-                            pat_list.append(tok)
-                    pat = '|'.join(pat_list)
+                    pat = self._expand_node_range_pattern(index_str)
+                elif index_str.startswith('[') and index_str.endswith(']'):
+                    pat = self._expand_node_range_pattern(index_str)
                 else:
                     pat = index_str
                 matched_indexes = re.findall(pat, ','.join(
