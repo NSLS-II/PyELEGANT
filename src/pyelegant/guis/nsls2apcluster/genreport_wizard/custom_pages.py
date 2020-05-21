@@ -1748,29 +1748,6 @@ class PageLTE(PageStandard):
         for typ in list(new_km_fps):
             kickmap_filepaths[typ].update(new_km_fps[typ])
 
-        # Since the input LTE file will reside in the report folder, and if the
-        # kickmap files are specified with relative paths, the kickmap files
-        # will need to be copied into the report folder.
-        alter_elements = []
-        for name, _fp in kickmap_filepaths['abs'].items():
-            abs_kickmap_f = Path(_fp)
-            if not abs_kickmap_f.exists():
-                text = f'Non-existing kickmap file for Element "{name}"'
-                info_text = f'Specified file "{_fp}" does not exist!'
-                showInvalidPageInputDialog(text, info_text)
-                #traceback.print_exc()
-                return False
-
-            dst = report_folder.joinpath(abs_kickmap_f.name).resolve()
-
-            alter_elements.append(
-                dict(name=name, item='INPUT_FILE', string_value=str(dst)))
-
-            if not dst.exists():
-                print((f'Kickmap elment "{name}": Copying file "{abs_kickmap_f}" '
-                       f'into {dst}.'))
-                shutil.copy(str(abs_kickmap_f), str(dst))
-
         self.wizardObj.LTE = LTE
 
         all_beamline_defs = LTE.get_all_beamline_defs(LTE.cleaned_LTE_text)
@@ -1797,6 +1774,35 @@ class PageLTE(PageStandard):
             self.wizardObj.pdf_filepath[:-len('_report.pdf')] + '.lte'
         input_LTE_Path = Path(input_LTE_filepath)
         input_LTE_Path.parent.mkdir(parents=True, exist_ok=True)
+        #
+        # (SEGMENT#1 Start) The following code segment must come after the
+        # "mkdir" function call right above. Otherwise, shutil.copy() could fail
+        # in this segment.
+        #
+        # Since the input LTE file will reside in the report folder, and if the
+        # kickmap files are specified with relative paths, the kickmap files
+        # will need to be copied into the report folder.
+        alter_elements = []
+        for name, _fp in kickmap_filepaths['abs'].items():
+            abs_kickmap_f = Path(_fp)
+            if not abs_kickmap_f.exists():
+                text = f'Non-existing kickmap file for Element "{name}"'
+                info_text = f'Specified file "{_fp}" does not exist!'
+                showInvalidPageInputDialog(text, info_text)
+                #traceback.print_exc()
+                return False
+
+            dst = report_folder.joinpath(abs_kickmap_f.name).resolve()
+
+            alter_elements.append(
+                dict(name=name, item='INPUT_FILE', string_value=str(dst)))
+
+            if not dst.exists():
+                print((f'Kickmap elment "{name}": Copying file "{abs_kickmap_f}" '
+                       f'into {dst}.'))
+                shutil.copy(str(abs_kickmap_f), str(dst))
+        # (SEGMENT#1 End)
+        #
         if not input_LTE_Path.exists():
             if alter_elements:
                 pe.eleutil.save_lattice_after_alter_elements(
