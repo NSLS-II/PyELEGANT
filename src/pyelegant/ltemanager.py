@@ -195,13 +195,13 @@ class Lattice():
                 if '*' in name:
                     star_ind = name.index('*')
                     multiplier = int(name[:star_ind].strip())
-                    name = name[(star_ind+1):]
+                    name = name[(star_ind+1):].strip()
                 else:
                     multiplier = 1
 
                 if name.startswith('-'):
                     reverse_next = True
-                    name = name[1:]
+                    name = name[1:].strip()
                 else:
                     reverse_next = False
 
