@@ -11,7 +11,7 @@ class Lattice():
     def __init__(self, LTE_filepath='', used_beamline_name=''):
         """Constructor"""
 
-        self.convertible_element_types = [
+        self.handled_element_types = [
             'DRIF','EDRIFT','RFCA',
             'CSBEND', 'CSBEN', 'SBEN','SBEND',
             'KQUAD', 'QUAD',
@@ -19,10 +19,10 @@ class Lattice():
             'KOCT', 'OCTU',
             'MULT',
             'UKICKMAP',
-            #'HKICK','VKICK','KICKER',
+            'HKICK','VKICK','KICKER',
             'EHKICK','EVKICK','EKICKER',
             'MARK', 'MONI',
-            #'SCRAPER',
+            'SCRAPER',
             #'SOLE',
             'MALIGN', 'WATCH',
             ]
@@ -64,10 +64,10 @@ class Lattice():
                 print((f'Kickmap elment "{name}": File "{abs_kickmap_f}" '
                        f'does not exist.'))
 
-        inconvertible_types = self.get_inconvertible_element_types(self.elem_defs)
-        if inconvertible_types != []:
-            print('Element types that cannot be converted:')
-            print(inconvertible_types)
+        unhandled_types = self.get_unhandled_element_types(self.elem_defs)
+        if unhandled_types != []:
+            print('Element types that are not handled:')
+            print(unhandled_types)
 
     def get_kickmap_filepaths(self):
         """"""
@@ -322,14 +322,14 @@ class Lattice():
 
         return prop
 
-    def get_inconvertible_element_types(self, elem_def_list):
+    def get_unhandled_element_types(self, elem_def_list):
         """"""
 
-        inconv_list = [
+        unhandled_list = [
             type_name.upper() for (_,type_name,_) in elem_def_list
-            if type_name.upper() not in self.convertible_element_types]
+            if type_name.upper() not in self.handled_element_types]
 
-        return list(set(inconv_list))
+        return list(set(unhandled_list))
 
 ########################################################################
 class KQUAD():
