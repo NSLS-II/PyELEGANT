@@ -11,6 +11,7 @@ import tempfile
 import pickle
 import fnmatch
 from types import SimpleNamespace
+import shutil
 import matplotlib.pylab as plt
 from matplotlib.backends.backend_pdf import PdfPages
 #import yaml
@@ -5480,7 +5481,18 @@ class Report_NSLS2U_Default:
         n_turns = calc_opts.pop('n_turns')
 
         s_start = 0.0
-        s_end = self.lin_data['circumf'] / self.lin_data['n_periods_in_ring']
+
+        if self.is_ring_a_multiple_of_superperiods():
+            s_end = self.lin_data['circumf'] / self.lin_data['n_periods_in_ring']
+            ring_flat_elem_names = None
+        else:
+            s_end = self.lin_data['circumf'] + 1.0
+
+            use_beamline_ring = self.conf['use_beamline_ring']
+            input_LTE_filepath = self.conf['input_LTE']['filepath']
+            LTE_ring = pe.ltemanager.Lattice(LTE_filepath=input_LTE_filepath,
+                                             used_beamline_name=use_beamline_ring)
+            ring_flat_elem_names = LTE_ring.flat_used_elem_names
 
         remote_opts = dict(
             use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
@@ -5491,9 +5503,12 @@ class Report_NSLS2U_Default:
         # Warning from ELEGANT: for best parallel efficiency in output_mode=0,
         # the number of elements divided by the number of processors should be
         # an integer or slightly below an integer.
-        elem_names = [
-            line.split(':')[1].strip() for line in
-            self.lin_data['flat_elem_s_name_type_list'][2:]] # exclude header lines
+        if ring_flat_elem_names is None:
+            elem_names = [
+                line.split(':')[1].strip() for line in
+                self.lin_data['flat_elem_s_name_type_list'][2:]] # exclude header lines
+        else:
+            elem_names = ring_flat_elem_names
         n_matched = len([
             elem_name for elem_name in elem_names
             if fnmatch.fnmatch(elem_name, calc_opts['include_name_pattern'])])
@@ -5507,6 +5522,28 @@ class Report_NSLS2U_Default:
             s_start=s_start, s_end=s_end,
             use_beamline=use_beamline, N_KICKS=N_KICKS, del_tmp_files=True,
             run_local=False, remote_opts=remote_opts, **calc_opts)
+
+    def is_ring_a_multiple_of_superperiods(self):
+        """"""
+
+        use_beamline_cell = self.conf['use_beamline_cell']
+        use_beamline_ring = self.conf['use_beamline_ring']
+        input_LTE_filepath = self.conf['input_LTE']['filepath']
+        LTE_ring = pe.ltemanager.Lattice(LTE_filepath=input_LTE_filepath,
+                                         used_beamline_name=use_beamline_ring)
+        LTE_cell = pe.ltemanager.Lattice(LTE_filepath=input_LTE_filepath,
+                                         used_beamline_name=use_beamline_cell)
+        #
+        ext_flat_used_elem_names = \
+            LTE_cell.flat_used_elem_names * self.lin_data['n_periods_in_ring']
+        if len(ext_flat_used_elem_names) != len(LTE_ring.flat_used_elem_names):
+            return False
+        else:
+            if np.all(np.array(ext_flat_used_elem_names) ==
+                      np.array(LTE_ring.flat_used_elem_names)):
+                return True
+            else:
+                return False
 
     def _save_nonlin_plots_to_pdf(self, calc_type, existing_fignums):
         """"""
@@ -5757,8 +5794,11 @@ class Report_NSLS2U_Default:
 
         calc_type = 'mom_aper'
         if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
-            slim = [0.0,
-                    self.lin_data['circumf']/self.lin_data['n_periods_in_ring']]
+            if self.is_ring_a_multiple_of_superperiods():
+                slim = [0.0,
+                        self.lin_data['circumf']/self.lin_data['n_periods_in_ring']]
+            else:
+                slim = [0.0, self.lin_data['circumf']]
             mom_aper_data = pe.nonlin.plot_mom_aper(
                 nonlin_data_filepaths[calc_type], title='',
                 add_mmap_info_to_title=True, slim=slim, deltalim=None,
@@ -5936,22 +5976,27 @@ class Report_NSLS2U_Default:
                 mmap_sdds_filepath_cell, params=mmap_d['scalars'],
                 columns=mmap_d['arrays'], outputMode='binary')
             if True: # Based on computeLifetime.py used with MOGA (geneopt.py)
-                dup_filenames = ' '.join(
-                    [mmap_sdds_filepath_cell] * n_periods_in_ring)
-                msectors = 1
-                cmd_list = [
-                    f'sddscombine {dup_filenames} -pipe=out',
-                    f'sddsprocess -pipe "-redefine=col,s,s i_page 1 - {circumf:.16g} {n_periods_in_ring} / * {msectors} * +,units=m"',
-                    f'sddscombine -pipe -merge',
-                    f'sddsprocess -pipe=in {mmap_sdds_filepath_ring} -filter=col,s,0,{circumf:.16g}',
-                ]
-                if False: print(cmd_list)
-                result, err, returncode = pe.util.chained_Popen(cmd_list)
+                if self.is_ring_a_multiple_of_superperiods():
+                    dup_filenames = ' '.join(
+                        [mmap_sdds_filepath_cell] * n_periods_in_ring)
+                    msectors = 1
+                    cmd_list = [
+                        f'sddscombine {dup_filenames} -pipe=out',
+                        f'sddsprocess -pipe "-redefine=col,s,s i_page 1 - {circumf:.16g} {n_periods_in_ring} / * {msectors} * +,units=m"',
+                        f'sddscombine -pipe -merge',
+                        f'sddsprocess -pipe=in {mmap_sdds_filepath_ring} -filter=col,s,0,{circumf:.16g}',
+                    ]
+                    if False: print(cmd_list)
+                    result, err, returncode = pe.util.chained_Popen(cmd_list)
+                else:
+                    # "mmap_sdds_filepath_cell" actually covers the whole ring,
+                    # even though the name name implies only one super-period.
+                    # So, there is no need for extending it.
+                    shutil.copy(mmap_sdds_filepath_cell, mmap_sdds_filepath_ring)
             elif False: # WRONG. This may overestimate/underestimate lifetime
                 # as "mmap" is not extended to the whole ring. It appears that
                 # the final momentum aperture value in "mmap" is simply copied
                 # over to the rest of the ring.
-                import shutil
                 shutil.copy(mmap_sdds_filepath_cell, mmap_sdds_filepath_ring)
             else:
                 # Avoid "sddscombine" & "sddsprocess". Do this mmap data
