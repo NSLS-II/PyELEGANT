@@ -877,8 +877,15 @@ class PageNonlinCalcTest(PageGenReport):
                 v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
                 if k in ('partition', 'ntasks', 'time'):
                     if k in common_remote_opts:
+                        indiv_remote_opts = calc_opts.get('remote_opts', {})
                         if common_remote_opts[k] == v:
-                            continue
+                            if k in indiv_remote_opts:
+                                try:
+                                    del new_calc_opts[mode]['remote_opts'][k]
+                                except KeyError:
+                                    pass
+                            else:
+                                continue
                         else:
                             if 'remote_opts' not in new_calc_opts[mode]:
                                 yaml_append_map(
@@ -1129,8 +1136,15 @@ class PageNonlinCalcPlot(PageGenReport):
                 v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
                 if k in ('partition', 'ntasks', 'time'):
                     if k in common_remote_opts:
+                        indiv_remote_opts = calc_opts.get('remote_opts', {})
                         if common_remote_opts[k] == v:
-                            continue
+                            if k in indiv_remote_opts:
+                                try:
+                                    del calc_opts['remote_opts'][k]
+                                except KeyError:
+                                    pass
+                            else:
+                                continue
                         else:
                             if 'remote_opts' not in calc_opts:
                                 calc_opts['remote_opts'] = CommentedMap({})
