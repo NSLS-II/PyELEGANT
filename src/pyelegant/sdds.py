@@ -216,7 +216,7 @@ def printout(sdds_filepath, param_name_list=None,
                 if param_info_dict[k_stripped]['TYPE'] == 'double':
                     #param_dict[k_stripped] = float(v_str)
                     param_dict[k_stripped].append(float(v_str))
-                elif param_info_dict[k_stripped]['TYPE'] == 'long':
+                elif param_info_dict[k_stripped]['TYPE'] in ('long', 'short'):
                     #param_dict[k_stripped] = int(v_str)
                     param_dict[k_stripped].append(int(v_str))
                 elif param_info_dict[k_stripped]['TYPE'] == 'string':
@@ -420,7 +420,7 @@ def sdds2dicts(sdds_filepath, str_format=''):
     output = {}
     if params:
         for _k, _v in params.items():
-            if meta['params'][_k]['TYPE'] == 'long':
+            if meta['params'][_k]['TYPE'] in ('long', 'short'):
                 try:
                     params[_k] = int(_v)
                 except TypeError:
@@ -435,7 +435,7 @@ def sdds2dicts(sdds_filepath, str_format=''):
         output['params'] = params
     if columns:
         for _k, _v in columns.items():
-            if meta['columns'][_k]['TYPE'] == 'long':
+            if meta['columns'][_k]['TYPE'] in ('long', 'short'):
                 columns[_k] = np.array(_v).astype(int)
             else:
                 columns[_k] = np.array(_v)
@@ -596,13 +596,13 @@ def plaindata2sdds(
     if param_name_list is not None:
         assert len(param_name_list) == len(param_type_list)
         for name, dtype in zip(param_name_list, param_type_list):
-            assert dtype in ('string', 'long', 'double')
+            assert dtype in ('string', 'long', 'short', 'double')
             cmd_list.append(f'-parameter={name},{dtype}')
 
     if column_name_list is not None:
         assert len(column_name_list) == len(column_type_list)
         for name, dtype in zip(column_name_list, column_type_list):
-            assert dtype in ('string', 'long', 'double')
+            assert dtype in ('string', 'long', 'short', 'double')
             cmd_list.append(f'-column={name},{dtype}')
 
     shell_cmd = ' '.join(cmd_list)
