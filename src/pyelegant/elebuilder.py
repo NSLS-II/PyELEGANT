@@ -2762,6 +2762,60 @@ class EleDesigner():
         return kickers
 
     #----------------------------------------------------------------------
+    def get_LTE_elem_names_by_regex(self, pattern, spos_sorted=False) -> dict:
+        """"""
+
+        matched_elem_names = [
+            name for name, elem_type, _ in self._LTE.elem_defs
+            if re.search(pattern, name, flags=re.IGNORECASE)]
+
+        if spos_sorted:
+            return self._spos_sort_matched_elem_names(matched_elem_names)
+        else:
+            return matched_elem_names
+
+    #----------------------------------------------------------------------
+    def get_LTE_elem_names_for_elem_type(self, sel_elem_type, spos_sorted=False) -> dict:
+        """"""
+
+        sel_elem_type = sel_elem_type.upper()
+
+        matched_elem_names = [
+            name for name, elem_type, _ in self._LTE.elem_defs
+            if elem_type.upper() == sel_elem_type]
+
+        if spos_sorted:
+            return self._spos_sort_matched_elem_names(matched_elem_names)
+        else:
+            return matched_elem_names
+
+    #----------------------------------------------------------------------
+    def _spos_sort_matched_elem_names(self, matched_elem_names) -> dict:
+        """"""
+
+        try:
+            assert np.all(np.array(
+                [self._LTE.flat_used_elem_names.count(name)
+                 for name in matched_elem_names]) == 1)
+        except AssertionError:
+            for name in matched_elem_names:
+                n = self._LTE.flat_used_elem_names.count(name)
+                if n != 1:
+                    print(f'* There are {n:d} occurrences of Element "{name}"')
+
+            print(
+                ('ERROR: There cannot be multiple occurrences of elements '
+                 'with the same name if "spos_sorted" is True.'))
+            raise
+
+        num_inds = [self._LTE.flat_used_elem_names.index(name)
+                    for name in matched_elem_names]
+        sort_inds = np.argsort(num_inds)
+        matched_elem_names = [matched_elem_names[i] for i in sort_inds]
+
+        return matched_elem_names
+
+    #----------------------------------------------------------------------
     def get_LTE_elem_count(self, elem_name: str):
         """"""
 
