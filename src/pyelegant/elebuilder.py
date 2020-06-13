@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Dict
 import sys
 import re
 import numpy as np
@@ -2762,7 +2762,7 @@ class EleDesigner():
         return kickers
 
     #----------------------------------------------------------------------
-    def get_LTE_elem_names_by_regex(self, pattern, spos_sorted=False) -> dict:
+    def get_LTE_elem_names_by_regex(self, pattern, spos_sorted=False) -> List:
         """"""
 
         matched_elem_names = [
@@ -2775,7 +2775,20 @@ class EleDesigner():
             return matched_elem_names
 
     #----------------------------------------------------------------------
-    def get_LTE_elem_names_for_elem_type(self, sel_elem_type, spos_sorted=False) -> dict:
+    def get_LTE_elem_names_types_by_regex(self, pattern, spos_sorted=False) -> List:
+        """"""
+
+        matched_elem_names_types = [
+            (name, elem_type) for name, elem_type, _ in self._LTE.elem_defs
+            if re.search(pattern, name, flags=re.IGNORECASE)]
+
+        if spos_sorted:
+            return self._spos_sort_matched_elem_names_types(matched_elem_names_types)
+        else:
+            return matched_elem_names_types
+
+    #----------------------------------------------------------------------
+    def get_LTE_elem_names_for_elem_type(self, sel_elem_type, spos_sorted=False) -> List:
         """"""
 
         sel_elem_type = sel_elem_type.upper()
@@ -2790,7 +2803,7 @@ class EleDesigner():
             return matched_elem_names
 
     #----------------------------------------------------------------------
-    def _spos_sort_matched_elem_names(self, matched_elem_names) -> dict:
+    def _spos_sort_matched_elem_names(self, matched_elem_names) -> List:
         """"""
 
         try:
@@ -2814,6 +2827,32 @@ class EleDesigner():
         matched_elem_names = [matched_elem_names[i] for i in sort_inds]
 
         return matched_elem_names
+
+    #----------------------------------------------------------------------
+    def _spos_sort_matched_elem_names_types(self, matched_elem_names_types) -> List:
+        """"""
+
+        try:
+            assert np.all(np.array(
+                [self._LTE.flat_used_elem_names.count(name)
+                 for name, _ in matched_elem_names_types]) == 1)
+        except AssertionError:
+            for name, _ in matched_elem_names_types:
+                n = self._LTE.flat_used_elem_names.count(name)
+                if n != 1:
+                    print(f'* There are {n:d} occurrences of Element "{name}"')
+
+            print(
+                ('ERROR: There cannot be multiple occurrences of elements '
+                 'with the same name if "spos_sorted" is True.'))
+            raise
+
+        num_inds = [self._LTE.flat_used_elem_names.index(name)
+                    for name, _ in matched_elem_names_types]
+        sort_inds = np.argsort(num_inds)
+        matched_elem_names_types = [matched_elem_names_types[i] for i in sort_inds]
+
+        return matched_elem_names_types
 
     #----------------------------------------------------------------------
     def get_LTE_elem_count(self, elem_name: str):
