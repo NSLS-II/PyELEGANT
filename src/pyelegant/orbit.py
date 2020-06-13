@@ -463,6 +463,37 @@ class ClosedOrbitCalculator:
             self.corrector_params_filepath, params=None, columns=col,
             outputMode='binary', suppress_err_msg=True)
 
+    def set_elem_properties(self, elem_names, elem_prop_names, elem_prop_vals):
+        """"""
+
+        assert len(elem_names) == len(elem_prop_names) == len(elem_prop_vals)
+
+        col = dict(
+            ElementName=elem_names, ElementParameter=elem_prop_names,
+            ParameterValue=elem_prop_vals)
+
+        sdds.dicts2sdds(
+            self.corrector_params_filepath, params=None, columns=col,
+            outputMode='binary', suppress_err_msg=True)
+
+    def get_elem_names_by_regex(self, pattern, spos_sorted=False):
+        """"""
+
+        return self.ed.get_LTE_elem_names_by_regex(pattern,
+                                                   spos_sorted=spos_sorted)
+
+    def get_elem_names_types_by_regex(self, pattern, spos_sorted=False):
+        """"""
+
+        return self.ed.get_LTE_elem_names_types_by_regex(
+            pattern, spos_sorted=spos_sorted)
+
+    def get_elem_names_for_elem_type(self, sel_elem_type, spos_sorted=False):
+        """"""
+
+        return self.ed.get_LTE_elem_names_for_elem_type(sel_elem_type,
+                                                        spos_sorted=spos_sorted)
+
     def calc(self, run_local: bool = True, remote_opts: Optional[dict] = None,
              ) -> dict:
         """"""
