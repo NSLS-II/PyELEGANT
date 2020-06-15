@@ -1131,6 +1131,67 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
 
     return results
 
+def srun_python_func(
+    remote_opts, module_name, func_name, func_args, func_kwargs, paths_to_prepend=None):
+    """
+    Example:
+        module_name = 'pyelegant.nonlin'
+        func_name = '_calc_chrom_track_get_tbt'
+    """
+
+    d = dict(module_name=module_name, func_name=func_name,
+             func_args=func_args, func_kwargs=func_kwargs)
+
+    tmp = tempfile.NamedTemporaryFile(dir=os.getcwd(), delete=False,
+                                      prefix='tmpInput_', suffix='.pgz')
+    input_filepath = os.path.abspath(tmp.name)
+    output_filepath = os.path.abspath(tmp.name.replace('tmpInput_', 'tmpOutput_'))
+    tmp.close()
+
+    d['output_filepath'] = output_filepath
+
+    job_name = remote_opts.get('job_name', 'job')
+    partition = remote_opts.get('partition', 'normal')
+    x11 = ('' if not remote_opts.get('x11', False) else 'export MPLBACKEND="agg"')
+    spread_job = ('' if not remote_opts.get('spread_job', False) else '--spread-job')
+    nodelist = ('' if 'nodelist' not in remote_opts
+                else f'--nodelist={",".join(remote_opts["nodelist"])}')
+    exclude = ('' if 'exclude' not in remote_opts
+               else f'--exclude={",".join(remote_opts["exclude"])}')
+    timelimit_str = remote_opts.get('time', None)
+    if timelimit_str is not None:
+        timelimit_str = f'--time={timelimit_str}'
+    else:
+        timelimit_str = ''
+
+    with open(input_filepath, 'wb') as f:
+
+        if paths_to_prepend is None:
+            paths_to_prepend = []
+        dill.dump(paths_to_prepend, f, protocol=-1)
+
+        dill.dump(d, f, protocol=-1)
+
+    main_script_path = __file__[:-3]+'_srun_py_func_script.py'
+    cmd = (f'srun -c 1 -J {job_name} -p {partition} {x11} {timelimit_str} '
+           f'{nodelist} {exclude} python {main_script_path} {input_filepath}')
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+    print(out)
+    if err:
+        print(err)
+
+    results = util.load_pgz_file(output_filepath)
+
+    if remote_opts.get('del_input_file', True):
+        try: os.remove(input_filepath)
+        except: pass
+    if remote_opts.get('del_output_file', True):
+        try: os.remove(output_filepath)
+        except: pass
+
+    return results
+
 #----------------------------------------------------------------------
 def convertLocalTimeStrToSecFromUTCEpoch(
     time_str, frac_sec=False, time_format=None):
