@@ -2920,7 +2920,8 @@ class OptimizationTerm():
     """"""
 
     #----------------------------------------------------------------------
-    def __init__(self, ele_designer_obj, intermediate=False):
+    def __init__(self, ele_designer_obj, intermediate=False,
+                 suppress_max_str_len_warning=False):
         """Constructor"""
 
         ed = ele_designer_obj
@@ -2937,6 +2938,8 @@ class OptimizationTerm():
         # Max string length limitation (approximately & empirically determined)
         # for "optimization_term" block.
 
+        self._suppress_max_str_len_warning = suppress_max_str_len_warning
+
     def __repr__(self):
         """"""
 
@@ -2951,7 +2954,8 @@ class OptimizationTerm():
 
         final_rpn_str = newline_indent + final_rpn_str + ('\n' + (' ' * 4))
 
-        if len(final_rpn_str) > self._max_str_len:
+        if (not self._suppress_max_str_len_warning) and \
+           len(final_rpn_str) > self._max_str_len:
             print('\n## WARNING ##')
             print(f'Expression character length is exceeding {self._max_str_len:d}. ELEGANT will likely fail.')
             print('Try to divide this OptimizationTerm object into multiple intermediate OptimizationTerm objects.')
