@@ -2162,8 +2162,10 @@ class EleDesigner():
     def __init__(
         self, ele_filepath: str = '', ele_folderpath: str = '',
         ele_prefix: str = 'tmp', double_format: str ='.12g',
-        auto_print_on_add=True):
+        auto_print_on_add=True, adj_optim_var_limits_to_init=False):
         """Constructor"""
+
+        self._adj_optim_var_limits_to_init = adj_optim_var_limits_to_init
 
         if ele_filepath:
             self.ele_filepath = str(Path(ele_filepath).absolute())
@@ -2486,13 +2488,23 @@ class EleDesigner():
                 init_val = self.get_LTE_elem_prop(name, item)
                 if init_val:
                     if init_val < lower_limit:
-                        raise ValueError(
-                            (f'Initial value ({init_val:{self.double_format}}) cannot be '
-                             f'smaller than "lower_limit" ({lower_limit:{self.double_format}})'))
+                        if self._adj_optim_var_limits_to_init:
+                            _i = [_i for _i, _s in enumerate(block)
+                                  if _s.startswith('lower_limit')][0]
+                            block[_i] = f'lower_limit={init_val:.12g}'
+                        else:
+                            raise ValueError(
+                                (f'Initial value ({init_val:{self.double_format}}) cannot be '
+                                 f'smaller than "lower_limit" ({lower_limit:{self.double_format}})'))
                     elif init_val > upper_limit:
-                        raise ValueError(
-                            (f'Initial value ({init_val:{self.double_format}}) cannot be '
-                             f'larger than "upper_limit" ({upper_limit:{self.double_format}})'))
+                        if self._adj_optim_var_limits_to_init:
+                            _i = [_i for _i, _s in enumerate(block)
+                                  if _s.startswith('upper_limit')][0]
+                            block[_i] = f'upper_limit={init_val:.12g}'
+                        else:
+                            raise ValueError(
+                                (f'Initial value ({init_val:{self.double_format}}) cannot be '
+                                 f'larger than "upper_limit" ({upper_limit:{self.double_format}})'))
                 else:
                     print(f'{name}.{item} is not defined in LTE. So, initial value check is skipped.')
 
