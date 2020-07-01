@@ -1019,10 +1019,10 @@ class Report_NSLS2U_Default:
                 doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
                 with doc.create(plx.FigureForMultiPagePDF(position='h!t')) as fig:
                     page_caption_list = [
-                        (3, 'C30 BM-B Extraction Port'),
-                        (4, 'C01 Short Straight Extraction Port'),
-                        (5, 'C01 BM-B Extraction Port'),
-                        (6, 'C02 Long Straight Extraction Port'),
+                        (3, 'C30 BM-B Extraction Port.'),
+                        (4, 'C01 Short Straight Extraction Port.'),
+                        (5, 'C01 BM-B Extraction Port.'),
+                        (6, 'C02 Long Straight Extraction Port.'),
                     ]
                     for iFig, (page, caption) in enumerate(page_caption_list):
                         with doc.create(plx.SubFigureForMultiPagePDF(
@@ -3443,15 +3443,45 @@ class Report_NSLS2U_Default:
             ws.write(row, col+2, np.rad2deg(theta) * (-1), fmt)
             row += 1
 
-        row = 0
-        for iFig, fp in enumerate(
-            sorted(Path(self.report_folderpath).glob('floor_*.png'))):
-            if iFig == 0:
-                img_height = 15
-            else:
-                img_height = 25
-            ws.insert_image(row, len(header_list) * 2 + 2, fp)
-            row += img_height
+        if self._version == '1.2':
+            title_list = [
+                None,
+                'C30 Long Straight Extraction Port',
+                'C30 BM-B Extraction Port',
+                'C01 Short Straight Extraction Port',
+                'C01 BM-B Extraction Port',
+                'C02 Long Straight Extraction Port',
+                'Electron beam tranjectory around Short Straight (SS)',
+                'Electron beam tranjectory around Long Straight (LS)',
+            ]
+            floor_png_fp_list = sorted(Path(self.report_folderpath).glob('floor_*.png'))
+            assert len(title_list) == len(floor_png_fp_list)
+
+            row = 0
+            for iFig, (fp, title) in enumerate(zip(floor_png_fp_list, title_list)):
+                if title is not None:
+                    ws.write(row, len(header_list) * 2 + 2, title)
+                    row += 1
+
+                if iFig <=5 :
+                    img_height = 22
+                else:
+                    img_height = 25
+                ws.insert_image(row, len(header_list) * 2 + 2, fp)
+                row += img_height
+
+        elif self._version == '1.1':
+            row = 0
+            for iFig, fp in enumerate(
+                sorted(Path(self.report_folderpath).glob('floor_*.png'))):
+                if iFig == 0:
+                    img_height = 15
+                else:
+                    img_height = 25
+                ws.insert_image(row, len(header_list) * 2 + 2, fp)
+                row += img_height
+        else:
+            raise NotImplementedError
 
     def add_xlsx_LTE(self):
         """"""
