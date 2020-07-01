@@ -14,6 +14,8 @@ from types import SimpleNamespace
 import shutil
 import matplotlib.pylab as plt
 from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.legend_handler import HandlerPatch
+import matplotlib.patches as mpatches
 #import yaml
 from ruamel import yaml
 # ^ ruamel's "yaml" does NOT suffer from the PyYAML(v5.3, YAML v1.1) problem
@@ -97,8 +99,8 @@ class Report_NSLS2U_Default:
             self.user_conf = user_conf
 
             report_version = self.user_conf.get('report_version', None)
-            if report_version == '1.0':
-                warnings.warn('report_version=1.1 is the latest.',
+            if report_version != '1.2':
+                warnings.warn('report_version=1.2 is the latest.',
                               DeprecationWarning)
             self.conf = self.get_default_config(report_version)
 
@@ -1001,14 +1003,52 @@ class Report_NSLS2U_Default:
                 fig.add_image(os.path.basename(flr_pdf_filepath), page=1,
                               width=plx.utils.NoEscape(r'\linewidth'))
                 doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
-                fig.add_caption(
-                    ('Floor layout comparison for one super-period with rays '
-                     'from bending magnet entry points.'))
+                if self._version == '1.1':
+                    caption = (
+                        'Floor layout comparison for one super-period with rays '
+                        'from bending magnet entry points.')
+                elif self._version == '1.2':
+                    caption = (
+                        'Floor layout comparison for one super-period with photon '
+                        'beam rays from IDs and bending magnets.')
+                else:
+                    raise NotImplementedError
+                fig.add_caption(caption)
+
+            if self._version == '1.2':
+                doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                with doc.create(plx.FigureForMultiPagePDF(position='h!t')) as fig:
+                    page_caption_list = [
+                        (3, 'C30 BM-B Extraction Port'),
+                        (4, 'C01 Short Straight Extraction Port'),
+                        (5, 'C01 BM-B Extraction Port'),
+                        (6, 'C02 Long Straight Extraction Port'),
+                    ]
+                    for iFig, (page, caption) in enumerate(page_caption_list):
+                        with doc.create(plx.SubFigureForMultiPagePDF(
+                            position='b', width=plx.utils.NoEscape(r'0.5\linewidth'))
+                                        ) as subfig:
+                            subfig.add_image(
+                                os.path.basename(flr_pdf_filepath), page=page,
+                                width=plx.utils.NoEscape(r'\linewidth'))
+                            doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                            subfig.add_caption(plx.NoEscape(caption))
+
+                        if np.mod(iFig, 2) == 1:
+                            doc.append(plx.NewLine())
+                fig.add_caption('Floor layout comparison around photon beam extraction ports.')
 
             doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
             with doc.create(plx.FigureForMultiPagePDF(position='h!t')) as fig:
-                for page, caption in [(2, 'Zoomed in around Short Straight (SS).'),
-                                      (3, 'Zoomed in around Short Straight (LS).')]:
+                if self._version == '1.1':
+                    page_caption_list = [
+                        (2, 'Zoomed in around Short Straight (SS).'),
+                        (3, 'Zoomed in around Long Straight (LS).')]
+                elif self._version == '1.2':
+                    page_caption_list = [
+                        (7, 'Electron beam tranjectory around Short Straight (SS).'),
+                        (8, 'Electron beam tranjectory around Long Straight (LS).')]
+                for page, caption in page_caption_list:
                     with doc.create(plx.SubFigureForMultiPagePDF(
                         position='b', width=plx.utils.NoEscape(r'0.5\linewidth'))
                                     ) as subfig:
@@ -1637,7 +1677,7 @@ class Report_NSLS2U_Default:
             'sigma_delta', # Energy spread
         ]
 
-        if self._version == '1.1':
+        if self._version in ('1.1', '1.2'):
 
             if 'rf' not in self.conf:
                 return
@@ -4871,72 +4911,587 @@ class Report_NSLS2U_Default:
         sel_zpos = dict(ref=[], cur=[])
         sel_xpos = dict(ref=[], cur=[])
 
-        plt.figure(figsize=(9, 3))
-        # Plot reference
-        plt.plot(d['_ref_flr_z'][:ref_max_ind+1],
-                 d['_ref_flr_x'][:ref_max_ind+1], 'b.-', ms=0.5,#5,
-                 label='Reference')
-        max_z = np.max(d['_ref_flr_z'][:ref_max_ind+1])
-        for i in d['_ref_flr_speical_inds']:
-            plt.plot(d['_ref_flr_z'][i], d['_ref_flr_x'][i], 'b+', ms=20)
-            sel_zpos['ref'].append(d['_ref_flr_z'][i])
-            sel_xpos['ref'].append(d['_ref_flr_x'][i])
-        nonbend_to_bend_inds_forward = np.where(
-            np.diff(d['_ref_flr_theta']) != 0.0)[0]
-        #nonbend_to_bend_inds_backward = np.sort(len(d['_ref_flr_theta']) + np.where(
-            #np.diff(d['_ref_flr_theta'][::-1]) != 0.0)[0] * (-1))
-        for bend_ind in nonbend_to_bend_inds_forward:
-            z_ini = d['_ref_flr_z'][bend_ind]
-            x_ini = d['_ref_flr_x'][bend_ind]
-            prev_ind = bend_ind - 1
-            z_prev = d['_ref_flr_z'][prev_ind]
-            x_prev = d['_ref_flr_x'][prev_ind]
-            while z_ini == z_prev:
-                prev_ind -= 1
+        # Locations for NSLS-II Storage Ring where the center of the ratchet
+        # wall penetration (a 16" wide opening in the shielding wall where the
+        # photon beam passes through) intersects with the inner facet of the
+        # shielding wall. (per B. Kosciuk on 06/26/2020)
+        #
+        # The extraction port for BM/3PW radiation "sees" the fan from the
+        # downstream end of BM-A and the upstream side of BM-B, plus the
+        # radiation from the 3PW if one is installed. (per B. Kosciuk on
+        # 06/26/2020)
+        #
+        # (z, x) coordinates in [meters] with Injection Point (C30 Long Straight
+        # Center) aligned at (0, 0).
+        nsls2_extraction_pts = [
+            [25.269, 0.0], # C30 Long Straight Extraction Port
+            [38.330, -3.003], # C30 BM-B Extraction Port
+            [49.670, -7.610], # C01 Short Straight Extraction Port
+            [62.994, -13.835], # C01 BM-B Extraction Port
+            [74.236, -21.151], # C02 Long Straight Extraction Port
+        ] # (per B. Kosciuk on 06/26/2020)
+        nsls2_extraction_pt_names = [
+            'C30 Long Straight Extraction Port',
+            'C30 BM-B Extraction Port',
+            'C01 Short Straight Extraction Port',
+            'C01 BM-B Extraction Port',
+            'C02 Long Straight Extraction Port',
+        ]
+        assert len(nsls2_extraction_pts) == len(nsls2_extraction_pt_names)
+
+        if self._version == '1.1':
+            _use_plot_method = 0
+            nsls2_extraction_pts = []
+            nsls2_extraction_pt_names = []
+            cur_BM_fan_plot = False
+            precise_BM_src_pts = False
+        elif self._version == '1.2':
+            _use_plot_method = 1
+            cur_BM_fan_plot = True
+            precise_BM_src_pts = True
+        else:
+            raise NotImplementedError()
+
+        if _use_plot_method == 0:
+
+            plt.figure(figsize=(10, 4))
+            # Plot reference e-beam trajectory
+            plt.plot(d['_ref_flr_z'][:ref_max_ind+1],
+                     d['_ref_flr_x'][:ref_max_ind+1], 'b.-', ms=0.5,#5,
+                     label='Reference e-Beam Trajectory')
+            #
+            # Plot reference (i.e., NSLS-II) extraction points
+            cur_angle_deg = 0.0 # assumed > 0
+            dh = 16 * 2.54e-2 / 2 # half of 16" ratchet wall opening [m]
+            nsls2_extraction_slopes = []
+            wall_openings = []
+            arrow_handles = []
+            for i, (z_ext, x_ext) in enumerate(nsls2_extraction_pts):
+                theta = np.deg2rad(cur_angle_deg)
+                if precise_BM_src_pts and (np.mod(i, 2) == 1):
+                    # The BM-B source point is 3.25 mrad downstream of the beginning
+                    # of the BM-B magnet. So, add this difference here.
+                    theta += 3.25e-3
+                _z_list = [z_ext - dh * np.sin(theta), z_ext, z_ext + dh * np.sin(theta)]
+                _x_list = [x_ext - dh * np.cos(theta), x_ext, x_ext + dh * np.cos(theta)]
+                plt.plot(_z_list, _x_list, 'b-')
+                wall_openings.append([_z_list, _x_list])
+
+                arrow_ext_fac = 10
+                h_arrow = plt.arrow(
+                    z_ext, x_ext,
+                    dh * np.cos(theta) * arrow_ext_fac,
+                    -dh * np.sin(theta) * arrow_ext_fac,
+                    head_width=0.5, head_length=1.0, fc='b', ec='b')
+                nsls2_extraction_slopes.append(-np.tan(theta))
+                cur_angle_deg += 6.0
+
+                arrow_handles.append(h_arrow)
+                h_arrow.set_label('Reference Ratchet Wall Openings')
+            #
+            if True:
+                max_z = np.max(d['_ref_flr_z'][:ref_max_ind+1])
+            else:
+                max_z = np.max([_z for _z, _x in nsls2_extraction_pts]) + 3.0
+            #
+            # Add ID source points
+            for i in d['_ref_flr_speical_inds']:
+                plt.plot(d['_ref_flr_z'][i], d['_ref_flr_x'][i], 'b+', ms=20)
+                sel_zpos['ref'].append(d['_ref_flr_z'][i])
+                sel_xpos['ref'].append(d['_ref_flr_x'][i])
+            #
+            # Add photon rays from IDs and bending magents
+            nonbend_to_bend_inds_forward = np.where(
+                np.diff(d['_ref_flr_theta']) != 0.0)[0]
+            #nonbend_to_bend_inds_backward = np.sort(len(d['_ref_flr_theta']) + np.where(
+                #np.diff(d['_ref_flr_theta'][::-1]) != 0.0)[0] * (-1))
+            nsls2_ray_slopes = []
+            for _iBend, bend_ind in enumerate(nonbend_to_bend_inds_forward):
+                z_ini = d['_ref_flr_z'][bend_ind]
+                x_ini = d['_ref_flr_x'][bend_ind]
+                prev_ind = bend_ind - 1
                 z_prev = d['_ref_flr_z'][prev_ind]
                 x_prev = d['_ref_flr_x'][prev_ind]
-                if z_prev == 0:
-                    break
-            slope = (x_ini - x_prev) / (z_ini - z_prev)
+                while z_ini == z_prev:
+                    prev_ind -= 1
+                    z_prev = d['_ref_flr_z'][prev_ind]
+                    x_prev = d['_ref_flr_x'][prev_ind]
+                    if z_prev == 0:
+                        break
+                slope = (x_ini - x_prev) / (z_ini - z_prev)
 
+                if precise_BM_src_pts and (np.mod(_iBend, 2) == 1): # For BM-B photons, NOT for ID photons
+                    # The BM-B source point is 3.25 mrad downstream of the beginning
+                    # of the BM-B magnet. So, add this difference here.
+                    theta = np.arctan2(x_ini - x_prev, z_ini - z_prev)
+                    theta_BMB = theta - 3.25e-3
+                    slope = np.tan(theta_BMB)
+
+                    bend_zb = d['_ref_flr_z'][bend_ind]
+                    bend_xb = d['_ref_flr_x'][bend_ind]
+                    bend_ze = d['_ref_flr_z'][bend_ind+1]
+                    bend_xe = d['_ref_flr_x'][bend_ind+1]
+                    phi = np.abs(
+                        d['_ref_flr_theta'][bend_ind+1] - d['_ref_flr_theta'][bend_ind])
+                    # Bending radius
+                    rho = np.sqrt((bend_ze - bend_zb)**2 + (bend_xe - bend_xb)**2
+                                  ) / (2 * np.sin(phi/2))
+                    # Center of bending
+                    z0 = bend_zb - rho * np.sin(np.abs(theta))
+                    x0 = bend_xb - rho * np.cos(np.abs(theta))
+
+                    # (z, x) coord. for 3.25 mrad downstream from BM-B beginning
+                    z_ini = z0 + rho * np.sin(np.abs(theta_BMB))
+                    x_ini = x0 + rho * np.cos(np.abs(theta_BMB))
+
+                    # Check if "theta" is consistent
+                    _d = np.sqrt((bend_ze - bend_zb)**2 + (bend_xe - bend_xb)**2)
+                    my_theta = np.arccos((bend_ze - bend_zb) / _d) - phi / 2
+                    print(f'{-theta:.9f}, {my_theta:.9f}, {(-theta) - my_theta:.9f}')
+
+                nsls2_ray_slopes.append(slope)
+
+                z_fin = max_z
+                x_fin = slope * (z_fin - z_ini) + x_ini
+                plt.plot([z_ini, z_fin], [x_ini, x_fin], 'b-.', lw=1)
+            # Add final photon ray from C02 ID straight
+            ind = np.where(np.diff(d['_ref_flr_z']) != 0.0)[0][-1] + 1
+            z_ini = d['_ref_flr_z'][ind]
+            x_ini = d['_ref_flr_x'][ind]
+            z_prev = d['_ref_flr_z'][ind-1]
+            x_prev = d['_ref_flr_x'][ind-1]
+            slope = (x_ini - x_prev) / (z_ini - z_prev)
+            nsls2_ray_slopes.append(slope)
             z_fin = max_z
             x_fin = slope * (z_fin - z_ini) + x_ini
-            plt.plot([z_ini, z_fin], [x_ini, x_fin], 'b-.', lw=1)
-        #
-        # Plot current
-        plt.plot(d['_cur_flr_z'][:cur_max_ind+1],
-                 d['_cur_flr_x'][:cur_max_ind+1], 'r.-', ms=0.5,#5,
-                 label='Current')
-        for i in d['_cur_flr_speical_inds']:
-            plt.plot(d['_cur_flr_z'][i], d['_cur_flr_x'][i], 'rx', ms=15)
-            sel_zpos['cur'].append(d['_cur_flr_z'][i])
-            sel_xpos['cur'].append(d['_cur_flr_x'][i])
-        nonbend_to_bend_inds_forward = np.where(
-            np.diff(d['_cur_flr_theta']) != 0.0)[0]
-        for bend_ind in nonbend_to_bend_inds_forward:
-            z_ini = d['_cur_flr_z'][bend_ind]
-            x_ini = d['_cur_flr_x'][bend_ind]
-            prev_ind = bend_ind - 1
-            z_prev = d['_cur_flr_z'][prev_ind]
-            x_prev = d['_cur_flr_x'][prev_ind]
-            while z_ini == z_prev:
-                prev_ind -= 1
-                z_prev = d['_cur_flr_z'][prev_ind]
-                x_prev = d['_cur_flr_x'][prev_ind]
-                if z_prev == 0:
-                    break
-            slope = (x_ini - x_prev) / (z_ini - z_prev)
+            plt.plot([z_ini, z_fin], [x_ini, x_fin], 'b-.', lw=1,
+                     label='Reference BM/ID Photon Rays')
+            #
+            print('Slope: (CAD) / (Lattice) / (Diff.)')
+            for cad_slope, lat_slope in zip(nsls2_extraction_slopes, nsls2_ray_slopes):
+                print(f'{cad_slope:.6f} / {lat_slope:.6f} / {lat_slope - cad_slope:.6f}')
+            print('Angle [mrad]: (CAD) / (Lattice) / (Diff.)')
+            for cad_slope, lat_slope in zip(nsls2_extraction_slopes, nsls2_ray_slopes):
+                print(f'{np.arctan(cad_slope) * 1e3:.3f} / {np.arctan(lat_slope) * 1e3:.3f} / {np.arctan(lat_slope - cad_slope) * 1e3:.3f}')
+            print('Angle [deg]: (CAD) / (Lattice) / (Diff.)')
+            for cad_slope, lat_slope in zip(nsls2_extraction_slopes, nsls2_ray_slopes):
+                print(f'{np.rad2deg(np.arctan(cad_slope)):.6f} / {np.rad2deg(np.arctan(lat_slope)):.6f} / {np.rad2deg(np.arctan(lat_slope - cad_slope)):.6f}')
+            #
+            # Plot current e-beam trajectory
+            plt.plot(d['_cur_flr_z'][:cur_max_ind+1],
+                     d['_cur_flr_x'][:cur_max_ind+1], 'r.-', ms=0.5,#5,
+                     label='Current e-Beam Trajectory')
+            for i in d['_cur_flr_speical_inds']:
+                plt.plot(d['_cur_flr_z'][i], d['_cur_flr_x'][i], 'rx', ms=15)
+                sel_zpos['cur'].append(d['_cur_flr_z'][i])
+                sel_xpos['cur'].append(d['_cur_flr_x'][i])
+            nonbend_to_bend_inds_forward = np.where(
+                np.diff(d['_cur_flr_theta']) != 0.0)[0]
+            id_ray_lw = 2 #3
+            #
+            prev_id_ray_ind = -1
+            if not cur_BM_fan_plot:
+                for bend_ind in nonbend_to_bend_inds_forward:
+                    z_ini = d['_cur_flr_z'][bend_ind]
+                    x_ini = d['_cur_flr_x'][bend_ind]
+                    prev_ind = bend_ind - 1
+                    z_prev = d['_cur_flr_z'][prev_ind]
+                    x_prev = d['_cur_flr_x'][prev_ind]
+                    while z_ini == z_prev:
+                        prev_ind -= 1
+                        z_prev = d['_cur_flr_z'][prev_ind]
+                        x_prev = d['_cur_flr_x'][prev_ind]
+                        if z_prev == 0:
+                            break
+                    slope = (x_ini - x_prev) / (z_ini - z_prev)
 
+                    z_fin = max_z
+                    x_fin = slope * (z_fin - z_ini) + x_ini
+                    if (prev_id_ray_ind == -1) or (
+                        bend_ind > d['_cur_flr_speical_inds'][prev_id_ray_ind]):
+                        # For ID rays
+                        lw = id_ray_lw
+                        prev_id_ray_ind += 1
+                    else: # For BM rays
+                        lw = 1
+                    h, = plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=lw)
+                h.set_label('Current BM Photon Rays')
+            else:
+                for bend_ind in nonbend_to_bend_inds_forward:
+                    z_ini = d['_cur_flr_z'][bend_ind]
+                    x_ini = d['_cur_flr_x'][bend_ind]
+                    prev_ind = bend_ind - 1
+                    z_prev = d['_cur_flr_z'][prev_ind]
+                    x_prev = d['_cur_flr_x'][prev_ind]
+                    while z_ini == z_prev:
+                        prev_ind -= 1
+                        z_prev = d['_cur_flr_z'][prev_ind]
+                        x_prev = d['_cur_flr_x'][prev_ind]
+                        if z_prev == 0:
+                            break
+                    slope = (x_ini - x_prev) / (z_ini - z_prev)
+
+                    z_fin = max_z
+                    x_fin = slope * (z_fin - z_ini) + x_ini
+
+                    if (prev_id_ray_ind == -1) or (
+                        bend_ind > d['_cur_flr_speical_inds'][prev_id_ray_ind]):
+                        # For ID rays
+                        plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=id_ray_lw)
+                        prev_id_ray_ind += 1
+                    else: # For BM fans
+                        next_ind = bend_ind + 1
+                        z_next = d['_cur_flr_z'][next_ind]
+                        x_next = d['_cur_flr_x'][next_ind]
+                        next_slope = (x_next - x_ini) / (z_next - z_ini)
+                        z_next_fin = max_z
+                        x_next_fin = next_slope * (z_next_fin - z_next) + x_next
+                        h, = plt.fill(
+                            [z_ini, z_fin] + [z_next, z_next_fin][::-1],
+                            [x_ini, x_fin] + [x_next, x_next_fin][::-1],
+                            facecolor='r', alpha=0.2)
+                h.set_label('Current BM Photon Fans')
+            # Add final photon ray from C02 ID straight
+            ind = np.where(np.diff(d['_cur_flr_z']) != 0.0)[0][-1] + 1
+            z_ini = d['_cur_flr_z'][ind]
+            x_ini = d['_cur_flr_x'][ind]
+            z_prev = d['_cur_flr_z'][ind-1]
+            x_prev = d['_cur_flr_x'][ind-1]
+            slope = (x_ini - x_prev) / (z_ini - z_prev)
             z_fin = max_z
             x_fin = slope * (z_fin - z_ini) + x_ini
-            plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=1)
-        #
-        plt.legend(loc='best')
-        #plt.axis('image')
-        plt.axis('equal')
-        plt.xlabel(r'$z\, [\mathrm{m}]$', size=20)
-        plt.ylabel(r'$x\, [\mathrm{m}]$', size=20)
-        plt.tight_layout()
+            plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=id_ray_lw,
+                     label='Current ID Rays')
+            #
+            if self._version == '1.1':
+                plt.legend(loc='best')
+            else:
+                # Based on the answer by Javier on
+                #   https://stackoverflow.com/questions/22348229/matplotlib-legend-for-an-arrow
+                handles, labels = plt.gca().get_legend_handles_labels()
+                ind = [_i for _i, _label in enumerate(labels)
+                       if _label.startswith('Current')][0]
+                handles.insert(ind, h_arrow)
+                labels.insert(ind, h_arrow.get_label())
+                plt.legend(
+                    #[h_arrow], [h_arrow.get_label()],
+                    handles, labels, loc='best',
+                    handler_map={mpatches.FancyArrow :
+                                 HandlerPatch(patch_func=make_legend_arrow)},
+                )
+            #plt.axis('image')
+            plt.axis('equal')
+            plt.xlabel(r'$z\, [\mathrm{m}]$', size=20)
+            plt.ylabel(r'$x\, [\mathrm{m}]$', size=20)
+            plt.tight_layout()
+
+            if self._version != '1.1':
+                base_fig_pkl = pickle.dumps(plt.gcf())
+
+                # Now generate zoomed-in plots
+                handles_wo_ebeam_traj = [_h for _h, _l in zip(handles, labels)
+                                         if 'e-Beam' not in _l]
+                labels_wo_ebeam_traj = [_l for _l in labels if 'e-Beam' not in _l]
+                assert len(wall_openings) == len(nsls2_extraction_pt_names)
+                for (_z_list, _x_list), _title in zip(
+                    wall_openings, nsls2_extraction_pt_names):
+                    pickle.loads(base_fig_pkl)
+                    ax = plt.gca()
+                    ax.get_legend().remove()
+
+                    _title = _title.replace('-', '\mathrm{{-}}')
+
+                    margin = 0.1
+                    ax.set_xlim([min(_z_list)-margin, max(_z_list)+margin])
+                    ax.set_ylim([min(_x_list)-margin, max(_x_list)+margin])
+                    ax.grid(True, linestyle='--')
+                    ax.set_title(fr'$\mathrm{{{_title}}}$'.replace(' ', '\;'), size=18)
+                    plt.legend(
+                        handles_wo_ebeam_traj, labels_wo_ebeam_traj, loc='best',
+                        handler_map={mpatches.FancyArrow :
+                                     HandlerPatch(patch_func=make_legend_arrow)},
+                    )
+                    fig = plt.gcf()
+                    fig._cachedRenderer = None # Needed for plt.tight_layout() to work
+                    plt.tight_layout()
+
+        elif _use_plot_method == 1:
+
+            for iZoom, zoom_title in enumerate([None] + nsls2_extraction_pt_names):
+
+                plt.figure(figsize=(10, 4))
+
+                if zoom_title is None:
+                    # Plot reference e-beam trajectory
+                    plt.plot(d['_ref_flr_z'][:ref_max_ind+1],
+                             d['_ref_flr_x'][:ref_max_ind+1], 'b.-', ms=0.5,#5,
+                             label='Reference e-Beam Trajectory')
+
+                # Plot reference (i.e., NSLS-II) extraction points
+                cur_angle_deg = 0.0 # assumed > 0
+                dh = 16 * 2.54e-2 / 2 # half of 16" ratchet wall opening [m]
+                nsls2_extraction_slopes = []
+                wall_openings = []
+                arrow_handles = []
+                for i, (z_ext, x_ext) in enumerate(nsls2_extraction_pts):
+                    theta = np.deg2rad(cur_angle_deg)
+                    if precise_BM_src_pts and (np.mod(i, 2) == 1):
+                        # The BM-B source point is 3.25 mrad downstream of the beginning
+                        # of the BM-B magnet. So, add this difference here.
+                        theta += 3.25e-3
+                    _z_list = [z_ext - dh * np.sin(theta), z_ext, z_ext + dh * np.sin(theta)]
+                    _x_list = [x_ext - dh * np.cos(theta), x_ext, x_ext + dh * np.cos(theta)]
+                    if (zoom_title is None) or (i == iZoom -1):
+                        plt.plot(_z_list, _x_list, 'b-')
+                    wall_openings.append([_z_list, _x_list])
+
+                    if (zoom_title is None) or (i == iZoom -1):
+                        if zoom_title is None:
+                            arrow_ext_fac = 10
+                            head_width = 0.5
+                            head_length = 1.0
+                        else:
+                            arrow_ext_fac = 2
+                            head_width = 0.1
+                            head_length = 0.2
+                        h_arrow = plt.arrow(
+                            z_ext, x_ext,
+                            dh * np.cos(theta) * arrow_ext_fac,
+                            -dh * np.sin(theta) * arrow_ext_fac,
+                            head_width=head_width, head_length=head_length,
+                            fc='b', ec='b')
+                        arrow_handles.append(h_arrow)
+                    nsls2_extraction_slopes.append(-np.tan(theta))
+                    cur_angle_deg += 6.0
+
+                h_arrow.set_label('Reference Ratchet Wall Openings')
+
+                if False:
+                    max_z = np.max(d['_ref_flr_z'][:ref_max_ind+1])
+                else:
+                    max_z = np.max([_z for _z, _x in nsls2_extraction_pts]) + 3.0
+
+                if zoom_title is None:
+                    # Add ID source points for reference lattice
+                    for i in d['_ref_flr_speical_inds']:
+                        plt.plot(d['_ref_flr_z'][i], d['_ref_flr_x'][i], 'b+', ms=20)
+                        sel_zpos['ref'].append(d['_ref_flr_z'][i])
+                        sel_xpos['ref'].append(d['_ref_flr_x'][i])
+
+                # Add photon rays from IDs and bending magents for reference lattice
+                nonbend_to_bend_inds_forward = np.where(
+                    np.diff(d['_ref_flr_theta']) != 0.0)[0]
+                #nonbend_to_bend_inds_backward = np.sort(len(d['_ref_flr_theta']) + np.where(
+                    #np.diff(d['_ref_flr_theta'][::-1]) != 0.0)[0] * (-1))
+                nsls2_ray_slopes = []
+                for _iBend, bend_ind in enumerate(nonbend_to_bend_inds_forward):
+                    z_ini = d['_ref_flr_z'][bend_ind]
+                    x_ini = d['_ref_flr_x'][bend_ind]
+                    prev_ind = bend_ind - 1
+                    z_prev = d['_ref_flr_z'][prev_ind]
+                    x_prev = d['_ref_flr_x'][prev_ind]
+                    while z_ini == z_prev:
+                        prev_ind -= 1
+                        z_prev = d['_ref_flr_z'][prev_ind]
+                        x_prev = d['_ref_flr_x'][prev_ind]
+                        if z_prev == 0:
+                            break
+                    slope = (x_ini - x_prev) / (z_ini - z_prev)
+
+                    if precise_BM_src_pts and (np.mod(_iBend, 2) == 1): # For BM-B photons, NOT for ID photons
+                        # The BM-B source point is 3.25 mrad downstream of the beginning
+                        # of the BM-B magnet. So, add this difference here.
+                        theta = np.arctan2(x_ini - x_prev, z_ini - z_prev)
+                        theta_BMB = theta - 3.25e-3
+                        slope = np.tan(theta_BMB)
+
+                        bend_zb = d['_ref_flr_z'][bend_ind]
+                        bend_xb = d['_ref_flr_x'][bend_ind]
+                        bend_ze = d['_ref_flr_z'][bend_ind+1]
+                        bend_xe = d['_ref_flr_x'][bend_ind+1]
+                        phi = np.abs(
+                            d['_ref_flr_theta'][bend_ind+1] - d['_ref_flr_theta'][bend_ind])
+                        # Bending radius
+                        rho = np.sqrt((bend_ze - bend_zb)**2 + (bend_xe - bend_xb)**2
+                                      ) / (2 * np.sin(phi/2))
+                        # Center of bending
+                        z0 = bend_zb - rho * np.sin(np.abs(theta))
+                        x0 = bend_xb - rho * np.cos(np.abs(theta))
+
+                        # (z, x) coord. for 3.25 mrad downstream from BM-B beginning
+                        z_ini = z0 + rho * np.sin(np.abs(theta_BMB))
+                        x_ini = x0 + rho * np.cos(np.abs(theta_BMB))
+
+                        # Check if "theta" is consistent
+                        _d = np.sqrt((bend_ze - bend_zb)**2 + (bend_xe - bend_xb)**2)
+                        my_theta = np.arccos((bend_ze - bend_zb) / _d) - phi / 2
+                        print(f'{-theta:.9f}, {my_theta:.9f}, {(-theta) - my_theta:.9f}')
+
+                    nsls2_ray_slopes.append(slope)
+
+                    z_fin = max_z
+                    x_fin = slope * (z_fin - z_ini) + x_ini
+                    plt.plot([z_ini, z_fin], [x_ini, x_fin], 'b-.', lw=1)
+                # Add final photon ray from C02 ID straight for reference lattice
+                ind = np.where(np.diff(d['_ref_flr_z']) != 0.0)[0][-1] + 1
+                z_ini = d['_ref_flr_z'][ind]
+                x_ini = d['_ref_flr_x'][ind]
+                z_prev = d['_ref_flr_z'][ind-1]
+                x_prev = d['_ref_flr_x'][ind-1]
+                slope = (x_ini - x_prev) / (z_ini - z_prev)
+                nsls2_ray_slopes.append(slope)
+                z_fin = max_z
+                x_fin = slope * (z_fin - z_ini) + x_ini
+                plt.plot([z_ini, z_fin], [x_ini, x_fin], 'b-.', lw=1,
+                         label='Reference BM/ID Photon Rays')
+                #
+                print('Slope: (CAD) / (Lattice) / (Diff.)')
+                for cad_slope, lat_slope in zip(nsls2_extraction_slopes, nsls2_ray_slopes):
+                    print(f'{cad_slope:.6f} / {lat_slope:.6f} / {lat_slope - cad_slope:.6f}')
+                print('Angle [mrad]: (CAD) / (Lattice) / (Diff.)')
+                for cad_slope, lat_slope in zip(nsls2_extraction_slopes, nsls2_ray_slopes):
+                    print(f'{np.arctan(cad_slope) * 1e3:.3f} / {np.arctan(lat_slope) * 1e3:.3f} / {np.arctan(lat_slope - cad_slope) * 1e3:.3f}')
+                print('Angle [deg]: (CAD) / (Lattice) / (Diff.)')
+                for cad_slope, lat_slope in zip(nsls2_extraction_slopes, nsls2_ray_slopes):
+                    print(f'{np.rad2deg(np.arctan(cad_slope)):.6f} / {np.rad2deg(np.arctan(lat_slope)):.6f} / {np.rad2deg(np.arctan(lat_slope - cad_slope)):.6f}')
+
+
+                if zoom_title is None:
+                    # Plot current e-beam trajectory
+                    plt.plot(d['_cur_flr_z'][:cur_max_ind+1],
+                             d['_cur_flr_x'][:cur_max_ind+1], 'r.-', ms=0.5,#5,
+                             label='Current e-Beam Trajectory')
+                    for i in d['_cur_flr_speical_inds']:
+                        plt.plot(d['_cur_flr_z'][i], d['_cur_flr_x'][i], 'rx', ms=15)
+                        sel_zpos['cur'].append(d['_cur_flr_z'][i])
+                        sel_xpos['cur'].append(d['_cur_flr_x'][i])
+
+                nonbend_to_bend_inds_forward = np.where(
+                    np.diff(d['_cur_flr_theta']) != 0.0)[0]
+                id_ray_lw = 2 #3
+                #
+                prev_id_ray_ind = -1
+                if not cur_BM_fan_plot:
+                    for bend_ind in nonbend_to_bend_inds_forward:
+                        z_ini = d['_cur_flr_z'][bend_ind]
+                        x_ini = d['_cur_flr_x'][bend_ind]
+                        prev_ind = bend_ind - 1
+                        z_prev = d['_cur_flr_z'][prev_ind]
+                        x_prev = d['_cur_flr_x'][prev_ind]
+                        while z_ini == z_prev:
+                            prev_ind -= 1
+                            z_prev = d['_cur_flr_z'][prev_ind]
+                            x_prev = d['_cur_flr_x'][prev_ind]
+                            if z_prev == 0:
+                                break
+                        slope = (x_ini - x_prev) / (z_ini - z_prev)
+
+                        z_fin = max_z
+                        x_fin = slope * (z_fin - z_ini) + x_ini
+                        if (prev_id_ray_ind == -1) or (
+                            bend_ind > d['_cur_flr_speical_inds'][prev_id_ray_ind]):
+                            # For ID rays
+                            lw = id_ray_lw
+                            prev_id_ray_ind += 1
+                        else: # For BM rays
+                            lw = 1
+                        h, = plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=lw)
+                    h.set_label('Current BM Photon Rays')
+                else:
+                    for bend_ind in nonbend_to_bend_inds_forward:
+                        z_ini = d['_cur_flr_z'][bend_ind]
+                        x_ini = d['_cur_flr_x'][bend_ind]
+                        prev_ind = bend_ind - 1
+                        z_prev = d['_cur_flr_z'][prev_ind]
+                        x_prev = d['_cur_flr_x'][prev_ind]
+                        while z_ini == z_prev:
+                            prev_ind -= 1
+                            z_prev = d['_cur_flr_z'][prev_ind]
+                            x_prev = d['_cur_flr_x'][prev_ind]
+                            if z_prev == 0:
+                                break
+                        slope = (x_ini - x_prev) / (z_ini - z_prev)
+
+                        z_fin = max_z
+                        x_fin = slope * (z_fin - z_ini) + x_ini
+
+                        if (prev_id_ray_ind == -1) or (
+                            bend_ind > d['_cur_flr_speical_inds'][prev_id_ray_ind]):
+                            # For ID rays
+                            plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=id_ray_lw)
+                            prev_id_ray_ind += 1
+                        else: # For BM fans
+                            next_ind = bend_ind + 1
+                            z_next = d['_cur_flr_z'][next_ind]
+                            x_next = d['_cur_flr_x'][next_ind]
+                            next_slope = (x_next - x_ini) / (z_next - z_ini)
+                            z_next_fin = max_z
+                            x_next_fin = next_slope * (z_next_fin - z_next) + x_next
+                            h, = plt.fill(
+                                [z_ini, z_fin] + [z_next, z_next_fin][::-1],
+                                [x_ini, x_fin] + [x_next, x_next_fin][::-1],
+                                facecolor='r', alpha=0.2)
+                    h.set_label('Current BM Photon Fans')
+                # Add final photon ray from C02 ID straight
+                ind = np.where(np.diff(d['_cur_flr_z']) != 0.0)[0][-1] + 1
+                z_ini = d['_cur_flr_z'][ind]
+                x_ini = d['_cur_flr_x'][ind]
+                z_prev = d['_cur_flr_z'][ind-1]
+                x_prev = d['_cur_flr_x'][ind-1]
+                slope = (x_ini - x_prev) / (z_ini - z_prev)
+                z_fin = max_z
+                x_fin = slope * (z_fin - z_ini) + x_ini
+                plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=id_ray_lw,
+                         label='Current ID Rays')
+                #plt.axis('image')
+                plt.axis('equal')
+
+                # Add legend
+                if False:
+                    plt.legend(loc='best')
+                elif zoom_title is None:
+                    # Based on the answer by Javier on
+                    #   https://stackoverflow.com/questions/22348229/matplotlib-legend-for-an-arrow
+                    handles, labels = plt.gca().get_legend_handles_labels()
+                    ind = [_i for _i, _label in enumerate(labels)
+                           if _label.startswith('Current')][0]
+                    handles.insert(ind, h_arrow)
+                    labels.insert(ind, h_arrow.get_label())
+                    plt.legend(
+                        #[h_arrow], [h_arrow.get_label()],
+                        handles, labels, loc='best',
+                        handler_map={mpatches.FancyArrow :
+                                     HandlerPatch(patch_func=make_legend_arrow)},
+                    )
+                else:
+                    handles_wo_ebeam_traj = [_h for _h, _l in zip(handles, labels)
+                                             if 'e-Beam' not in _l]
+                    labels_wo_ebeam_traj = [_l for _l in labels if 'e-Beam' not in _l]
+
+                    _z_list, _x_list = wall_openings[iZoom-1]
+                    assert zoom_title == nsls2_extraction_pt_names[iZoom-1]
+
+                    ax = plt.gca()
+
+                    margin = 0.1
+                    ax.set_xlim([min(_z_list)-margin, max(_z_list)+margin])
+                    ax.set_ylim([min(_x_list)-margin, max(_x_list)+margin])
+                    ax.grid(True, linestyle='--')
+                    if False:
+                        ax.set_title(fr'$\mathrm{{{zoom_title}}}$'.replace(' ', '\;'), size=18)
+                    plt.legend(
+                        handles_wo_ebeam_traj, labels_wo_ebeam_traj, loc='best',
+                        handler_map={mpatches.FancyArrow :
+                                     HandlerPatch(patch_func=make_legend_arrow)},
+                    )
+
+                plt.xlabel(r'$z\, [\mathrm{m}]$', size=20)
+                plt.ylabel(r'$x\, [\mathrm{m}]$', size=20)
+                plt.tight_layout()
+
+        else:
+            raise ValueError
+
 
         for iSel, (z_ref, z_cur, x_ref, x_cur) in enumerate(zip(
             sel_zpos['ref'], sel_zpos['cur'], sel_xpos['ref'], sel_xpos['cur'])):
@@ -5861,20 +6416,20 @@ class Report_NSLS2U_Default:
 
                 # Synchronous Phase
                 synch_phases_deg = np.rad2deg(np.pi - np.arcsin(U0_eV / rf_volts))
-                if self._version == '1.1':
+                if self._version in ('1.1', '1.2'):
                     synch_phases_deg_list.append(synch_phases_deg)
 
                 # Synchrotron Tune
                 nu_s = np.sqrt(
                     -rf_volts / (E_GeV * 1e9) * np.cos(np.deg2rad(synch_phases_deg))
                     * alphac * h / (2 * np.pi))
-                if self._version == '1.1':
+                if self._version in ('1.1', '1.2'):
                     nu_s_list.append(nu_s)
 
                 # Bunch Length
                 sigma_z_m = alphac * sigma_delta * circumf / (2 * np.pi * nu_s) # [m]
                 sigma_z_ps = sigma_z_m / c * 1e12 # [ps]
-                if self._version == '1.1':
+                if self._version in ('1.1', '1.2'):
                     sigma_z_m_list.append(sigma_z_m)
                     sigma_z_ps_list.append(sigma_z_ps)
 
@@ -5894,10 +6449,10 @@ class Report_NSLS2U_Default:
                 F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
                 rf_bucket_heights_percent = 1e2 * np.sqrt(
                     U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
-                if self._version == '1.1':
+                if self._version in ('1.1', '1.2'):
                     rf_bucket_heights_percent_list.append(rf_bucket_heights_percent)
 
-            if self._version == '1.1':
+            if self._version in ('1.1', '1.2'):
                 self.rf_dep_props = dict(
                     # Inputs
                     E_GeV_list=E_GeV_list, rf_volts=rf_volts, h=h,
@@ -6589,7 +7144,8 @@ class Report_NSLS2U_Default:
         # `None` for latest version
         func_dict = {None: self._get_default_config_v1_1,
                      '1.0': self._get_default_config_v1_0,
-                     '1.1': self._get_default_config_v1_1}
+                     '1.1': self._get_default_config_v1_1,
+                     '1.2': self._get_default_config_v1_2}
 
         return func_dict
 
@@ -6597,7 +7153,7 @@ class Report_NSLS2U_Default:
     def get_latest_config_version_str():
         """"""
 
-        return '1.1'
+        return '1.2'
 
     @staticmethod
     def upgrade_config(conf):
@@ -6669,10 +7225,27 @@ class Report_NSLS2U_Default:
                 del conf['lifetime_calc_opts']
 
         elif conf['report_version'] == '1.1':
+            # Upgrade to '1.2'
+            conf['report_version'] = '1.2'
+            # NotImplementedError
+
+        elif conf['report_version'] == '1.2':
             pass # Latest version. No need to upgrade.
 
         else:
             raise NotImplementedError()
+
+        return conf
+
+    def _get_default_config_v1_2(self, example=False):
+        """"""
+
+        conf = self._get_default_config_v1_1(example=example)
+
+        sqss = yaml.scalarstring.SingleQuotedScalarString
+
+        conf['report_version'] = sqss('1.2')
+        self._version = '1.2'
 
         return conf
 
@@ -7704,6 +8277,17 @@ class Report_NSLS2U_Default:
                 dumper.dump(conf, f)
 
         return conf
+
+def make_legend_arrow(
+    legend, orig_handle, xdescent, ydescent, width, height, fontsize):
+    '''
+    Based on the answer by Javier on
+      https://stackoverflow.com/questions/22348229/matplotlib-legend-for-an-arrow
+    '''
+    p = mpatches.FancyArrow(
+        0, 0.5 * height, width, 0, length_includes_head=True,
+        head_width=0.75*height)
+    return p
 
 def get_parsed_args():
     """"""
