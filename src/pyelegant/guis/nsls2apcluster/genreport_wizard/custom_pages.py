@@ -3997,6 +3997,10 @@ class PageRfTau(PageGenReport):
 
         w = comboBox_max_mom_aper
         validator = w.validator()
+
+        if validator is None:
+            return
+
         new_text = w.currentText()
 
         custom_val_index = 1
