@@ -122,6 +122,9 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
         self.splitter.setSizes([ini_width_load_table,
                                 width - ini_width_load_table])
 
+        # Change the initial selection for "scancel" type
+        self.comboBox_scancel_type.setCurrentText('Only Selected')
+
         self.update_edit_q_cmd_suppl('All')
 
         self.pushButton_update_q.clicked.connect(self.update_q_table)
