@@ -1470,6 +1470,10 @@ class Report_NSLS2U_Default:
                 f'ELEGANT version {versions[0]} was used to compute the '
                 f'tune shift with amplitude.')
 
+            with open(self.suppl_plot_data_filepath['tswa'], 'rb') as f:
+                _, tswa_data = pickle.load(f)
+            _fit_opts = tswa_data['fit_options']
+
             doc.append((
                 f'The plots for tune shift with horizontal amplitude were generated '
                 f'by tracking particles for {n_turns:d} turns at each point in the '
@@ -1488,6 +1492,10 @@ class Report_NSLS2U_Default:
                     y0_offset * 1e3))
             else:
                 doc.append('.')
+
+            doc.append(plx.NoEscape(
+                f'\ The fitting range was ${_fit_opts["fit_xmin"]*1e3:+.3f} '
+                f'\le x_0 [\mathrm{{mm}}] \le {_fit_opts["fit_xmax"]*1e3:+.3f}$.'))
 
             doc.append(plx.NewParagraph())
 
@@ -1509,6 +1517,10 @@ class Report_NSLS2U_Default:
                     x0_offset * 1e3))
             else:
                 doc.append('.')
+
+            doc.append(plx.NoEscape(
+                f'\ The fitting range was ${_fit_opts["fit_ymin"]*1e3:+.3f} '
+                f'\le y_0 [\mathrm{{mm}}] \le {_fit_opts["fit_ymax"]*1e3:+.3f}$.'))
 
             doc.append(plx.NewParagraph())
             doc.append(ver_sentence)
@@ -1549,11 +1561,15 @@ class Report_NSLS2U_Default:
 
         with doc.create(plx.Section('Nonlinear Chromaticity')):
             d = pe.util.load_pgz_file(nonlin_data_filepaths['nonlin_chrom'])
+            assert d['input']['lattice_file_contents'] == LTE_contents
+
             ver_sentence = (
                 f'ELEGANT version {d["_version_ELEGANT"]} was used '
                 f'to compute the nonlinear chromaticity data.')
 
-            assert d['input']['lattice_file_contents'] == LTE_contents
+            with open(self.suppl_plot_data_filepath['nonlin_chrom'], 'rb') as f:
+                nonlin_chrom_data = pickle.load(f)
+            _fit_opts = nonlin_chrom_data['fit_options']
 
             n_turns = d['input']['n_turns']
             ndelta = d['input']['ndelta']
@@ -1579,6 +1595,12 @@ class Report_NSLS2U_Default:
                     x0_offset * 1e3, y0_offset * 1e3))
             else:
                 doc.append('.')
+
+            doc.append(plx.NoEscape(
+                f'\ A polynomial of degree {_fit_opts["max_chrom_order"]} was '
+                f'fit to the tune data in the range of '
+                f'${_fit_opts["fit_deltalim"][0]*1e2:+.3f} \le \delta [\%] \le '
+                f'{_fit_opts["fit_deltalim"][1]*1e2:+.3f}$.'))
 
             doc.append(plx.NewParagraph())
             doc.append(ver_sentence)
@@ -6236,6 +6258,9 @@ class Report_NSLS2U_Default:
             _plot_kwargs['fit_ymin'] = _plot_kwargs.get('fit_ymin', -0.25e-3)
             _plot_kwargs['fit_ymax'] = _plot_kwargs.get('fit_ymax', +0.25e-3)
 
+            fit_options = {k: v for k, v in _plot_kwargs.items()
+                           if k.startswith('fit_')}
+
             if plot_plus_minus_combined:
                 sel_tswa_caption_keys = [
                     'nu_vs_x0', 'tunefootprint_vs_x0',
@@ -6253,7 +6278,7 @@ class Report_NSLS2U_Default:
 
             MathText = plx.MathText # for short-hand notation
 
-            tswa_data = {}
+            tswa_data = {'fit_options': fit_options}
 
             if plot_plus_minus_combined:
 
@@ -6369,8 +6394,13 @@ class Report_NSLS2U_Default:
             _plot_kwargs['fit_deltalim'] = _plot_kwargs.get(
                 'fit_deltalim', [-2e-2, +2e-2])
 
+            fit_options = {k: _plot_kwargs[k] for k in
+                           ['max_chrom_order', 'fit_deltalim']}
+
             nonlin_chrom_data = pe.nonlin.plot_chrom(
                 nonlin_data_filepaths[calc_type], title='', **_plot_kwargs)
+
+            nonlin_chrom_data['fit_options'] = fit_options
 
             self._save_nonlin_plots_to_pdf(calc_type, existing_fignums)
 
