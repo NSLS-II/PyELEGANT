@@ -9,30 +9,24 @@ import tempfile
 import glob
 from pathlib import Path
 import json
+import re
+
+import numpy as np
+import dill
+from ruamel import yaml
 
 from . import util
 
-import dill
+_IMPORT_TIMESTAMP = time.time()
 
-_ABS_TIME_LIMIT = None
-#_ABS_TIME_LIMIT = '2019-10-24T05-50-00'
+_SLURM_CONFIG_FILEPATH = Path.home().joinpath('.pyelegant', 'slurm_config.yaml')
+_SLURM_CONFIG_FILEPATH.parent.mkdir(parents=True, exist_ok=True)
+if not _SLURM_CONFIG_FILEPATH.exists():
+    _SLURM_CONFIG_FILEPATH.write_text('')
+#
+SLURM_PARTITIONS = {}
+SLURM_EXCL_NODES = []
 SLURM_ABS_TIME_LIMIT = {}
-for _k in ['normal', 'tiny', 'short', 'low', 'high', 'long', 'longlong', 'debug',
-           'risky']:
-    SLURM_ABS_TIME_LIMIT[_k] = _ABS_TIME_LIMIT
-
-SLURM_EXCL_NODES = None
-#SLURM_EXCL_NODES = ['apcpu-005',]
-#SLURM_EXCL_NODES = ['cpu-019', 'cpu-020', 'cpu-021',]
-#SLURM_EXCL_NODES = [f'cpu-{n:03d}' for n in range(19, 26+1)] # exclude GPFS nodes
-#SLURM_EXCL_NODES = [f'cpu-{n:03d}' for n in
-                    #list(range(2, 5+1)) + list(range(7, 15+1))] # exclude NFS nodes
-#SLURM_EXCL_NODES = [
-    #f'cpu-{n:03d}' for n in list(range(19, 26+1)) + list(range(2, 5+1)) +
-    #list(range(7, 15+1))] # exclude both GPFS & NFS nodes
-#SLURM_EXCL_NODES = [f'apcpu-{n:03d}' for n in range(1, 5+1)] + [
-    #f'cpu-{n:03d}' for n in list(range(2, 5+1)) +
-    #list(range(7, 15+1))] # exclude both apcpu & NFS nodes, i.e., including only GPFS nodes
 
 if False:
     MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant-latest', ''
@@ -138,10 +132,181 @@ DEFAULT_REMOTE_OPTS = dict(
     ],
 )
 
+def get_slurm_config_filepath():
+    """"""
+    return str(_SLURM_CONFIG_FILEPATH.resolve())
+
+def _get_slurm_partition_info():
+    """"""
+
+    cmd = 'scontrol show partition'
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+
+    parsed = {}
+    for k, v in re.findall('([\w\d]+)=([^\s]+)', out):
+        if k == 'PartitionName':
+            d = parsed[v] = {}
+        else:
+            d[k] = v
+
+    partition_info = parsed
+
+    return partition_info
+
+def clear_slurm_excl_nodes():
+    """"""
+
+    SLURM_EXCL_NODES.clear()
+
+def set_slurm_excl_nodes(node_name_list):
+    """
+    Examples:
+
+    SLURM_EXCL_NODES = ['apcpu-005',]
+    SLURM_EXCL_NODES = ['cpu-019', 'cpu-020', 'cpu-021',]
+    SLURM_EXCL_NODES = [f'cpu-{n:03d}' for n in range(19, 26+1)] # exclude GPFS nodes
+    SLURM_EXCL_NODES = [f'cpu-{n:03d}' for n in
+                        list(range(2, 5+1)) + list(range(7, 15+1))] # exclude NFS nodes
+    SLURM_EXCL_NODES = [
+        f'cpu-{n:03d}' for n in list(range(19, 26+1)) + list(range(2, 5+1)) +
+        list(range(7, 15+1))] # exclude both GPFS & NFS nodes
+    SLURM_EXCL_NODES = [f'apcpu-{n:03d}' for n in range(1, 5+1)] + [
+        f'cpu-{n:03d}' for n in list(range(2, 5+1)) +
+        list(range(7, 15+1))] # exclude both apcpu & NFS nodes, i.e., including only GPFS nodes
+    """
+
+    clear_slurm_excl_nodes()
+    SLURM_EXCL_NODES.extend(node_name_list)
+
+def _init_SLURM_ABS_TIME_LIMIT():
+    """"""
+
+    if not SLURM_PARTITIONS:
+        SLURM_PARTITIONS.update(_get_slurm_partition_info())
+
+    for _partition in list(SLURM_PARTITIONS):
+        SLURM_ABS_TIME_LIMIT[_partition] = None
+
+def clear_slurm_abs_time_limit(partition=None):
+    """"""
+
+    if partition:
+        SLURM_ABS_TIME_LIMIT[partition] = None
+    else:
+        for k in list(SLURM_ABS_TIME_LIMIT):
+            SLURM_ABS_TIME_LIMIT[k] = None
+
+def set_slurm_abs_time_limit(abs_time_limit_str, partition=None):
+    """
+    "abs_time_limit_str" should be either `None` or a string in the form of:
+      '2020-07-02T14-50-00'
+    """
+
+    try:
+        if abs_time_limit_str is not None:
+            time.mktime(time.strptime(abs_time_limit_str, '%Y-%m-%dT%H-%M-%S'))
+    except:
+        raise ValueError(('Invalid format for "abs_time_limit_str". '
+                          'A valid example is "2020-07-02T14-50-00"'))
+
+    # Initialize if not done yet
+    if SLURM_ABS_TIME_LIMIT == {}:
+        _init_SLURM_ABS_TIME_LIMIT()
+
+    if partition:
+        SLURM_ABS_TIME_LIMIT[partition] = abs_time_limit_str
+    else:
+        for k in list(SLURM_ABS_TIME_LIMIT):
+            SLURM_ABS_TIME_LIMIT[k] = abs_time_limit_str
+
+def load_slurm_excl_nodes_from_config_file(force=False):
+    """"""
+
+    if (not force) and (
+        not util.is_file_updated(_SLURM_CONFIG_FILEPATH, _IMPORT_TIMESTAMP)):
+        return
+
+    yml = yaml.YAML()
+    config = yml.load(_SLURM_CONFIG_FILEPATH.read_text())
+
+    exclude_list = config.get('exclude', None)
+    if exclude_list is not None:
+        set_slurm_excl_nodes(list(exclude_list))
+
+def save_slurm_excl_nodes_to_config_file():
+    """"""
+
+    yml = yaml.YAML()
+    try:
+        config = yml.load(_SLURM_CONFIG_FILEPATH.read_text())
+        if config is None:
+            config = {}
+    except:
+        config = {}
+
+    config['exclude'] = SLURM_EXCL_NODES
+
+    with open(_SLURM_CONFIG_FILEPATH, 'w') as f:
+        yml.dump(config, f)
+
+def load_slurm_abs_time_limit_from_config_file(force=False):
+    """"""
+
+    if (not force) and (
+        not util.is_file_updated(_SLURM_CONFIG_FILEPATH, _IMPORT_TIMESTAMP)):
+        return
+
+    yml = yaml.YAML()
+    config = yml.load(_SLURM_CONFIG_FILEPATH.read_text())
+
+    abs_time_limit_str_dict = config.get('abs_time_limit', None)
+    if abs_time_limit_str_dict is None:
+        return
+
+    abs_time_limit_str_list = list(abs_time_limit_str_dict.values())
+    if len(set(abs_time_limit_str_list)) == 1:
+        set_slurm_abs_time_limit(abs_time_limit_str_list[0])
+    else:
+        for partition, abs_time_limit_str in abs_time_limit_str_dict.items():
+            set_slurm_abs_time_limit(abs_time_limit_str, partition=partition)
+
+def save_slurm_abs_time_limit_from_config_file():
+    """"""
+
+    yml = yaml.YAML()
+    try:
+        config = yml.load(_SLURM_CONFIG_FILEPATH.read_text())
+        if config is None:
+            config = {}
+    except:
+        config = {}
+
+    config['abs_time_limit'] = SLURM_ABS_TIME_LIMIT
+
+    with open(_SLURM_CONFIG_FILEPATH, 'w') as f:
+        yml.dump(config, f)
+
 def extract_slurm_opts(remote_opts):
     """"""
 
     slurm_opts = {}
+
+    if SLURM_EXCL_NODES != []:
+        slurm_opts['exclude'] = f'--exclude={",".join(SLURM_EXCL_NODES)}'
+
+    partition = remote_opts.get('partition', None)
+    if partition:
+        try:
+            abs_timelimit = SLURM_ABS_TIME_LIMIT[partition]
+        except:
+            _init_SLURM_ABS_TIME_LIMIT()
+            abs_timelimit = SLURM_ABS_TIME_LIMIT[partition]
+
+        if abs_timelimit:
+            timelimit = get_constrained_timelimit_str(abs_timelimit, partition)
+            if timelimit:
+                slurm_opts['time'] = f'--time={timelimit}'
 
     need_mail_user = False
 
@@ -759,58 +924,99 @@ def get_human_friendly_time_duration_str(dt, fmt='.2f'):
     else:
         return template.format(val=dt/60/60/24, unit='day')
 
+def _convert_slurm_time_duration_str_to_seconds(slurm_time_duration_str):
+    """"""
+
+    s_list = slurm_time_duration_str.split(':')
+    if len(s_list) == 1:
+        s_list = ['00', '00'] + s_list
+    elif len(s_list) == 2:
+        s_list = ['00'] + s_list
+    elif (len(s_list) >= 4) or (len(s_list) == 0):
+        raise RuntimeError('Unexpected number of splits')
+
+    if '-' in s_list[0]:
+        days_str, hrs_str = s_list[0].split('-')
+        s_list[0] = hrs_str
+
+        days_in_secs = int(days_str) * 60.0 * 60.0 * 24.0
+    else:
+        days_in_secs = 0.0
+
+    d = time.strptime(':'.join(s_list), '%H:%M:%S')
+
+    duration_in_sec = days_in_secs + datetime.timedelta(
+        hours=d.tm_hour, minutes=d.tm_min, seconds=d.tm_sec).total_seconds()
+
+    return duration_in_sec
+
 #----------------------------------------------------------------------
 def get_cluster_time_limits():
     """"""
 
-    p = Popen('sinfo', stdout=PIPE, stderr=PIPE)
+    if False:
+        p = Popen('sinfo', stdout=PIPE, stderr=PIPE, encoding='utf-8')
 
-    out , err = p.communicate()
-    out = out.decode('utf-8')
-    err = err.decode('utf-8')
+        out , err = p.communicate()
 
-    if err:
-        print('\n* ERROR:')
-        print(err)
-        raise RuntimeError()
+        if err:
+            print('\n* ERROR:')
+            print(err)
+            raise RuntimeError()
 
-    lines = out.split('\n')
+        lines = out.split('\n')
 
-    all_u_partition_names, uinds = np.unique(
-        [L.split()[0].replace('*', '') for L in lines[1:] if len(L.split()) != 0],
-        return_index=True)
+        all_u_partition_names, uinds = np.unique(
+            [L.split()[0].replace('*', '') for L in lines[1:] if len(L.split()) != 0],
+            return_index=True)
 
-    all_timelimit_strs = np.array(
-        [L.split()[2] for L in lines[1:] if len(L.split()) != 0])
+        all_timelimit_strs = np.array(
+            [L.split()[2] for L in lines[1:] if len(L.split()) != 0])
 
-    all_u_timelimit_strs = all_timelimit_strs[uinds]
+        all_u_timelimit_strs = all_timelimit_strs[uinds]
 
-    all_u_timelimit_secs = []
-    for s in all_u_timelimit_strs:
-        s_list = s.split(':')
-        if len(s_list) == 1:
-            s_list = ['00', '00'] + s_list
-        elif len(s_list) == 2:
-            s_list = ['00'] + s_list
-        elif (len(s_list) >= 4) or (len(s_list) == 0):
-            raise RuntimeError('Unexpected number of splits')
+        all_u_timelimit_secs = []
+        for s in all_u_timelimit_strs:
 
-        if '-' in s_list[0]:
-            days_str, hrs_str = s_list[0].split('-')
-            s_list[0] = hrs_str
+            if s == 'infinite':
+                s = '1000-00:00:00' # set the limit to 1000 days (or any other arbitrarily large number)
 
-            days_in_secs = int(days_str) * 60.0 * 60.0 * 24.0
-        else:
-            days_in_secs = 0.0
+            s_list = s.split(':')
+            if len(s_list) == 1:
+                s_list = ['00', '00'] + s_list
+            elif len(s_list) == 2:
+                s_list = ['00'] + s_list
+            elif (len(s_list) >= 4) or (len(s_list) == 0):
+                raise RuntimeError('Unexpected number of splits')
 
-        d = time.strptime(':'.join(s_list), '%H:%M:%S')
-        all_u_timelimit_secs.append(
-            days_in_secs + datetime.timedelta(
-                hours=d.tm_hour, minutes=d.tm_min, seconds=d.tm_sec).total_seconds())
+            if '-' in s_list[0]:
+                days_str, hrs_str = s_list[0].split('-')
+                s_list[0] = hrs_str
 
-    timelimit_d = {}
-    for partition, sec in zip(all_u_partition_names, all_u_timelimit_secs):
-        timelimit_d[partition] = sec
+                days_in_secs = int(days_str) * 60.0 * 60.0 * 24.0
+            else:
+                days_in_secs = 0.0
+
+            d = time.strptime(':'.join(s_list), '%H:%M:%S')
+            all_u_timelimit_secs.append(
+                days_in_secs + datetime.timedelta(
+                    hours=d.tm_hour, minutes=d.tm_min, seconds=d.tm_sec).total_seconds())
+
+        timelimit_d = {}
+        for partition, sec in zip(all_u_partition_names, all_u_timelimit_secs):
+            timelimit_d[partition] = sec
+
+    else:
+        if not SLURM_PARTITIONS:
+            SLURM_PARTITIONS.update(_get_slurm_partition_info())
+
+        timelimit_d = {}
+        for partition, info_d in SLURM_PARTITIONS.items():
+            time_limit_str = info_d['MaxTime']
+            if time_limit_str == 'UNLIMITED':
+                time_limit_str = '1000-00:00:00' # set the limit to 1000 days (or any other arbitrarily large number)
+            timelimit_d[partition] = \
+                _convert_slurm_time_duration_str_to_seconds(time_limit_str)
 
     return timelimit_d
 
@@ -1230,7 +1436,6 @@ def get_constrained_timelimit_str(abs_timelimit, partition):
     dt_till_timelimit = convertLocalTimeStrToSecFromUTCEpoch(
         abs_timelimit, time_format='%Y-%m-%dT%H-%M-%S') - time.time()
 
-    #get_default_timelimit(partition)
     def_timelimit = get_cluster_time_limits()[partition]
 
     if dt_till_timelimit > def_timelimit:
@@ -1286,7 +1491,11 @@ def gen_mpi_submit_script(
 srun {mpi_compiler_opt} python -m mpi4py.futures {main_script_path} _mpi_starmap {input_filepath}
     '''
 
-    abs_timelimit = SLURM_ABS_TIME_LIMIT[partition]
+    try:
+        abs_timelimit = SLURM_ABS_TIME_LIMIT[partition]
+    except:
+        _init_SLURM_ABS_TIME_LIMIT()
+        abs_timelimit = SLURM_ABS_TIME_LIMIT[partition]
 
     if timelimit_str is None:
         if abs_timelimit is None:
@@ -1306,7 +1515,7 @@ srun {mpi_compiler_opt} python -m mpi4py.futures {main_script_path} _mpi_starmap
         job_name=job_name, partition=partition, ntasks=ntasks,
         slurm_timelimit_str=slurm_timelimit_str,
         x11=('' if not x11 else 'export MPLBACKEND="agg"'),
-        exclude=('' if SLURM_EXCL_NODES is None else '#SBATCH --exclude={}'.format(
+        exclude=('' if SLURM_EXCL_NODES == [] else '#SBATCH --exclude={}'.format(
             ','.join(SLURM_EXCL_NODES))),
         spread_job=('' if not spread_job else '#SBATCH --spread-job')
     )
