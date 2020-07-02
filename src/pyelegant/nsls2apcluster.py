@@ -8,6 +8,7 @@ import shlex
 import tempfile
 import glob
 from pathlib import Path
+import json
 
 from . import util
 
@@ -33,9 +34,17 @@ SLURM_EXCL_NODES = None
     #f'cpu-{n:03d}' for n in list(range(2, 5+1)) +
     #list(range(7, 15+1))] # exclude both apcpu & NFS nodes, i.e., including only GPFS nodes
 
-#MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant-latest', ''
-MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant-latest elegant/2020.2.0', ''
-#MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant/2020.1.1-1', '--mpi=pmi2'
+if False:
+    MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant-latest', ''
+    #MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant-latest elegant/2020.2.0', ''
+    #MODULE_LOAD_CMD_STR, MPI_COMPILER_OPT_STR = 'elegant/2020.1.1-1', '--mpi=pmi2'
+else:
+    _this_folder = os.path.dirname(os.path.abspath(__file__))
+    _facility_json_filepath = os.path.join(_this_folder, 'facility.json')
+    with open(_facility_json_filepath, 'r') as f:
+        _facility_info = json.load(f)
+    MODULE_LOAD_CMD_STR = _facility_info['MODULE_LOAD_CMD_STR']
+    MPI_COMPILER_OPT_STR = _facility_info['MPI_COMPILER_OPT_STR']
 
 _p = Popen(shlex.split('which elegant'), stdout=PIPE, stderr=PIPE, encoding='utf-8')
 _out, _err = _p.communicate()

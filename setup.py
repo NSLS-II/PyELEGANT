@@ -66,9 +66,18 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
             'Specified facility_name "{}" is not available.'.format(facility_name))
 
     this_folder = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(
-        this_folder, 'src', 'pyelegant', facility_json_filename), 'w') as f:
-        json.dump({'name': facility_name}, f)
+
+    facility_json_filepath = os.path.join(
+        this_folder, 'src', 'pyelegant', facility_json_filename)
+    with open(facility_json_filepath, 'w') as f:
+        if facility_name == 'nsls2apcluster':
+            json.dump({
+                'name': facility_name,
+                'MODULE_LOAD_CMD_STR': 'elegant-latest', # 'elegant-latest elegant/2020.2.0',
+                'MPI_COMPILER_OPT_STR': '', # '--mpi=pmi2',
+                }, f)
+        else:
+            json.dump({'name': facility_name}, f)
 
     sys.argv.remove(facility_name_opt[0])
 
