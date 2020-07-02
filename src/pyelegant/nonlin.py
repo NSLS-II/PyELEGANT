@@ -1101,6 +1101,8 @@ def calc_mom_aper(
     delta_positive_start=+1e-3, delta_positive_limit=+5e-2,
     init_delta_step_size=5e-3, s_start=0.0, s_end=None, include_name_pattern=None,
     steps_back=1, splits=2, split_step_divisor=10, verbosity=1,
+    forbid_resonance_crossing=False, soft_failure=False,
+    process_elements=2147483647,
     n_turns=1024, use_beamline=None, N_KICKS=None, transmute_elements=None,
     ele_filepath=None, output_file_type=None, del_tmp_files=True,
     run_local=False, remote_opts=None):
@@ -1133,6 +1135,9 @@ def calc_mom_aper(
     input_dict['splits'] = splits
     input_dict['split_step_divisor'] = split_step_divisor
     input_dict['verbosity'] = verbosity
+    input_dict['forbid_resonance_crossing'] = forbid_resonance_crossing
+    input_dict['soft_failure'] = soft_failure
+    input_dict['process_elements'] = process_elements
 
     output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
     input_dict['output_file_type'] = output_file_type
@@ -1185,6 +1190,8 @@ def calc_mom_aper(
         steps_back=steps_back, splits=splits,
         split_step_divisor=split_step_divisor,
         fiducialize=True, verbosity=verbosity,
+        forbid_resonance_crossing=forbid_resonance_crossing,
+        soft_failure=soft_failure, process_elements=process_elements,
     )
     if include_name_pattern is not None:
         _block_opts['include_name_pattern'] = include_name_pattern
