@@ -1721,6 +1721,24 @@ class Report_NSLS2U_Default:
                 s_start = d['input']['s_start']
                 s_end = d['input']['s_end']
                 include_name_pattern = d['input']['include_name_pattern']
+                if 'forbid_resonance_crossing' in d['input']:
+                    if d['input']['forbid_resonance_crossing']:
+                        res_xing_flag = ''
+                    else:
+                        res_xing_flag = 'not '
+                else:
+                    res_xing_flag = 'not '
+                #
+                if 'soft_failure' in d['input']:
+                    if d['input']['soft_failure']:
+                        soft_fail_sentence = (
+                            'When no particle loss occurred during the search, '
+                            'the search limit was used as its aperture.')
+                    else:
+                        soft_fail_sentence = ''
+                else:
+                    soft_fail_sentence = ''
+                #
                 para = f'''\
                 The momentum aperture was searched by tracking particles for
                 {n_turns:d} turns with initial $(x, y) =
@@ -1733,6 +1751,9 @@ class Report_NSLS2U_Default:
                 aperture search started from {delta_negative_start*1e2:-.3f}\%
                 up to {delta_negative_limit*1e2:-.3f}\%, with the initial step
                 size of {init_delta_step_size*1e2:.6f}\%.
+                The search was {res_xing_flag}terminated when crossing
+                half-integer and integer tunes.
+                {soft_fail_sentence}
                 '''
                 para = self._convert_multiline_to_oneline(para)
                 doc.append(plx.NoEscape(para))
