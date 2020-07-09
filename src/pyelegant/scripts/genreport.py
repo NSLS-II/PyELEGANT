@@ -12,10 +12,12 @@ import pickle
 import fnmatch
 from types import SimpleNamespace
 import shutil
-import matplotlib.pylab as plt
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.legend_handler import HandlerPatch
 import matplotlib.patches as mpatches
+from matplotlib.patches import Polygon
+import matplotlib.colors as mcolors
 #import yaml
 from ruamel import yaml
 # ^ ruamel's "yaml" does NOT suffer from the PyYAML(v5.3, YAML v1.1) problem
@@ -39,6 +41,75 @@ GREEK = dict(
 SYMBOL = dict(
     partial=chr(0x2202), minus=chr(0x2013), # 0x2013 := "en dash"
 )
+
+def gradient_fill(
+    x, y, fill_color=None, ax=None, xy_polygon_clip=False, alpha_descending=True,
+    **kwargs):
+    """
+    Copied from "https://stackoverflow.com/questions/29321835/is-it-possible-to-get-color-gradients-under-curve-in-matplotlib"
+
+    Plot a line with a linear alpha gradient filled beneath it.
+
+    Parameters
+    ----------
+    x, y : array-like
+        The data values of the line.
+    fill_color : a matplotlib color specifier (string, tuple) or None
+        The color for the fill. If None, the color of the line will be used.
+    ax : a matplotlib Axes instance
+        The axes to plot on. If None, the current pyplot axes will be used.
+    Additional arguments are passed on to matplotlib's ``plot`` function.
+
+    Returns
+    -------
+    line : a Line2D instance
+        The line plotted.
+    im : an AxesImage instance
+        The transparent gradient clipped to just the area beneath the curve.
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    x = np.array(x)
+    y = np.array(y)
+
+    line, = ax.plot(x, y, **kwargs)
+    if fill_color is None:
+        fill_color = line.get_color()
+
+    zorder = line.get_zorder()
+    alpha = line.get_alpha()
+    alpha = 1.0 if alpha is None else alpha
+
+    z = np.empty((100, 1, 4), dtype=float)
+    rgb = mcolors.colorConverter.to_rgb(fill_color)
+    z[:,:,:3] = rgb
+    if alpha_descending:
+        z[:,:,-1] = np.linspace(0, alpha, 100)[:,None]
+    else:
+        z[:,:,-1] = np.linspace(alpha, 0, 100)[:,None]
+
+    xmin, xmax, ymin, ymax = x.min(), x.max(), y.min(), y.max()
+    im = ax.imshow(z, aspect='auto', extent=[xmin, xmax, ymin, ymax],
+                   origin='lower', zorder=zorder)
+
+    if not xy_polygon_clip:
+        xy = np.column_stack([x, y])
+        xy = np.vstack([[xmin, ymin], xy, [xmax, ymin], [xmin, ymin]])
+    else:
+        if x[0] == x[-1] and y[0] == y[-1]:
+            # Closed polygon path was given
+            xy = np.column_stack([x, y])
+        else:
+            # Force closing the polygon path
+            xy = np.column_stack([x, y])
+            xy = np.vstack([xy, [x[0], y[0]]])
+    clip_path = Polygon(xy, facecolor='none', edgecolor='none', closed=True)
+    ax.add_patch(clip_path)
+    im.set_clip_path(clip_path)
+
+    ax.autoscale(True)
+    return line, im
 
 def _yaml_append_map(
     com_map, key, value, eol_comment=None, before_comment=None, before_indent=0):
@@ -4999,7 +5070,9 @@ class Report_NSLS2U_Default:
             precise_BM_src_pts = False
         elif self._version == '1.2':
             _use_plot_method = 1
-            cur_BM_fan_plot = True
+            #_use_plot_method = 2
+            #cur_BM_fan_plot = True
+            cur_BM_fan_plot = False
             precise_BM_src_pts = True
         else:
             raise NotImplementedError()
@@ -5267,7 +5340,19 @@ class Report_NSLS2U_Default:
                     fig._cachedRenderer = None # Needed for plt.tight_layout() to work
                     plt.tight_layout()
 
-        elif _use_plot_method == 1:
+        elif _use_plot_method in (1, 2):
+
+            ref_ray_ls = '-.'
+            cur_ray_ls = '--'
+
+            # ### CRITICAL ###
+            # Note that bending angle is **twice** the angle corresponding to
+            # the e-beam trajectory slope change!!
+
+            if _use_plot_method == 2 or cur_BM_fan_plot:
+                plt.rcParams['image.composite_image'] = False
+                # ^ IMPORTANT: Needed for the clipping in gradient_fill() to work
+                # properly when saving to a vector format.
 
             for iZoom, zoom_title in enumerate([None] + nsls2_extraction_pt_names):
 
@@ -5330,12 +5415,14 @@ class Report_NSLS2U_Default:
                         sel_zpos['ref'].append(d['_ref_flr_z'][i])
                         sel_xpos['ref'].append(d['_ref_flr_x'][i])
 
-                # Add photon rays from IDs and bending magents for reference lattice
+                # Add photon rays from IDs and bending magnets for reference lattice
                 nonbend_to_bend_inds_forward = np.where(
                     np.diff(d['_ref_flr_theta']) != 0.0)[0]
                 #nonbend_to_bend_inds_backward = np.sort(len(d['_ref_flr_theta']) + np.where(
                     #np.diff(d['_ref_flr_theta'][::-1]) != 0.0)[0] * (-1))
                 nsls2_ray_slopes = []
+                prev_id_ray_ind = -1
+                ref_BM_fan_labeled = False
                 for _iBend, bend_ind in enumerate(nonbend_to_bend_inds_forward):
                     z_ini = d['_ref_flr_z'][bend_ind]
                     x_ini = d['_ref_flr_x'][bend_ind]
@@ -5349,6 +5436,86 @@ class Report_NSLS2U_Default:
                         if z_prev == 0:
                             break
                     slope = (x_ini - x_prev) / (z_ini - z_prev)
+                    # ### CRITICAL ###
+                    # Note that bending angle is **twice** the angle corresponding to
+                    # the e-beam trajectory slope change!!
+
+                    if _use_plot_method == 2:
+                        if (prev_id_ray_ind == -1) or (
+                            bend_ind > d['_ref_flr_speical_inds'][prev_id_ray_ind]):
+
+                            prev_id_ray_ind += 1
+
+                            if False:
+                                # Plot reference BM-A fans (which are right next to ID ray)
+                                z_fin = max_z
+                                x_fin = slope * (z_fin - z_ini) + x_ini
+
+                                ds_ind = bend_ind + 1
+                                z_ds_ini = d['_ref_flr_z'][ds_ind]
+                                x_ds_ini = d['_ref_flr_x'][ds_ind]
+
+                                ds_next_ind = ds_ind + 1
+                                z_ds_next = d['_ref_flr_z'][ds_next_ind]
+                                x_ds_next = d['_ref_flr_x'][ds_next_ind]
+                                while z_ds_ini == z_ds_next:
+                                    ds_next_ind += 1
+                                    z_ds_next = d['_ref_flr_z'][ds_next_ind]
+                                    x_ds_next = d['_ref_flr_x'][ds_next_ind]
+
+                                next_slope = (x_ds_next - x_ds_ini) / (z_ds_next - z_ds_ini)
+                                z_ds_next_fin = max_z
+                                x_ds_next_fin = next_slope * (z_ds_next_fin - z_ds_next) + x_ds_next
+                                #h, = plt.fill(
+                                    #[z_ini, z_fin] + [z_ds_next, z_ds_next_fin][::-1],
+                                    #[x_ini, x_fin] + [x_ds_next, x_ds_next_fin][::-1],
+                                    #facecolor='b', alpha=0.2)
+                                _, _ = gradient_fill(
+                                    [z_ini, z_fin] + [z_ds_next, z_ds_next_fin][::-1],
+                                    [x_ini, x_fin] + [x_ds_next, x_ds_next_fin][::-1],
+                                    color='b', fill_color='b', alpha=1.0, xy_polygon_clip=True,
+                                    alpha_descending=True)
+                                h, = plt.fill(np.nan, np.nan, facecolor='b', alpha=1.0)
+                                # ^ Adding this just to have a rectangle show up
+                                #   in the legend.
+
+                                if not ref_BM_fan_labeled:
+                                    h.set_label('Reference BM Photon Fans')
+                                    ref_BM_fan_labeled = True
+
+                        else:
+                            # Plot reference BM-B fans
+
+                            z_fin = max_z
+                            x_fin = slope * (z_fin - z_ini) + x_ini
+
+                            ds_ind = bend_ind + 1
+                            z_ds_ini = d['_ref_flr_z'][ds_ind]
+                            x_ds_ini = d['_ref_flr_x'][ds_ind]
+
+                            ds_next_ind = ds_ind + 1
+                            z_ds_next = d['_ref_flr_z'][ds_next_ind]
+                            x_ds_next = d['_ref_flr_x'][ds_next_ind]
+                            while z_ds_ini == z_ds_next:
+                                ds_next_ind += 1
+                                z_ds_next = d['_ref_flr_z'][ds_next_ind]
+                                x_ds_next = d['_ref_flr_x'][ds_next_ind]
+
+                            next_slope = (x_ds_next - x_ds_ini) / (z_ds_next - z_ds_ini)
+                            z_ds_next_fin = max_z
+                            x_ds_next_fin = next_slope * (z_ds_next_fin - z_ds_next) + x_ds_next
+                            _, _ = gradient_fill(
+                                [z_ini, z_fin] + [z_ds_next, z_ds_next_fin][::-1],
+                                [x_ini, x_fin] + [x_ds_next, x_ds_next_fin][::-1],
+                                color='b', fill_color='b', alpha=1.0, xy_polygon_clip=True,
+                                alpha_descending=True)
+                            h, = plt.fill(np.nan, np.nan, facecolor='b', alpha=1.0)
+                            # ^ Adding this just to have a rectangle show up
+                            #   in the legend.
+
+                            if not ref_BM_fan_labeled:
+                                h.set_label('Reference BM Photon Fans')
+                                ref_BM_fan_labeled = True
 
                     if precise_BM_src_pts and (np.mod(_iBend, 2) == 1): # For BM-B photons, NOT for ID photons
                         # The BM-B source point is 3.25 mrad downstream of the beginning
@@ -5383,7 +5550,7 @@ class Report_NSLS2U_Default:
 
                     z_fin = max_z
                     x_fin = slope * (z_fin - z_ini) + x_ini
-                    plt.plot([z_ini, z_fin], [x_ini, x_fin], 'b-.', lw=1)
+                    plt.plot([z_ini, z_fin], [x_ini, x_fin], 'b', ls=ref_ray_ls, lw=1)
                 # Add final photon ray from C02 ID straight for reference lattice
                 ind = np.where(np.diff(d['_ref_flr_z']) != 0.0)[0][-1] + 1
                 z_ini = d['_ref_flr_z'][ind]
@@ -5394,8 +5561,8 @@ class Report_NSLS2U_Default:
                 nsls2_ray_slopes.append(slope)
                 z_fin = max_z
                 x_fin = slope * (z_fin - z_ini) + x_ini
-                plt.plot([z_ini, z_fin], [x_ini, x_fin], 'b-.', lw=1,
-                         label='Reference BM/ID Photon Rays')
+                plt.plot([z_ini, z_fin], [x_ini, x_fin], 'b', ls=ref_ray_ls, lw=1,
+                         label='Reference BM-Entrance/ID Photon Rays')
                 #
                 print('Slope: (CAD) / (Lattice) / (Diff.)')
                 for cad_slope, lat_slope in zip(nsls2_extraction_slopes, nsls2_ray_slopes):
@@ -5423,6 +5590,7 @@ class Report_NSLS2U_Default:
                 id_ray_lw = 2 #3
                 #
                 prev_id_ray_ind = -1
+                cur_BM_ray_labeled = False
                 if not cur_BM_fan_plot:
                     for bend_ind in nonbend_to_bend_inds_forward:
                         z_ini = d['_cur_flr_z'][bend_ind]
@@ -5445,10 +5613,15 @@ class Report_NSLS2U_Default:
                             # For ID rays
                             lw = id_ray_lw
                             prev_id_ray_ind += 1
+                            c = 'r'
                         else: # For BM rays
                             lw = 1
-                        h, = plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=lw)
-                    h.set_label('Current BM Photon Rays')
+                            c = 'k'
+                        h, = plt.plot([z_ini, z_fin], [x_ini, x_fin], c,
+                                      ls=cur_ray_ls, lw=lw)
+                    if (not cur_BM_ray_labeled) and (c == 'k'):
+                        h.set_label('Current BM Entrance Photon Rays')
+                        cur_BM_ray_labeled = True
                 else:
                     for bend_ind in nonbend_to_bend_inds_forward:
                         z_ini = d['_cur_flr_z'][bend_ind]
@@ -5470,19 +5643,34 @@ class Report_NSLS2U_Default:
                         if (prev_id_ray_ind == -1) or (
                             bend_ind > d['_cur_flr_speical_inds'][prev_id_ray_ind]):
                             # For ID rays
-                            plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=id_ray_lw)
+                            plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r',
+                                     ls=cur_ray_ls, lw=id_ray_lw)
                             prev_id_ray_ind += 1
                         else: # For BM fans
-                            next_ind = bend_ind + 1
-                            z_next = d['_cur_flr_z'][next_ind]
-                            x_next = d['_cur_flr_x'][next_ind]
-                            next_slope = (x_next - x_ini) / (z_next - z_ini)
-                            z_next_fin = max_z
-                            x_next_fin = next_slope * (z_next_fin - z_next) + x_next
-                            h, = plt.fill(
-                                [z_ini, z_fin] + [z_next, z_next_fin][::-1],
-                                [x_ini, x_fin] + [x_next, x_next_fin][::-1],
-                                facecolor='r', alpha=0.2)
+                            ds_ind = bend_ind + 1
+                            z_ds_ini = d['_cur_flr_z'][ds_ind]
+                            x_ds_ini = d['_cur_flr_x'][ds_ind]
+
+                            ds_next_ind = ds_ind + 1
+                            z_ds_next = d['_cur_flr_z'][ds_next_ind]
+                            x_ds_next = d['_cur_flr_x'][ds_next_ind]
+                            while z_ds_ini == z_ds_next:
+                                ds_next_ind += 1
+                                z_ds_next = d['_cur_flr_z'][ds_next_ind]
+                                x_ds_next = d['_cur_flr_x'][ds_next_ind]
+
+                            next_slope = (x_ds_next - x_ds_ini) / (z_ds_next - z_ds_ini)
+                            z_ds_next_fin = max_z
+                            x_ds_next_fin = next_slope * (z_ds_next_fin - z_ds_next) + x_ds_next
+                            _, _ = gradient_fill(
+                                [z_ini, z_fin] + [z_ds_next, z_ds_next_fin][::-1],
+                                [x_ini, x_fin] + [x_ds_next, x_ds_next_fin][::-1],
+                                lw=0.1, color='r', fill_color='r', alpha=1.0, xy_polygon_clip=True,
+                                alpha_descending=True)
+                            h, = plt.fill(np.nan, np.nan, facecolor='r', alpha=1.0)
+                            # ^ Adding this just to have a rectangle show up
+                            #   in the legend.
+
                     h.set_label('Current BM Photon Fans')
                 # Add final photon ray from C02 ID straight
                 ind = np.where(np.diff(d['_cur_flr_z']) != 0.0)[0][-1] + 1
@@ -5493,8 +5681,8 @@ class Report_NSLS2U_Default:
                 slope = (x_ini - x_prev) / (z_ini - z_prev)
                 z_fin = max_z
                 x_fin = slope * (z_fin - z_ini) + x_ini
-                plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=id_ray_lw,
-                         label='Current ID Rays')
+                plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r', ls=cur_ray_ls,
+                         lw=id_ray_lw, label='Current ID Rays')
                 #plt.axis('image')
                 plt.axis('equal')
 
@@ -5523,16 +5711,23 @@ class Report_NSLS2U_Default:
                     _z_list, _x_list = wall_openings[iZoom-1]
                     assert zoom_title == nsls2_extraction_pt_names[iZoom-1]
 
+                    plt.xticks(size=18)
+                    plt.yticks(size=18)
+
                     ax = plt.gca()
 
                     margin = 0.1
                     ax.set_xlim([min(_z_list)-margin, max(_z_list)+margin])
-                    ax.set_ylim([min(_x_list)-margin, max(_x_list)+margin])
+                    top_margin = 0.6
+                    bottom_margin = 0.1
+                    ax.set_ylim([min(_x_list)-bottom_margin,
+                                 max(_x_list)+top_margin])
                     ax.grid(True, linestyle='--')
                     if False:
                         ax.set_title(fr'$\mathrm{{{zoom_title}}}$'.replace(' ', '\;'), size=18)
                     plt.legend(
-                        handles_wo_ebeam_traj, labels_wo_ebeam_traj, loc='best',
+                        handles_wo_ebeam_traj, labels_wo_ebeam_traj,
+                        loc='upper left', ncol=1, prop=dict(size=16),
                         handler_map={mpatches.FancyArrow :
                                      HandlerPatch(patch_func=make_legend_arrow)},
                     )
