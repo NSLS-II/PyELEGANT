@@ -43,7 +43,7 @@ class TableModelQueue(QtCore.QAbstractTableModel):
         self._data = [[]]
 
         self._headers = header_list
-        #self._row_numbers = range(len(data))
+        self._row_numbers = []
 
     def data(self, index, role):
         if role == Qt.DisplayRole:
@@ -67,13 +67,37 @@ class TableModelQueue(QtCore.QAbstractTableModel):
             if orientation == Qt.Horizontal:
                 return str(self._headers[section])
 
-            #if orientation == Qt.Vertical:
-                #return str(self._row_numbers[section])
+            if orientation == Qt.Vertical:
+                try:
+                    return str(self._row_numbers[section])
+                except:
+                    return '0'
 
     def get_hearders(self):
         """"""
 
         return self._headers
+
+    def update_data(self, table):
+        """"""
+
+        self.beginResetModel()
+
+        self._data.clear()
+
+        if table != []:
+            self._data.extend(table)
+        else:
+            self._data.append([None] * len(self.get_hearders()))
+
+        self.endResetModel()
+
+        self._update_row_numbers()
+
+    def _update_row_numbers(self):
+        """"""
+
+        self._row_numbers = range(len(self._data))
 
 class ClusterStatusWindow(QtWidgets.QMainWindow):
 
@@ -613,13 +637,7 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
 
         m = self.model_q
 
-        m.beginResetModel()
-        m._data.clear()
-        if table != []:
-            m._data.extend(table)
-        else:
-            m._data.append([None] * len(m.get_hearders()))
-        m.endResetModel()
+        m.update_data(table)
 
         self.tableView_q.resizeColumnsToContents()
 
