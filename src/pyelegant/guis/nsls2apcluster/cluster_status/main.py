@@ -37,18 +37,34 @@ def chained_Popen(cmd_list):
 class TableModelQueue(QtCore.QAbstractTableModel):
     """"""
 
-    def __init__(self, squeue_output_format, header_list,
-                 time_duration_column_inds):
+    def __init__(self, q_output_format_list):
         """Constructor"""
 
         super().__init__()
 
+        self.initialize(q_output_format_list)
+
+    def initialize(self, q_output_format_list):
+        """"""
+
         self._data = [[]]
 
-        self._headers = header_list
+        q_output_format_delimiter = '#'
+        q_output_format = q_output_format_delimiter.join(q_output_format_list)
+
+        # Any username will do as long as it does not exist, as we want to just
+        # get a header here.
+        cmd = f'squeue -o "{q_output_format}" -u nonexistent'
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+        out, err = p.communicate()
+        header = out
+        self._headers = [s.strip() for s in header.split(q_output_format_delimiter)]
+
         self._row_numbers = []
 
-        self._time_duration_column_inds = time_duration_column_inds
+        self._time_duration_column_inds = [
+            i for i, _format in enumerate(q_output_format_list)
+            if _format in ('%M', '%L')]
 
     def data(self, index, role):
         if role == Qt.DisplayRole:
@@ -104,6 +120,11 @@ class TableModelQueue(QtCore.QAbstractTableModel):
         self._data.clear()
 
         if table != []:
+
+            for row in table:
+                for iCol in self._time_duration_column_inds:
+                    row[iCol] = convert_slurm_time_duration_str_to_seconds(row[iCol])
+
             self._data.extend(table)
         else:
             self._data.append([None] * len(self.get_hearders()))
@@ -135,14 +156,7 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             '%V', '%Q']
         self.q_output_format = q_output_format_delimiter.join(q_output_format_list)
 
-        self.time_duration_column_inds = [
-            i for i, _format in enumerate(q_output_format_list)
-            if _format in ('%M', '%L')]
-
-        header, _ = self.squeue('-u nonexistent')
-        header = [s.strip() for s in header.split(q_output_format_delimiter)]
-        self.model_q = TableModelQueue(self.q_output_format, header,
-                                       self.time_duration_column_inds)
+        self.model_q = TableModelQueue(q_output_format_list)
 
         self.proxy_model_q = QtCore.QSortFilterProxyModel()
         self.proxy_model_q.setSourceModel(self.model_q)
@@ -631,6 +645,8 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
     def update_q_table(self):
         """"""
 
+        QMessageBox = QtWidgets.QMessageBox
+
         extra_arg_list = ['--noheader']
 
         cmd_type = self.comboBox_q_cmd.currentText()
@@ -644,24 +660,23 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
         elif cmd_type == 'grep exclude':
             extra = self.q_cmd_extra_args[cmd_type]
             extra_arg_list.append(f'| grep -v {extra}')
-        elif cmd_type == '$ squeue':
-            extra = self.q_cmd_extra_args[cmd_type]
-            extra_tokens = extra.split()
-            if '--noheader' in extra_tokens:
-                extra_tokens.remove('--noheader')
-            elif '-h' in extra_tokens:
-                extra_tokens.remove('-h')
-            extra_arg_list += extra_tokens
         else:
             raise ValueError()
 
         out, err = self.squeue(' '.join(extra_arg_list))
+        if err:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Critical)
+            msg.setText('Error during squeue')
+            msg.setInformativeText(err)
+            msg.setWindowTitle('squeue error')
+            msg.setStyleSheet("QIcon{max-width: 100px;}")
+            msg.setStyleSheet("QLabel{min-width: 300px;}")
+            msg.exec_()
+            return
+
         table = [line.split(self.q_output_format_delimiter)
                  for line in out.splitlines()]
-
-        for row in table:
-            for iCol in self.time_duration_column_inds:
-                row[iCol] = convert_slurm_time_duration_str_to_seconds(row[iCol])
 
         self.model_q.update_data(table)
 
