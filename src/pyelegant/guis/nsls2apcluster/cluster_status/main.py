@@ -6,6 +6,8 @@ import re
 import getpass
 import time
 import datetime
+import collections
+from functools import partial
 
 import numpy as np
 
@@ -332,6 +334,59 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
 
         self.partition_info = parsed
 
+    def update_sinfo(self):
+        """"""
+
+        cmd = 'sinfo -h -o "%P#%a#%l#%D#%T#%N"'
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+        out, err = p.communicate()
+
+        nMaxNodeIndex = 100
+
+        parsed = collections.defaultdict(dict)
+        for line in out.strip().split('\n'):
+            partition, avail, tlim, n_nodes, state, nodes_str = line.split('#')
+            if partition.endswith('*'):
+                partition = partition[:-1]
+            if state not in parsed[partition]:
+                parsed[partition][state] = []
+
+            nodes_tuple = tuple(re.findall('\w+\-[\d\-\[\],]+(?<!,)', nodes_str))
+
+            for nodes_str in nodes_tuple:
+                prefix = nodes_str.split('-')[0]
+                index_str = nodes_str[len(prefix)+1:]
+                #print((prefix, index_str))
+                if ',' in index_str:
+                    assert index_str.startswith('[') and index_str.endswith(']')
+                    pat = self._expand_node_range_pattern(index_str)
+                elif index_str.startswith('[') and index_str.endswith(']'):
+                    pat = self._expand_node_range_pattern(index_str)
+                else:
+                    pat = index_str
+                matched_indexes = re.findall(pat, ','.join(
+                    [f'{i:03d}' for i in range(nMaxNodeIndex)]))
+                #print(matched_indexes)
+                node_list = [f'{prefix}-{s}' for s in matched_indexes]
+                #print(nodes_str)
+                #print(prefix, node_list)
+                parsed[partition][state].extend(node_list)
+
+        self.sinfo = parsed
+
+        #ok_states = ['alloc','comp','idle','mix']
+        ok_states = ['allocated', 'completing', 'idle', 'mixed']
+
+        non_ok_nodes = collections.defaultdict(list)
+        for k, v in self.sinfo.items():
+            for st in list(v):
+                if st not in ok_states:
+                    for node_name in v[st]:
+                        non_ok_nodes[node_name].append(st)
+        self.non_ok_nodes = {}
+        for node_name, state_list in non_ok_nodes.items():
+            self.non_ok_nodes[node_name] = np.unique(state_list).tolist()
+
     def _expand_node_range_pattern(self, index_str):
         """
         Examples for "index_str":
@@ -362,6 +417,7 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             'CPU Load\n(cores)', 'Free\n(cores)', 'Free &\nSuspendable\n(cores)'])
 
         self.update_partition_info()
+        self.update_sinfo()
         #
         grouped_partition_names = {}
         for p in list(self.partition_info):
@@ -441,7 +497,8 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             _nAlloc = _nTot = _nSuspendable = _cpu_load = 0
             node_list = d['node_list']
             for node_name, nAlloc, nTot, cpu_load in parsed:
-                if node_name in node_list:
+                if (node_name in node_list) and (
+                    node_name not in self.non_ok_nodes):
                     _nAlloc += int(nAlloc)
                     _nTot += int(nTot)
                     if node_name in suspendables:
@@ -581,9 +638,18 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
                    ) in enumerate(parsed):
 
             iRow += row_offset
-            iCol = 1
+            iCol = 0
 
-            t.setItem(iRow, iCol, QTableWidgetItem(node_name))
+            if node_name in self.non_ok_nodes:
+                setItem = partial(
+                    self.set_bg_colored_QTableWidgetItem, t, Qt.gray)
+                setItem(iRow, iCol, QTableWidgetItem(
+                    ','.join(self.non_ok_nodes[node_name])))
+            else:
+                setItem = t.setItem
+            iCol += 1
+
+            setItem(iRow, iCol, QTableWidgetItem(node_name))
             iCol += 1
 
             n_alloc = int(n_alloc_str)
@@ -616,13 +682,13 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             t.setCellWidget(iRow, iCol, prog)
             iCol += 1
 
-            t.setItem(iRow, iCol, QTableWidgetItem(load_val_str))
+            setItem(iRow, iCol, QTableWidgetItem(load_val_str))
             iCol += 1
 
-            t.setItem(iRow, iCol, QTableWidgetItem(f'{n_free:d}'))
+            setItem(iRow, iCol, QTableWidgetItem(f'{n_free:d}'))
             iCol += 1
 
-            t.setItem(iRow, iCol, QTableWidgetItem(f'{n_free + n_suspendable:d}'))
+            setItem(iRow, iCol, QTableWidgetItem(f'{n_free + n_suspendable:d}'))
             iCol += 1
 
         self.tableWidget_load.resizeColumnsToContents()
@@ -681,6 +747,13 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
         self.model_q.update_data(table)
 
         self.tableView_q.resizeColumnsToContents()
+
+    def set_bg_colored_QTableWidgetItem(
+        self, tableWidget, qt_bg_color, iRow, iCol, qTableWidgetItem):
+        """"""
+
+        qTableWidgetItem.setBackground(qt_bg_color)
+        tableWidget.setItem(iRow, iCol, qTableWidgetItem)
 
 def convert_slurm_time_duration_str_to_seconds(slurm_time_duration_str):
     """"""
