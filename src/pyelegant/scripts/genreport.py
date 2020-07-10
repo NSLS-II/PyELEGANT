@@ -7523,6 +7523,11 @@ class Report_NSLS2U_Default:
         conf['report_version'] = sqss('1.2')
         self._version = '1.2'
 
+        # Add "forbid_resonance_crossing" and "soft_failure"
+        test = conf['nonlin']['calc_opts']['mom_aper']['test']
+        test['forbid_resonance_crossing'] = True
+        test['soft_failure'] = False
+
         return conf
 
     def _get_default_config_v1_1(self, example=False):

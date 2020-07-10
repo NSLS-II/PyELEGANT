@@ -549,6 +549,21 @@ class PageStandard(QtWidgets.QWizardPage):
 
         self._next_id = None
 
+    def safeFindChild(self, qt_class, obj_name):
+        """
+        Same as self.findChild(), except that if a child object cannot be found,
+        this function will throw an error.
+        """
+
+        w = self.findChild(qt_class, obj_name)
+
+        if w is None:
+            raise AttributeError((
+                f'There is no object of type "{qt_class}" '
+                f'with object name "{obj_name}"'))
+
+        return w
+
     def registerFieldOnFirstShow(self, name, widget, *args, **kwargs):
         """"""
 
@@ -774,16 +789,16 @@ class PageNonlinCalcTest(PageGenReport):
                 w_suffix = f'{k}_{self.calc_type}_{short_mode}'
                 f_suffix = f'{k}_{self.calc_type}_{mode}'
                 if wtype == spin:
-                    w = self.findChild(spin, f'spinBox_{w_suffix}')
+                    w = self.safeFindChild(spin, f'spinBox_{w_suffix}')
                     self.registerFieldOnFirstShow(f'spin_{f_suffix}', w)
                 elif wtype == edit:
-                    w = self.findChild(edit, f'lineEdit_{w_suffix}')
+                    w = self.safeFindChild(edit, f'lineEdit_{w_suffix}')
                     self.registerFieldOnFirstShow(f'edit_{f_suffix}', w)
                 elif wtype == check:
-                    w = self.findChild(check, f'checkBox_{w_suffix}')
+                    w = self.safeFindChild(check, f'checkBox_{w_suffix}')
                     self.registerFieldOnFirstShow(f'check_{f_suffix}', w)
                 elif wtype == combo:
-                    w = self.findChild(combo, f'comboBox_{w_suffix}')
+                    w = self.safeFindChild(combo, f'comboBox_{w_suffix}')
                     self.registerFieldOnFirstShow(f'combo_{f_suffix}', w,
                                                   property='currentText')
                 else:
@@ -968,16 +983,16 @@ class PageNonlinCalcPlot(PageGenReport):
             for k, wtype in k_wtype_list:
                 w_suffix = f_suffix = f'{k}_{self.calc_type}_{mode}'
                 if wtype == spin:
-                    w = self.findChild(spin, f'spinBox_{w_suffix}')
+                    w = self.safeFindChild(spin, f'spinBox_{w_suffix}')
                     self.registerFieldOnFirstShow(f'spin_{f_suffix}', w)
                 elif wtype == edit:
-                    w = self.findChild(edit, f'lineEdit_{w_suffix}')
+                    w = self.safeFindChild(edit, f'lineEdit_{w_suffix}')
                     self.registerFieldOnFirstShow(f'edit_{f_suffix}', w)
                 elif wtype == check:
-                    w = self.findChild(check, f'checkBox_{w_suffix}')
+                    w = self.safeFindChild(check, f'checkBox_{w_suffix}')
                     self.registerFieldOnFirstShow(f'check_{f_suffix}', w)
                 elif wtype == combo:
-                    w = self.findChild(combo, f'comboBox_{w_suffix}')
+                    w = self.safeFindChild(combo, f'comboBox_{w_suffix}')
                     self.registerFieldOnFirstShow(f'combo_{f_suffix}', w,
                                                   property='currentText')
                 else:
@@ -1609,27 +1624,27 @@ class PageLTE(PageStandard):
             k_wo_star = (k[:-1] if k.endswith('*') else k)
             self.registerFieldOnFirstShow(
                 f'edit_{k}',
-                self.findChild(QtWidgets.QLineEdit, f'lineEdit_{k_wo_star}'))
+                self.safeFindChild(QtWidgets.QLineEdit, f'lineEdit_{k_wo_star}'))
         self.registerFieldOnFirstShow(
             'date_LTE_received*',
-            self.findChild(QtWidgets.QDateEdit, 'dateEdit_LTE_received'))
+            self.safeFindChild(QtWidgets.QDateEdit, 'dateEdit_LTE_received'))
         self.registerFieldOnFirstShow(
             'check_pyele_stdout',
-            self.findChild(QtWidgets.QCheckBox, 'checkBox_pyelegant_stdout'))
+            self.safeFindChild(QtWidgets.QCheckBox, 'checkBox_pyelegant_stdout'))
 
         # Set fields
         self._update_fields()
 
         # Establish connections
 
-        b = self.findChild(QtWidgets.QPushButton, 'pushButton_browse_LTE')
+        b = self.safeFindChild(QtWidgets.QPushButton, 'pushButton_browse_LTE')
         b.clicked.connect(self.browse_LTE_file)
 
         for k in [
             'orig_LTE_path*', 'LTE_authors*', 'E_GeV*',
             'use_beamline_cell*', 'use_beamline_ring*',]:
             k_wo_star = (k[:-1] if k.endswith('*') else k)
-            w = self.findChild(QtWidgets.QLineEdit, f'lineEdit_{k_wo_star}')
+            w = self.safeFindChild(QtWidgets.QLineEdit, f'lineEdit_{k_wo_star}')
             w.textChanged.connect(self.completeChanged)
 
         self._pageInitialized = True
@@ -2006,15 +2021,15 @@ class PageStraightCenters(PageStandard):
 
         # Hook up models to views
 
-        tableView = self.findChild(QtWidgets.QTableView, 'tableView_elem_list')
+        tableView = self.safeFindChild(QtWidgets.QTableView, 'tableView_elem_list')
         tableView.setModel(self.wizardObj.model_elem_list)
 
         # Register fields
 
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
+        edit = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
         self.registerFieldOnFirstShow('edit_LS_center_name*', edit)
 
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_1st_center_name')
+        edit = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_SS_1st_center_name')
         self.registerFieldOnFirstShow('edit_SS_center_name*', edit)
 
         # Set fields
@@ -2022,15 +2037,15 @@ class PageStraightCenters(PageStandard):
 
         # Establish connections
 
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
+        edit = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
         edit.textChanged.connect(self.synchronize_LS_elem_names)
 
-        b = self.findChild(QtWidgets.QPushButton, 'pushButton_reload_LTE')
+        b = self.safeFindChild(QtWidgets.QPushButton, 'pushButton_reload_LTE')
         b.clicked.connect(self.update_LTE_table)
 
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
+        edit = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_LS_1st_center_name')
         edit.textChanged.connect(self.completeChanged)
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_1st_center_name')
+        edit = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_SS_1st_center_name')
         edit.textChanged.connect(self.completeChanged)
 
         self._pageInitialized = True
@@ -2072,14 +2087,14 @@ class PageStraightCenters(PageStandard):
     def synchronize_LS_elem_names(self, new_text):
         """"""
 
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_2nd_center_name')
+        edit = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_LS_2nd_center_name')
         edit.setText(self.field('edit_LS_center_name'))
 
     def update_LTE_table(self):
         """"""
 
         self.wizardObj.page_links['LTE'].validatePage()
-        tableView = self.findChild(QtWidgets.QTableView, 'tableView_elem_list')
+        tableView = self.safeFindChild(QtWidgets.QTableView, 'tableView_elem_list')
         tableView.setModel(self.wizardObj.model_elem_list)
 
     def validatePage(self):
@@ -2181,17 +2196,17 @@ class PagePhaseAdv(PageStandard):
 
         # Hook up models to views
 
-        tableView = self.findChild(QtWidgets.QTableView,
-                                   'tableView_elem_list_phase_adv')
+        tableView = self.safeFindChild(QtWidgets.QTableView,
+                                       'tableView_elem_list_phase_adv')
         tableView.setModel(self.wizardObj.model_elem_list)
 
         # Register fields
 
-        obj = self.findChild(QtWidgets.QLineEdit,
-                             'lineEdit_disp_bump_marker_name')
+        obj = self.safeFindChild(QtWidgets.QLineEdit,
+                                 'lineEdit_disp_bump_marker_name')
         self.registerFieldOnFirstShow('edit_disp_bump_marker_name', obj)
 
-        obj = self.findChild(QtWidgets.QComboBox, 'comboBox_n_disp_bumps')
+        obj = self.safeFindChild(QtWidgets.QComboBox, 'comboBox_n_disp_bumps')
         self.registerFieldOnFirstShow('combo_n_disp_bumps', obj, property='currentText')
 
         # Set fields
@@ -2199,8 +2214,8 @@ class PagePhaseAdv(PageStandard):
 
         # Establish connections
 
-        b = self.findChild(QtWidgets.QPushButton,
-                           'pushButton_reload_LTE_phase_adv')
+        b = self.safeFindChild(QtWidgets.QPushButton,
+                               'pushButton_reload_LTE_phase_adv')
         b.clicked.connect(self.update_LTE_table)
 
         self._pageInitialized = True
@@ -2242,8 +2257,8 @@ class PagePhaseAdv(PageStandard):
 
         self.wizardObj.page_links['LTE'].validatePage()
         self.wizardObj.page_links['straight_centers'].validatePage()
-        tableView = self.findChild(QtWidgets.QTableView,
-                                   'tableView_elem_list_phase_adv')
+        tableView = self.safeFindChild(QtWidgets.QTableView,
+                                       'tableView_elem_list_phase_adv')
         tableView.setModel(self.wizardObj.model_elem_list)
 
     def validatePage(self):
@@ -2430,16 +2445,16 @@ class PageStraightDrifts(PageStandard):
 
         # Hook up models to views
 
-        tableView = self.findChild(QtWidgets.QTableView,
-                                   'tableView_elem_list_straight_drifts')
+        tableView = self.safeFindChild(QtWidgets.QTableView,
+                                       'tableView_elem_list_straight_drifts')
         tableView.setModel(self.wizardObj.model_elem_list)
 
         # Register fields
 
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_drift_names')
+        edit = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_LS_drift_names')
         self.registerFieldOnFirstShow('edit_half_LS_drifts*', edit)
 
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_drift_names')
+        edit = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_SS_drift_names')
         self.registerFieldOnFirstShow('edit_half_SS_drifts*', edit)
 
         # Set fields
@@ -2447,9 +2462,9 @@ class PageStraightDrifts(PageStandard):
 
         # Establish connections
 
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_LS_drift_names')
+        edit = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_LS_drift_names')
         edit.textChanged.connect(self.completeChanged)
-        edit = self.findChild(QtWidgets.QLineEdit, 'lineEdit_SS_drift_names')
+        edit = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_SS_drift_names')
         edit.textChanged.connect(self.completeChanged)
 
         self._pageInitialized = True
@@ -2651,21 +2666,21 @@ class PageTwissPlots(PageGenReport):
 
         # Register fields
 
-        w = self.findChild(QtWidgets.QSpinBox, 'spinBox_element_divisions')
+        w = self.safeFindChild(QtWidgets.QSpinBox, 'spinBox_element_divisions')
         self.registerFieldOnFirstShow('spin_element_divisions', w)
 
-        w = self.findChild(QtWidgets.QSpinBox, 'spinBox_font_size')
+        w = self.safeFindChild(QtWidgets.QSpinBox, 'spinBox_font_size')
         self.registerFieldOnFirstShow('spin_font_size', w)
 
-        w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_extra_dy_frac')
+        w = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_extra_dy_frac')
         self.registerFieldOnFirstShow('edit_extra_dy_frac', w)
 
-        w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_full_r_margin')
+        w = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_full_r_margin')
         self.registerFieldOnFirstShow('edit_full_r_margin', w)
 
         for sec in ['sec1', 'sec2', 'sec3']:
             for suffix in ['smin', 'smax', 'r_margin']:
-                w = self.findChild(QtWidgets.QLineEdit, f'lineEdit_{sec}_{suffix}')
+                w = self.safeFindChild(QtWidgets.QLineEdit, f'lineEdit_{sec}_{suffix}')
                 self.registerFieldOnFirstShow(f'edit_{sec}_{suffix}', w)
 
         # Set fields
@@ -2834,7 +2849,7 @@ class PageParagraphs(PageGenReport):
         self.wizardObj = self.wizard()
 
         # Adjust initial splitter ratio
-        w = self.findChild(QtWidgets.QSplitter, 'splitter_paragraphs')
+        w = self.safeFindChild(QtWidgets.QSplitter, 'splitter_paragraphs')
         #w.setSizes([10, 2])
         w.setSizes([200, 90])
 
@@ -2842,15 +2857,15 @@ class PageParagraphs(PageGenReport):
 
         # Register fields
 
-        w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_keywords')
+        w = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_keywords')
         self.registerFieldOnFirstShow('edit_keywords*', w)
 
-        w = self.findChild(QtWidgets.QPlainTextEdit,
-                           'plainTextEdit_lattice_description')
+        w = self.safeFindChild(QtWidgets.QPlainTextEdit,
+                               'plainTextEdit_lattice_description')
         self.registerFieldOnFirstShow('edit_lattice_description*', w, 'plainText')
 
-        w = self.findChild(QtWidgets.QPlainTextEdit,
-                           'plainTextEdit_lattice_properties')
+        w = self.safeFindChild(QtWidgets.QPlainTextEdit,
+                               'plainTextEdit_lattice_properties')
         self.registerFieldOnFirstShow('edit_lattice_properties', w, 'plainText')
 
         # Set fields
@@ -2860,11 +2875,11 @@ class PageParagraphs(PageGenReport):
 
         self.establish_connections()
 
-        w = self.findChild(QtWidgets.QLineEdit, 'lineEdit_keywords')
+        w = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_keywords')
         w.textChanged.connect(self.completeChanged)
 
-        w = self.findChild(QtWidgets.QPlainTextEdit,
-                           'plainTextEdit_lattice_description')
+        w = self.safeFindChild(QtWidgets.QPlainTextEdit,
+                               'plainTextEdit_lattice_description')
         w.textChanged.connect(self.completeChanged)
 
         self._pageInitialized = True
@@ -2966,7 +2981,7 @@ class PageNKicks(PageGenReport):
         # Register fields
 
         for k in ['CSBEND', 'KQUAD', 'KSEXT', 'KOCT']:
-            w = self.findChild(QtWidgets.QSpinBox, f'spinBox_N_KICKS_{k}')
+            w = self.safeFindChild(QtWidgets.QSpinBox, f'spinBox_N_KICKS_{k}')
             self.registerFieldOnFirstShow(f'spin_{k}', w)
 
         # Set fields
@@ -3319,6 +3334,7 @@ class PageMomAperTest(PageNonlinCalcTest):
             ('delta_positive_start', edit), ('delta_positive_limit', edit),
             ('init_delta_step_size', edit), ('include_name_pattern', edit),
             ('steps_back', spin), ('splits', spin), ('split_step_divisor', spin),
+            ('forbid_resonance_crossing', check), ('soft_failure', check),
             ('partition', combo), ('ntasks', spin), ('time', edit)
         ]
         self.prod_list = [
@@ -3334,6 +3350,7 @@ class PageMomAperTest(PageNonlinCalcTest):
                 delta_positive_start='edit_%', delta_positive_limit='edit_%',
                 init_delta_step_size='edit_%', include_name_pattern='edit_str',
                 steps_back='spin', splits='spin', split_step_divisor='spin',
+                forbid_resonance_crossing='check', soft_failure='check',
                 partition='combo', ntasks='spin', time='edit_str_None'),
             'production': dict(
                 n_turns='spin',
@@ -3496,7 +3513,7 @@ class PageNonlinProduction(PageGenReport):
         self._checkboxes = {}
         for opt_type in ['include', 'recalc', 'replot']:
             for calc_type in ['all'] + self.all_calc_types:
-                w = self.findChild(
+                w = self.safeFindChild(
                     check, f'checkBox_nonlin_{opt_type}_{calc_type}')
                 self._checkboxes[f'{opt_type}:{calc_type}'] = w
                 self.registerFieldOnFirstShow(f'check_{opt_type}_{calc_type}', w)
@@ -3510,7 +3527,7 @@ class PageNonlinProduction(PageGenReport):
             for prop_name, wtype in d.items():
                 suffix = f'{calc_type}_{prop_name}'
                 if wtype == 'spin':
-                    w = self.findChild(spin, f'spinBox_{suffix}')
+                    w = self.safeFindChild(spin, f'spinBox_{suffix}')
                     self.registerFieldOnFirstShow(f'{wtype}_{suffix}', w)
                 else:
                     raise ValueError()
@@ -3700,16 +3717,16 @@ class PageRfTau(PageGenReport):
             for k, wtype in k_wtype_list:
                 w_suffix = f_suffix = k
                 if wtype == spin:
-                    w = self.findChild(spin, f'spinBox_{w_suffix}')
+                    w = self.safeFindChild(spin, f'spinBox_{w_suffix}')
                     self.registerFieldOnFirstShow(f'spin_{f_suffix}', w)
                 elif wtype == edit:
-                    w = self.findChild(edit, f'lineEdit_{w_suffix}')
+                    w = self.safeFindChild(edit, f'lineEdit_{w_suffix}')
                     self.registerFieldOnFirstShow(f'edit_{f_suffix}', w)
                 elif wtype == check:
-                    w = self.findChild(check, f'checkBox_{w_suffix}')
+                    w = self.safeFindChild(check, f'checkBox_{w_suffix}')
                     self.registerFieldOnFirstShow(f'check_{f_suffix}', w)
                 elif wtype == combo:
-                    w = self.findChild(combo, f'comboBox_{w_suffix}')
+                    w = self.safeFindChild(combo, f'comboBox_{w_suffix}')
                     self.registerFieldOnFirstShow(f'combo_{f_suffix}', w,
                                                   property='currentText')
                 else:
@@ -3719,16 +3736,16 @@ class PageRfTau(PageGenReport):
             total_beam_current=[],
             loss_plots_set={'E_MeV': [], 'rf_V': [], 'coupling': []})
         for k in list(self.tau_special_data):
-            w = self.findChild(edit, f'lineEdit_{k}')
+            w = self.safeFindChild(edit, f'lineEdit_{k}')
             self.registerFieldOnFirstShow(f'edit_{k}', w)
         self.tau_calc_special_widgets = [
-            self.findChild(edit, 'lineEdit_total_beam_current'),
-            self.findChild(QtWidgets.QPushButton,
-                           'pushButton_edit_total_beam_current'),]
+            self.safeFindChild(edit, 'lineEdit_total_beam_current'),
+            self.safeFindChild(QtWidgets.QPushButton,
+                               'pushButton_edit_total_beam_current'),]
         self.tau_plot_special_widgets = [
-            self.findChild(edit, 'lineEdit_loss_plots_set'),
-            self.findChild(QtWidgets.QPushButton,
-                           'pushButton_edit_loss_plots_set'),]
+            self.safeFindChild(edit, 'lineEdit_loss_plots_set'),
+            self.safeFindChild(QtWidgets.QPushButton,
+                               'pushButton_edit_loss_plots_set'),]
 
         # Set fields
         self._update_fields()
@@ -3737,29 +3754,29 @@ class PageRfTau(PageGenReport):
 
         self.establish_connections() # "Run Production" & "Open PDF" buttons
 
-        w = self.findChild(check, 'checkBox_rf_include')
+        w = self.safeFindChild(check, 'checkBox_rf_include')
         w.stateChanged.connect(partial(self.enable_opts, self.rf_list))
 
-        w = self.findChild(check, 'checkBox_tau_calc_include')
+        w = self.safeFindChild(check, 'checkBox_tau_calc_include')
         w.stateChanged.connect(partial(self.enable_opts, self.tau_calc_list))
         w.stateChanged.connect(partial(self.enable_special_opts,
                                        self.tau_calc_special_widgets))
 
-        w = self.findChild(check, 'checkBox_tau_plot_include')
+        w = self.safeFindChild(check, 'checkBox_tau_plot_include')
         w.stateChanged.connect(partial(self.enable_opts, self.tau_plot_list))
         w.stateChanged.connect(partial(self.enable_special_opts,
                                        self.tau_plot_special_widgets))
 
-        w = self.findChild(combo, 'comboBox_max_mom_aper')
+        w = self.safeFindChild(combo, 'comboBox_max_mom_aper')
         w.currentTextChanged.connect(self.setEditable_comboBox_max_mom_aper)
         self.setEditable_comboBox_max_mom_aper(w.currentText())
 
-        w = self.findChild(QtWidgets.QPushButton,
-                           f'pushButton_edit_total_beam_current')
+        w = self.safeFindChild(QtWidgets.QPushButton,
+                               f'pushButton_edit_total_beam_current')
         w.clicked.connect(self.edit_total_beam_current)
 
-        w = self.findChild(QtWidgets.QPushButton,
-                           f'pushButton_edit_loss_plots_set')
+        w = self.safeFindChild(QtWidgets.QPushButton,
+                               f'pushButton_edit_loss_plots_set')
         w.clicked.connect(self.edit_loss_plots_set)
 
         self._pageInitialized = True
@@ -3980,7 +3997,7 @@ class PageRfTau(PageGenReport):
     def setEditable_comboBox_max_mom_aper(self, new_text):
         """"""
 
-        w = self.findChild(QtWidgets.QComboBox, 'comboBox_max_mom_aper')
+        w = self.safeFindChild(QtWidgets.QComboBox, 'comboBox_max_mom_aper')
 
         if new_text != 'None':
             w.setEditable(True)
@@ -4021,7 +4038,7 @@ class PageRfTau(PageGenReport):
         # FocusOut event
         if event.type() == QtCore.QEvent.FocusOut:
 
-            if widget == self.findChild(
+            if widget == self.safeFindChild(
                 QtWidgets.QComboBox, 'comboBox_max_mom_aper'):
 
                 self.comboBox_max_mom_aper_focusOut_handler(widget)
@@ -4047,13 +4064,13 @@ class PageRfTau(PageGenReport):
 
             w_suffix = k
             if wtype == spin:
-                w = self.findChild(spin, f'spinBox_{w_suffix}')
+                w = self.safeFindChild(spin, f'spinBox_{w_suffix}')
             elif wtype == edit:
-                w = self.findChild(edit, f'lineEdit_{w_suffix}')
+                w = self.safeFindChild(edit, f'lineEdit_{w_suffix}')
             elif wtype == check:
-                w = self.findChild(check, f'checkBox_{w_suffix}')
+                w = self.safeFindChild(check, f'checkBox_{w_suffix}')
             elif wtype == combo:
-                w = self.findChild(combo, f'comboBox_{w_suffix}')
+                w = self.safeFindChild(combo, f'comboBox_{w_suffix}')
             else:
                 raise ValueError()
 

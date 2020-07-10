@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Lattice Report Generator Wizard v1.1</string>
+   <string>Lattice Report Generator Wizard v1.2</string>
   </property>
   <property name="wizardStyle">
    <enum>QWizard::ModernStyle</enum>
@@ -2078,7 +2078,7 @@ p, li { white-space: pre-wrap; }
       <property name="handleWidth">
        <number>6</number>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_36">
         <item>
          <widget class="QTabWidget" name="tabWidget_xy_aper">
@@ -2805,7 +2805,7 @@ n_lines</string>
       <property name="handleWidth">
        <number>6</number>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_65">
         <item>
          <widget class="QTabWidget" name="tabWidget_fmap_xy">
@@ -5855,6 +5855,31 @@ delta_offset</string>
                </layout>
               </item>
               <item>
+               <widget class="QCheckBox" name="checkBox_soft_failure_mom_aper_test">
+                <property name="minimumSize">
+                 <size>
+                  <width>71</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>71</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>soft_failure</string>
+                </property>
+                <property name="checked">
+                 <bool>false</bool>
+                </property>
+                <property name="tristate">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
                <spacer name="horizontalSpacer_33">
                 <property name="orientation">
                  <enum>Qt::Horizontal</enum>
@@ -6016,7 +6041,7 @@ delta_offset</string>
              </layout>
             </item>
             <item>
-             <layout class="QHBoxLayout" name="horizontalLayout_72">
+             <layout class="QHBoxLayout" name="horizontalLayout_113">
               <item>
                <layout class="QHBoxLayout" name="horizontalLayout_63">
                 <item>
@@ -6140,10 +6165,23 @@ delta_offset</string>
                 </item>
                </layout>
               </item>
+              <item>
+               <spacer name="horizontalSpacer_79">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
              </layout>
             </item>
             <item>
-             <layout class="QHBoxLayout" name="horizontalLayout_73">
+             <layout class="QHBoxLayout" name="horizontalLayout_72">
               <item>
                <layout class="QHBoxLayout" name="horizontalLayout_57">
                 <item>
@@ -6260,6 +6298,31 @@ delta_offset</string>
                  </widget>
                 </item>
                </layout>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="checkBox_forbid_resonance_crossing_mom_aper_test">
+                <property name="minimumSize">
+                 <size>
+                  <width>121</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>121</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>forbid_resonance_xing</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+                <property name="tristate">
+                 <bool>false</bool>
+                </property>
+               </widget>
               </item>
               <item>
                <spacer name="horizontalSpacer_48">
@@ -6917,7 +6980,7 @@ delta_offset</string>
       </widget>
       <widget class="QTabWidget" name="tabWidget_std_mom_aper_test">
        <property name="currentIndex">
-        <number>2</number>
+        <number>0</number>
        </property>
        <widget class="QWidget" name="tab_36">
         <attribute name="title">
@@ -6958,6 +7021,8 @@ steps_back := 1 (test), 1 (production)
 splits := 1 (test), 2 (production)
 split_step_divisor := 2 (test), 10 (production)
 include_name_pattern := 'S*' [only sextupoles] (test), '[BQSO]*' [all bends, quads, sextupoles, &amp; octupoles] (production)
+forbid_resonance_xing := True
+soft_failure := False
 
 The following parameters will be forced to be the same for test and production:
 
@@ -6966,7 +7031,9 @@ y_initial
 delta_negative_start
 delta_negative_limit
 delta_positive_start
-delta_positive_limit</string>
+delta_positive_limit
+forbid_resonance_xing
+soft_failure</string>
            </property>
           </widget>
          </item>
@@ -6993,7 +7060,7 @@ delta_positive_limit</string>
       <property name="handleWidth">
        <number>6</number>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_152">
         <item>
          <widget class="QTabWidget" name="tabWidget_tswa">
@@ -8878,7 +8945,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_185">
         <item>
          <layout class="QHBoxLayout" name="horizontalLayout_101">
@@ -9621,7 +9688,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_192">
         <item>
          <widget class="QTabWidget" name="tabWidget_rf_tau_opts">
