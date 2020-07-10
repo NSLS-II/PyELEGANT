@@ -452,9 +452,8 @@ def run(
                 print('\n\n*** Immediate abort requested. Aborting now.')
                 raise RuntimeError('Abort requested.')
 
-            exit_right_after_sbatch = (
-                remote_opts['exit_right_after_sbatch']
-                if 'exit_right_after_sbatch' in remote_opts else False)
+            exit_right_after_sbatch = remote_opts.get(
+                'exit_right_after_sbatch', False)
 
             (job_ID_str, slurm_out_filepath, slurm_err_filepath, sbatch_info
              ) = _sbatch(sbatch_sh_filepath, job_name,
@@ -598,7 +597,7 @@ def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False):
         status_check_interval = 5.0 #10.0
 
         err_log_check = dict(
-            interval=60.0, func=check_unable_to_open_mode_w_File_exists,
+            interval=60.0, funcs=[check_unable_to_open_mode_w_File_exists],
             job_name=job_name)
 
         sbatch_info = wait_for_completion(
@@ -805,7 +804,8 @@ def check_unable_to_open_mode_w_File_exists(err_filepath):
     return abort
 
 def wait_for_completion(
-    job_ID_str, status_check_interval, timelimit_action=None, err_log_check=None):
+    job_ID_str, status_check_interval, timelimit_action=None,
+    out_log_check=None, err_log_check=None):
     """"""
 
     t0 = t_err_log = time.time()
@@ -887,9 +887,10 @@ def wait_for_completion(
             dt = time.time() - t_err_log
 
             if dt >= err_log_check['interval']:
-                if err_log_check['func']('{}.{}.err'.format(
-                    err_log_check['job_name'], job_ID_str)):
-                    break
+                for _check_func in err_log_check['funcs']:
+                    if _check_func('{}.{}.err'.format(
+                        err_log_check['job_name'], job_ID_str)):
+                        break
 
                 t_err_log = time.time()
 
