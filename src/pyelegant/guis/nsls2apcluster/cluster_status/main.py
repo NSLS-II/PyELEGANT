@@ -691,8 +691,6 @@ def convert_slurm_time_duration_str_to_seconds(slurm_time_duration_str):
     duration_in_sec = days_in_secs + datetime.timedelta(
         hours=d.tm_hour, minutes=d.tm_min, seconds=d.tm_sec).total_seconds()
 
-    print(slurm_time_duration_str, duration_in_sec)
-
     return duration_in_sec
 
 def convert_slurm_time_duration_seconds_to_str(slurm_time_duration_sec):
