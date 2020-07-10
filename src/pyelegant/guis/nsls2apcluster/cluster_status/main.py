@@ -4,6 +4,8 @@ from subprocess import Popen, PIPE
 import shlex
 import re
 import getpass
+import time
+import datetime
 
 import numpy as np
 
@@ -35,7 +37,8 @@ def chained_Popen(cmd_list):
 class TableModelQueue(QtCore.QAbstractTableModel):
     """"""
 
-    def __init__(self, squeue_output_format, header_list):
+    def __init__(self, squeue_output_format, header_list,
+                 time_duration_column_inds):
         """Constructor"""
 
         super().__init__()
@@ -45,12 +48,27 @@ class TableModelQueue(QtCore.QAbstractTableModel):
         self._headers = header_list
         self._row_numbers = []
 
+        self._time_duration_column_inds = time_duration_column_inds
+
     def data(self, index, role):
         if role == Qt.DisplayRole:
             # See below for the nested-list data structure.
             # .row() indexes into the outer list,
             # .column() indexes into the sub-list
-            return self._data[index.row()][index.column()]
+
+            val = self._data[index.row()][index.column()]
+
+            if index.column() not in self._time_duration_column_inds:
+                return val
+            else:
+                if val:
+                    return convert_slurm_time_duration_seconds_to_str(val)
+                else:
+                    return val
+
+        elif role == Qt.UserRole: # Used for sorting
+            val = self._data[index.row()][index.column()]
+            return val
 
     def rowCount(self, index):
         # The length of the outer list.
@@ -117,12 +135,18 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             '%V', '%Q']
         self.q_output_format = q_output_format_delimiter.join(q_output_format_list)
 
+        self.time_duration_column_inds = [
+            i for i, _format in enumerate(q_output_format_list)
+            if _format in ('%M', '%L')]
+
         header, _ = self.squeue('-u nonexistent')
         header = [s.strip() for s in header.split(q_output_format_delimiter)]
-        self.model_q = TableModelQueue(self.q_output_format, header)
+        self.model_q = TableModelQueue(self.q_output_format, header,
+                                       self.time_duration_column_inds)
 
         self.proxy_model_q = QtCore.QSortFilterProxyModel()
         self.proxy_model_q.setSourceModel(self.model_q)
+        self.proxy_model_q.setSortRole(Qt.UserRole)
 
         self.tableView_q.setModel(self.proxy_model_q)
         self.tableView_q.setSortingEnabled(True)
@@ -635,11 +659,55 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
         table = [line.split(self.q_output_format_delimiter)
                  for line in out.splitlines()]
 
-        m = self.model_q
+        for row in table:
+            for iCol in self.time_duration_column_inds:
+                row[iCol] = convert_slurm_time_duration_str_to_seconds(row[iCol])
 
-        m.update_data(table)
+        self.model_q.update_data(table)
 
         self.tableView_q.resizeColumnsToContents()
+
+def convert_slurm_time_duration_str_to_seconds(slurm_time_duration_str):
+    """"""
+
+    s_list = slurm_time_duration_str.split(':')
+    if len(s_list) == 1:
+        s_list = ['00', '00'] + s_list
+    elif len(s_list) == 2:
+        s_list = ['00'] + s_list
+    elif (len(s_list) >= 4) or (len(s_list) == 0):
+        raise RuntimeError('Unexpected number of splits')
+
+    if '-' in s_list[0]:
+        days_str, hrs_str = s_list[0].split('-')
+        s_list[0] = hrs_str
+
+        days_in_secs = int(days_str) * 60.0 * 60.0 * 24.0
+    else:
+        days_in_secs = 0.0
+
+    d = time.strptime(':'.join(s_list), '%H:%M:%S')
+
+    duration_in_sec = days_in_secs + datetime.timedelta(
+        hours=d.tm_hour, minutes=d.tm_min, seconds=d.tm_sec).total_seconds()
+
+    print(slurm_time_duration_str, duration_in_sec)
+
+    return duration_in_sec
+
+def convert_slurm_time_duration_seconds_to_str(slurm_time_duration_sec):
+    """"""
+
+    sec = datetime.timedelta(seconds=slurm_time_duration_sec)
+    dobj = datetime.datetime(1,1,1) + sec
+    if dobj.day - 1 != 0:
+        str_duration = '{:d}-'.format(dobj.day - 1)
+    else:
+        str_duration = ''
+    str_duration += '{:02d}:{:02d}:{:02d}'.format(
+        dobj.hour, dobj.minute, dobj.second)
+
+    return str_duration
 
 def main():
     """"""
