@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>545</width>
+    <width>535</width>
     <height>422</height>
    </rect>
   </property>
@@ -46,6 +46,67 @@ p, li { white-space: pre-wrap; }
     </item>
    </layout>
   </widget>
+  <widget class="PageLoadSeedConfig" name="wizardPage_config_load">
+   <property name="title">
+    <string>Load Pre-existing YAML Config File</string>
+   </property>
+   <property name="subTitle">
+    <string>Select a previous YAML config file to start from. If you want to start from scratch using this wizard's default values, leave the filed empty.</string>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_2">
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>Config File Path:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit_seed_config_filepath"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton_browse">
+        <property name="maximumSize">
+         <size>
+          <width>80</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Browse...</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_73">
+      <item>
+       <widget class="QCheckBox" name="checkBox_create_new_report">
+        <property name="text">
+         <string>Create New Report</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_80">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+   </layout>
+  </widget>
   <widget class="PageNewSetup" name="wizardPage_new_config_setup">
    <property name="title">
     <string>New Configuration Setup</string>
@@ -57,7 +118,7 @@ p, li { white-space: pre-wrap; }
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_7">
       <item>
-       <widget class="QLabel" name="label_3">
+       <widget class="QLabel" name="label_84">
         <property name="maximumSize">
          <size>
           <width>71</width>
@@ -73,7 +134,7 @@ p, li { white-space: pre-wrap; }
        <widget class="QLineEdit" name="lineEdit_rootname"/>
       </item>
       <item>
-       <spacer name="horizontalSpacer_12">
+       <spacer name="horizontalSpacer_91">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>
         </property>
@@ -90,7 +151,7 @@ p, li { white-space: pre-wrap; }
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_21">
       <item>
-       <widget class="QLabel" name="label_34">
+       <widget class="QLabel" name="label_82">
         <property name="maximumSize">
          <size>
           <width>71</width>
@@ -123,14 +184,20 @@ p, li { white-space: pre-wrap; }
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_22">
       <item>
-       <widget class="QLabel" name="label_38">
+       <widget class="QLabel" name="label_81">
+        <property name="maximumSize">
+         <size>
+          <width>123</width>
+          <height>16777215</height>
+         </size>
+        </property>
         <property name="text">
          <string>Full path to new config file:</string>
         </property>
        </widget>
       </item>
       <item>
-       <spacer name="horizontalSpacer_18">
+       <spacer name="horizontalSpacer_92">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>
         </property>
@@ -157,14 +224,20 @@ p, li { white-space: pre-wrap; }
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_23">
       <item>
-       <widget class="QLabel" name="label_39">
+       <widget class="QLabel" name="label_83">
+        <property name="maximumSize">
+         <size>
+          <width>135</width>
+          <height>16777215</height>
+         </size>
+        </property>
         <property name="text">
          <string>Full path to new report folder:</string>
         </property>
        </widget>
       </item>
       <item>
-       <spacer name="horizontalSpacer_19">
+       <spacer name="horizontalSpacer_93">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>
         </property>
@@ -191,14 +264,20 @@ p, li { white-space: pre-wrap; }
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_24">
       <item>
-       <widget class="QLabel" name="label_40">
+       <widget class="QLabel" name="label_86">
+        <property name="maximumSize">
+         <size>
+          <width>105</width>
+          <height>16777215</height>
+         </size>
+        </property>
         <property name="text">
          <string>Full path to PDF report:</string>
         </property>
        </widget>
       </item>
       <item>
-       <spacer name="horizontalSpacer_20">
+       <spacer name="horizontalSpacer_94">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>
         </property>
@@ -225,14 +304,20 @@ p, li { white-space: pre-wrap; }
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_25">
       <item>
-       <widget class="QLabel" name="label_41">
+       <widget class="QLabel" name="label_85">
+        <property name="maximumSize">
+         <size>
+          <width>112</width>
+          <height>16777215</height>
+         </size>
+        </property>
         <property name="text">
          <string>Full path to Excel report:</string>
         </property>
        </widget>
       </item>
       <item>
-       <spacer name="horizontalSpacer_21">
+       <spacer name="horizontalSpacer_95">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>
         </property>
@@ -255,37 +340,6 @@ p, li { white-space: pre-wrap; }
        <bool>true</bool>
       </property>
      </widget>
-    </item>
-   </layout>
-  </widget>
-  <widget class="PageLoadSeedConfig" name="wizardPage_config_load">
-   <property name="title">
-    <string>Load Pre-existing YAML Config File</string>
-   </property>
-   <property name="subTitle">
-    <string>Select a previous YAML config file to start from. If you want to start from scratch using this wizard's default values, leave the filed empty.</string>
-   </property>
-   <layout class="QVBoxLayout" name="verticalLayout_2">
-    <item>
-     <layout class="QHBoxLayout" name="horizontalLayout">
-      <item>
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Config File Path:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="lineEdit_seed_config_filepath"/>
-      </item>
-      <item>
-       <widget class="QPushButton" name="pushButton_browse">
-        <property name="text">
-         <string>Browse...</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
     </item>
    </layout>
   </widget>
@@ -5735,7 +5789,7 @@ delta_offset</string>
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_104">
         <item>
          <widget class="QTabWidget" name="tabWidget_mom_aper">
@@ -10316,9 +10370,6 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
  </customwidgets>
  <tabstops>
   <tabstop>textBrowser</tabstop>
-  <tabstop>lineEdit_rootname</tabstop>
-  <tabstop>lineEdit_new_config_folder</tabstop>
-  <tabstop>pushButton_browse_new_config_folder</tabstop>
   <tabstop>lineEdit_seed_config_filepath</tabstop>
   <tabstop>pushButton_browse</tabstop>
   <tabstop>lineEdit_report_author</tabstop>

@@ -697,9 +697,6 @@ class PageGenReport(PageStandard):
         if self._connections_established:
             return
 
-        config_filepath = self.wizardObj.config_filepath
-        pdf_filepath = self.wizardObj.pdf_filepath
-
         # Establish connections
         view_out = self.findChildren(QtWidgets.QListView,
                                      QtCore.QRegExp('listView_stdout_.+'))[0]
@@ -712,11 +709,10 @@ class PageGenReport(PageStandard):
                                         QtCore.QRegExp('pushButton_gen_.+'))
         if len(gen_buttons) == 1:
             b = gen_buttons[0]
-            b.clicked.connect(partial(
-                self.generate_report, config_filepath, view_out, view_err, None))
+            b.clicked.connect(partial(self.generate_report, view_out, view_err, None))
         elif len(gen_buttons) == 2:
             for b in gen_buttons:
-                _args = [config_filepath, view_out, view_err]
+                _args = [view_out, view_err]
                 if '_recalc_' in b.objectName():
                     _args += ['recalc']
                 elif '_replot_' in b.objectName():
@@ -728,14 +724,15 @@ class PageGenReport(PageStandard):
             raise RuntimeError()
         b = self.findChildren(QtWidgets.QPushButton,
                               QtCore.QRegExp('pushButton_open_pdf_.+'))[0]
-        b.clicked.connect(partial(open_pdf_report, pdf_filepath))
+        b.clicked.connect(self.open_pdf_report)
 
         self._connections_established = True
 
     def generate_report(
-        self, config_filepath, view_stdout=None, view_stderr=None,
-        recalc_replot=None):
+        self, view_stdout=None, view_stderr=None, recalc_replot=None):
         """"""
+
+        config_filepath = self.wizardObj.config_filepath
 
         config_file = Path(config_filepath)
         config_filename = config_file.name
@@ -756,6 +753,13 @@ class PageGenReport(PageStandard):
 
         generate_report(config_filename, view_stdout=view_stdout,
                         view_stderr=view_stderr, cwd=config_filedirpath)
+
+    def open_pdf_report(self):
+        """"""
+
+        pdf_filepath = self.wizardObj.pdf_filepath
+
+        open_pdf_report(pdf_filepath)
 
     def modify_conf(self, orig_conf, recalc_replot=None):
         """"""
@@ -1295,6 +1299,165 @@ class PageNonlinCalcPlot(PageGenReport):
 
         return mod_conf
 
+class PageLoadSeedConfig(QtWidgets.QWizardPage):
+    """"""
+
+    def __init__(self, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+
+        self._pageInitialized = False
+
+        self._registeredFields = []
+
+        self._next_id = None
+
+    def setNextId(self, next_id):
+        """"""
+
+        self._next_id = next_id
+
+    def nextId(self):
+        """"""
+
+        if self._next_id is None:
+            return super().nextId()
+        else:
+            return self._next_id
+
+    def cleanupPage(self):
+        """"""
+
+        self.initializePage()
+
+    def registerFieldOnFirstShow(self, name, widget, *args, **kwargs):
+        """"""
+
+        if name not in self._registeredFields:
+            self.registerField(name, widget, *args, **kwargs)
+            self._registeredFields.append(name)
+
+    def initializePage(self):
+        """"""
+
+        if self._pageInitialized:
+            return
+
+        self.wizardObj = self.wizard()
+
+        self.edit_obj = self.findChild(
+            QtWidgets.QLineEdit, 'lineEdit_seed_config_filepath')
+
+        self.check_create_new_report = self.findChild(
+            QtWidgets.QCheckBox, 'checkBox_create_new_report')
+
+        # Establish connections
+
+        b = self.findChild(QtWidgets.QPushButton, 'pushButton_browse')
+        b.clicked.connect(self.browse_yaml_config_file)
+
+        self.edit_obj.setText(self.wizardObj._settings['seed_config_filepath'])
+
+        self._pageInitialized = True
+
+    def browse_yaml_config_file(self):
+        """"""
+
+        caption = 'Select YAML config file to load'
+        extension_dict = {'YAML Files': ['*.yaml', '*.yml'],
+                          'All Files': ['*']}
+        filter_str = getFileDialogFilterStr(extension_dict)
+        directory = getFileDialogInitDir(self.edit_obj.text())
+        filepath = openFileNameDialog(
+            self, caption=caption, directory=directory, filter_str=filter_str)
+
+        if filepath:
+            self.edit_obj.setText(filepath)
+
+    def validatePage(self):
+        """"""
+
+        self.wizardObj.new_report = self.check_create_new_report.isChecked()
+
+        seed_config_filepath = self.edit_obj.text().strip()
+
+        if seed_config_filepath == '':
+
+            if not self.wizardObj.new_report:
+                text = 'Need existing YAML config file path'
+                info_text = (
+                    'When not creating a new report, you must specify the path '
+                    'to an existing config file you want to resume/modify.')
+                showInvalidPageInputDialog(text, info_text)
+                return False
+
+            genreport.Report_NSLS2U_Default(
+                self.wizardObj.config_filepath, example_args=['full', None])
+
+            seed_config_filepath = self.wizardObj.config_filepath
+
+        if not Path(seed_config_filepath).exists():
+            text = 'Invalid file path'
+            info_text = (
+                f'Specified config file "{seed_config_filepath}" '
+                f'does not exist!')
+            showInvalidPageInputDialog(text, info_text)
+
+            return False
+
+        self.wizardObj._settings['seed_config_filepath'] = seed_config_filepath
+
+        try:
+            yml = yaml.YAML()
+            yml.preserve_quotes = True
+            user_conf = yml.load(Path(seed_config_filepath).read_text())
+            self.wizardObj.conf = user_conf
+
+        except:
+            text = 'Invalid YAML file'
+            info_text = (
+                f'Specified config file "{seed_config_filepath}" does not '
+                f'appear to be a valid YAML file!')
+            showInvalidPageInputDialog(text, info_text)
+
+            return False
+
+        report_class = genreport.Report_NSLS2U_Default
+        latest_config_ver = report_class.get_latest_config_version_str()
+        while self.wizardObj.conf['report_version'] != latest_config_ver:
+            self.wizardObj.conf = report_class.upgrade_config(
+                self.wizardObj.conf)
+
+        self.wizardObj.update_conf_on_all_pages(self.wizardObj.conf)
+
+        self.wizardObj.update_common_remote_opts()
+
+        should_skip = not self.wizardObj.new_report
+        if should_skip:
+            config_file = Path(seed_config_filepath)
+
+            config_filename = config_file.name
+            if config_filename.endswith(('.yaml', '.yml')):
+                rootname = '.'.join(config_filename.split('.')[:-1])
+            else:
+                text = 'Invalid YAML file extension'
+                info_text = (
+                    f'Specified config file "{seed_config_filepath}" does not '
+                    f'have the extensions ".yaml" or ".yml"!')
+                showInvalidPageInputDialog(text, info_text)
+                return False
+            report_foldername = f'report_{rootname}'
+            report_folder = config_file.parent.joinpath(report_foldername)
+            pdf_filename = f'{rootname}_report.pdf'
+
+            self.wizardObj.config_filepath = str(config_file.resolve())
+            self.wizardObj.pdf_filepath = str(report_folder.joinpath(pdf_filename))
+        #
+        self.wizardObj.skip_new_report_setup_page(should_skip)
+
+        return True
+
 class PageNewSetup(QtWidgets.QWizardPage):
     """"""
 
@@ -1459,108 +1622,6 @@ class PageNewSetup(QtWidgets.QWizardPage):
         rootname = self.field('edit_rootname')
 
         self.update_paths(new_config_folder, rootname)
-
-        return True
-
-class PageLoadSeedConfig(QtWidgets.QWizardPage):
-    """"""
-
-    def __init__(self, *args, **kwargs):
-        """Constructor"""
-
-        super().__init__(*args, **kwargs)
-
-        self._pageInitialized = False
-
-        self._registeredFields = []
-
-    def registerFieldOnFirstShow(self, name, widget, *args, **kwargs):
-        """"""
-
-        if name not in self._registeredFields:
-            self.registerField(name, widget, *args, **kwargs)
-            self._registeredFields.append(name)
-
-    def initializePage(self):
-        """"""
-
-        if self._pageInitialized:
-            return
-
-        self.wizardObj = self.wizard()
-
-        self.edit_obj = self.findChild(
-            QtWidgets.QLineEdit, 'lineEdit_seed_config_filepath')
-
-        # Establish connections
-
-        b = self.findChild(QtWidgets.QPushButton, 'pushButton_browse')
-        b.clicked.connect(self.browse_yaml_config_file)
-
-        self.edit_obj.setText(self.wizardObj._settings['seed_config_filepath'])
-
-        self._pageInitialized = True
-
-    def browse_yaml_config_file(self):
-        """"""
-
-        caption = 'Select YAML config file to load'
-        extension_dict = {'YAML Files': ['*.yaml', '*.yml'],
-                          'All Files': ['*']}
-        filter_str = getFileDialogFilterStr(extension_dict)
-        directory = getFileDialogInitDir(self.edit_obj.text())
-        filepath = openFileNameDialog(
-            self, caption=caption, directory=directory, filter_str=filter_str)
-
-        if filepath:
-            self.edit_obj.setText(filepath)
-
-    def validatePage(self):
-        """"""
-
-        seed_config_filepath = self.edit_obj.text().strip()
-
-        if seed_config_filepath == '':
-            genreport.Report_NSLS2U_Default(
-                self.wizardObj.config_filepath, example_args=['full', None])
-
-            seed_config_filepath = self.wizardObj.config_filepath
-
-        if not Path(seed_config_filepath).exists():
-            text = 'Invalid file path'
-            info_text = (
-                f'Specified config file "{seed_config_filepath}" '
-                f'does not exist!')
-            showInvalidPageInputDialog(text, info_text)
-
-            return False
-
-        self.wizardObj._settings['seed_config_filepath'] = seed_config_filepath
-
-        try:
-            yml = yaml.YAML()
-            yml.preserve_quotes = True
-            user_conf = yml.load(Path(seed_config_filepath).read_text())
-            self.wizardObj.conf = user_conf
-
-        except:
-            text = 'Invalid YAML file'
-            info_text = (
-                f'Specified config file "{seed_config_filepath}" does not '
-                f'appear to be a valid YAML file!')
-            showInvalidPageInputDialog(text, info_text)
-
-            return False
-
-        report_class = genreport.Report_NSLS2U_Default
-        latest_config_ver = report_class.get_latest_config_version_str()
-        while self.wizardObj.conf['report_version'] != latest_config_ver:
-            self.wizardObj.conf = report_class.upgrade_config(
-                self.wizardObj.conf)
-
-        self.wizardObj.update_conf_on_all_pages(self.wizardObj.conf)
-
-        self.wizardObj.update_common_remote_opts()
 
         return True
 

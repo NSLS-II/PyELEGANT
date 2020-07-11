@@ -80,6 +80,7 @@ class ReportWizard(QtWidgets.QWizard):
         self.LTE = None
         self.model_elem_list = None
         self.common_remote_opts = {}
+        self.new_report = True
 
         self.page_name_list = [
             'LTE', 'straight_centers', 'phase_adv', 'straight_length',
@@ -200,6 +201,16 @@ class ReportWizard(QtWidgets.QWizard):
             'common_remote_opts' in self.conf['nonlin']):
             self.common_remote_opts.update(
                 self.conf['nonlin']['common_remote_opts'])
+
+    def skip_new_report_setup_page(self, should_skip):
+        """"""
+
+        cur_page = self.currentPage()
+
+        if should_skip:
+            cur_page.setNextId(3)
+        else:
+            cur_page.setNextId(2)
 
 def main():
     """"""
