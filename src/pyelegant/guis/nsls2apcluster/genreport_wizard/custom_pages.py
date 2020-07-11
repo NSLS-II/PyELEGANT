@@ -722,9 +722,16 @@ class PageGenReport(PageStandard):
                 b.clicked.connect(partial(self.generate_report, *_args))
         else:
             raise RuntimeError()
+
         b = self.findChildren(QtWidgets.QPushButton,
                               QtCore.QRegExp('pushButton_open_pdf_.+'))[0]
         b.clicked.connect(self.open_pdf_report)
+
+        buttons = self.findChildren(QtWidgets.QPushButton,
+                                    QtCore.QRegExp('pushButton_global_opts_.+'))
+        if len(buttons) != 0:
+            b = buttons[0]
+            b.clicked.connect(self.open_global_opts_dialog)
 
         self._connections_established = True
 
@@ -761,9 +768,80 @@ class PageGenReport(PageStandard):
 
         open_pdf_report(pdf_filepath)
 
+    def open_global_opts_dialog(self):
+        """"""
+
+        mod_conf = duplicate_yaml_conf(self.conf)
+
+        dialog = GlobalOptionsDialog(self, mod_conf)
+        dialog.exec()
+
+        if dialog.result() == dialog.Accepted:
+            self.wizardObj.update_conf_on_all_pages(mod_conf)
+            self.wizardObj.update_common_remote_opts()
+
     def modify_conf(self, orig_conf, recalc_replot=None):
         """"""
         return duplicate_yaml_conf(orig_conf)
+
+class GlobalOptionsDialog(QtWidgets.QDialog):
+    """"""
+
+    def __init__(self, wizard_obj, conf, *args, **kwargs):
+        """Constructor"""
+
+        super().__init__(*args, **kwargs)
+        ui_file = os.path.join(os.path.dirname(__file__), 'global_options.ui')
+        uic.loadUi(ui_file, self)
+
+        self.conf = conf
+
+        self.upload_options()
+
+        self.accepted.connect(self.download_options)
+
+    def upload_options(self):
+        """"""
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+
+        w = self.findChild(check, 'checkBox_pyelegant_stdout')
+        w.setChecked(self.conf['enable_pyelegant_stdout'])
+
+        try:
+            common_remote_opts = self.conf['nonlin']['common_remote_opts']
+        except:
+            common_remote_opts = {}
+
+        for suffix in ['nodelist', 'exclude']:
+            if suffix in common_remote_opts:
+                w = self.findChild(edit, f'lineEdit_{suffix}')
+                w.setText(','.join(common_remote_opts[suffix]))
+
+    def download_options(self):
+        """"""
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+
+        w = self.findChild(check, 'checkBox_pyelegant_stdout')
+        self.conf['enable_pyelegant_stdout'] = w.isChecked()
+
+        try:
+            common_remote_opts = self.conf['nonlin']['common_remote_opts']
+        except:
+            self.conf['nonlin']['common_remote_opts'] = {}
+            common_remote_opts = self.conf['nonlin']['common_remote_opts']
+
+        for suffix in ['nodelist', 'exclude']:
+            w = self.findChild(edit, f'lineEdit_{suffix}')
+            text = w.text().strip()
+            if text != '':
+                common_remote_opts[suffix] = [s.strip() for s in text.split(',')]
+            else:
+                if suffix in common_remote_opts:
+                    del common_remote_opts[suffix]
 
 class PageNonlinCalcTest(PageGenReport):
     """"""

@@ -197,8 +197,8 @@ class ReportWizard(QtWidgets.QWizard):
     def update_common_remote_opts(self):
         """"""
 
-        if (self.common_remote_opts == {}) and (
-            'common_remote_opts' in self.conf['nonlin']):
+        if 'common_remote_opts' in self.conf['nonlin']:
+            self.common_remote_opts.clear()
             self.common_remote_opts.update(
                 self.conf['nonlin']['common_remote_opts'])
 
