@@ -7364,6 +7364,9 @@ class Report_NSLS2U_Default:
         slim = [0.0,
                 self.lin_data['circumf'] / self.lin_data['n_periods_in_ring']]
 
+        pp = PdfPages(lifetime_pdf_filepath)
+        page = 0
+
         for iEnergy, iCoup, iVolt in zip(
             loss_plots_indexes['E_MeV'], loss_plots_indexes['coupling'],
             loss_plots_indexes['rf_V']):
@@ -7377,18 +7380,19 @@ class Report_NSLS2U_Default:
                     tmp.name, title='', add_tau_info_to_title=True,
                     slim=slim, show_mag_prof=True)
 
-        fignums_to_delete = []
+            fignums_to_delete = []
+            for fignum in plt.get_fignums():
+                if fignum not in existing_fignums:
+                    pp.savefig(figure=fignum)
+                    #plt.savefig(os.path.join(report_folderpath, f'lifetime_{page:d}.svg'))
+                    plt.savefig(os.path.join(report_folderpath, f'lifetime_{page:d}.png'),
+                                dpi=200)
+                    page += 1
+                    fignums_to_delete.append(fignum)
 
-        pp = PdfPages(lifetime_pdf_filepath)
-        page = 0
-        for fignum in plt.get_fignums():
-            if fignum not in existing_fignums:
-                pp.savefig(figure=fignum)
-                #plt.savefig(os.path.join(report_folderpath, f'lifetime_{page:d}.svg'))
-                plt.savefig(os.path.join(report_folderpath, f'lifetime_{page:d}.png'),
-                            dpi=200)
-                page += 1
-                fignums_to_delete.append(fignum)
+            for fignum in fignums_to_delete:
+                plt.close(fignum)
+
         pp.close()
 
         #plt.show()
