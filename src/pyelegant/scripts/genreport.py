@@ -471,10 +471,15 @@ class Report_NSLS2U_Default:
                 os.path.basename(input_LTE_filepath).replace("_", r"\_")
             ver_str = pe.__version__["PyELEGANT"]
 
+            latex_safe_report_class_name = self.conf['report_class'].replace(
+                '_', '\_')
+
             default_paragraph = plx.NoEscape(
                 (f'The lattice file being analyzed here is '
                  f'\seqsplit{{"{mod_LTE_filename}"}}. This report was generated using '
-                 f'PyELEGANT version {ver_str}.'))
+                 f'PyELEGANT version {ver_str} and '
+                 f'the report format "{latex_safe_report_class_name}" '
+                 f'version {self._version}.'))
             doc.append(default_paragraph)
 
             custom_paragraphs = conf['report_paragraphs'].get('lattice_description', [])
