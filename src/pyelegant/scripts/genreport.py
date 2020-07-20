@@ -7336,15 +7336,16 @@ class Report_NSLS2U_Default:
     def plot_lifetime_props(self, replot):
         """"""
 
-        if not replot:
+        report_folderpath = self.report_folderpath
+        lifetime_pdf_filepath = os.path.join(report_folderpath, 'lifetime.pdf')
+
+        if Path(lifetime_pdf_filepath).exists() and (not replot):
             return
 
         if 'plot_opts' not in self.conf['lifetime']:
             return
 
         plot_opts = self.conf['lifetime']['plot_opts']
-
-        report_folderpath = self.report_folderpath
 
         existing_fignums = plt.get_fignums()
 
@@ -7375,8 +7376,6 @@ class Report_NSLS2U_Default:
                 pe.nonlin.plot_Touschek_lifetime(
                     tmp.name, title='', add_tau_info_to_title=True,
                     slim=slim, show_mag_prof=True)
-
-        lifetime_pdf_filepath = os.path.join(report_folderpath, 'lifetime.pdf')
 
         fignums_to_delete = []
 
