@@ -647,6 +647,7 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
                     ','.join(self.non_ok_nodes[node_name])))
             else:
                 setItem = t.setItem
+                setItem(iRow, iCol, QTableWidgetItem('')) # fill with blank
             iCol += 1
 
             setItem(iRow, iCol, QTableWidgetItem(node_name))
