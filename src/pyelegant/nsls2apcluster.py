@@ -25,7 +25,7 @@ if not _SLURM_CONFIG_FILEPATH.exists():
     _SLURM_CONFIG_FILEPATH.write_text('')
 #
 SLURM_PARTITIONS = {}
-SLURM_EXCL_NODES = []
+SLURM_EXCL_NODES = None
 SLURM_ABS_TIME_LIMIT = {}
 
 if False:
@@ -153,6 +153,16 @@ def _get_slurm_partition_info():
     partition_info = parsed
 
     return partition_info
+
+def _make_sure_slurm_excl_nodes_initialized():
+    """"""
+
+    global SLURM_EXCL_NODES
+
+    if SLURM_EXCL_NODES is None:
+        SLURM_EXCL_NODES = []
+
+        load_slurm_excl_nodes_from_config_file(force=True)
 
 def clear_slurm_excl_nodes():
     """"""
@@ -291,6 +301,8 @@ def extract_slurm_opts(remote_opts):
     """"""
 
     slurm_opts = {}
+
+    _make_sure_slurm_excl_nodes_initialized()
 
     if SLURM_EXCL_NODES != []:
         slurm_opts['exclude'] = f'--exclude={",".join(SLURM_EXCL_NODES)}'
@@ -1509,6 +1521,8 @@ srun {mpi_compiler_opt} python -m mpi4py.futures {main_script_path} _mpi_starmap
                 slurm_timelimit_str = '#SBATCH --time={}'.format(timelimit)
     else:
         slurm_timelimit_str = '#SBATCH --time={}'.format(timelimit_str)
+
+    _make_sure_slurm_excl_nodes_initialized()
 
     contents = contents_template.format(
         mpi_compiler_opt=MPI_COMPILER_OPT_STR,
