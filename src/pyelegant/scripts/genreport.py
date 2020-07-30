@@ -7529,7 +7529,15 @@ class Report_NSLS2U_Default:
         elif conf['report_version'] == '1.1':
             # Upgrade to '1.2'
             conf['report_version'] = '1.2'
-            # NotImplementedError
+
+            conf['ring_is_a_simple_multiple_of_cells'] = True
+
+            test = conf['nonlin']['calc_opts']['mom_aper']['test']
+            test['forbid_resonance_crossing'] = False
+            # ^ Default for this option in v1.2 is "True", but only "False" was
+            # available in v1.1, this value is set here to "False" during this
+            # auto-upgrade function.
+            test['soft_failure'] = False
 
         elif conf['report_version'] == '1.2':
             pass # Latest version. No need to upgrade.
