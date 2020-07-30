@@ -575,13 +575,13 @@ p, li { white-space: pre-wrap; }
        <widget class="QLabel" name="label_13">
         <property name="minimumSize">
          <size>
-          <width>150</width>
+          <width>111</width>
           <height>0</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
-          <width>150</width>
+          <width>111</width>
           <height>16777215</height>
          </size>
         </property>
@@ -592,6 +592,39 @@ p, li { white-space: pre-wrap; }
       </item>
       <item>
        <widget class="QLineEdit" name="lineEdit_use_beamline_ring"/>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_112">
+      <item>
+       <widget class="QCheckBox" name="checkBox_ring_is_simple_mult_cells">
+        <property name="maximumSize">
+         <size>
+          <width>301</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>Uncheck this if your LTE's ring beamline is NOT defined to be (n * SuperPeriodBeamline) where n is a positive integer.</string>
+        </property>
+        <property name="text">
+         <string>Ring Beamline is simply a multiple of Super-Period Beamlines</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_18">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
       </item>
      </layout>
     </item>
@@ -1201,7 +1234,7 @@ p, li { white-space: pre-wrap; }
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QHBoxLayout" name="horizontalLayout_125">
         <item>
          <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -2177,7 +2210,7 @@ p, li { white-space: pre-wrap; }
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_36">
         <item>
          <widget class="QTabWidget" name="tabWidget_xy_aper">
@@ -2914,7 +2947,7 @@ n_lines</string>
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_65">
         <item>
          <widget class="QTabWidget" name="tabWidget_fmap_xy">
@@ -3840,7 +3873,7 @@ delta_offset</string>
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_69">
         <item>
          <widget class="QTabWidget" name="tabWidget_fmap_px">
@@ -4766,7 +4799,7 @@ delta_offset</string>
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_95">
         <item>
          <widget class="QTabWidget" name="tabWidget_cmap_xy">
@@ -5327,7 +5360,7 @@ delta_offset
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_102">
         <item>
          <widget class="QTabWidget" name="tabWidget_cmap_px">
@@ -5887,7 +5920,7 @@ delta_offset</string>
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_104">
         <item>
          <widget class="QTabWidget" name="tabWidget_mom_aper">
@@ -7222,7 +7255,7 @@ soft_failure</string>
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_152">
         <item>
          <widget class="QTabWidget" name="tabWidget_tswa">
@@ -8113,7 +8146,7 @@ nx, ny:= 50</string>
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_157">
         <item>
          <widget class="QTabWidget" name="tabWidget_nonlin_chrom">
@@ -9130,7 +9163,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_185">
         <item>
          <layout class="QHBoxLayout" name="horizontalLayout_101">
@@ -9886,7 +9919,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout_192">
         <item>
          <widget class="QTabWidget" name="tabWidget_rf_tau_opts">

@@ -6311,9 +6311,27 @@ class Report_NSLS2U_Default:
         s_start = 0.0
 
         if self.is_ring_a_multiple_of_superperiods():
+            if not self.conf['ring_is_a_simple_multiple_of_cells']:
+                use_beamline_cell = self.conf['use_beamline_cell']
+                use_beamline_ring = self.conf['use_beamline_ring']
+                raise ValueError(
+                    f'Config file says "{use_beamline_ring}" is NOT a simple '
+                    f'multiple of "{use_beamline_cell}", but the specified LTE '
+                    f'seems to indicate otherwise. You must reconcile this '
+                    f'discreapancy.')
+
             s_end = self.lin_data['circumf'] / self.lin_data['n_periods_in_ring']
             ring_flat_elem_names = None
         else:
+            if self.conf['ring_is_a_simple_multiple_of_cells']:
+                use_beamline_cell = self.conf['use_beamline_cell']
+                use_beamline_ring = self.conf['use_beamline_ring']
+                raise ValueError(
+                    f'Config file says "{use_beamline_ring}" is a simple '
+                    f'multiple of "{use_beamline_cell}", but the specified LTE '
+                    f'seems to indicate otherwise. You must reconcile this '
+                    f'discreapancy.')
+
             s_end = self.lin_data['circumf'] + 1.0
 
             use_beamline_ring = self.conf['use_beamline_ring']
@@ -7530,6 +7548,13 @@ class Report_NSLS2U_Default:
 
         conf['report_version'] = sqss('1.2')
         self._version = '1.2'
+
+        # This variable is added to ensure that your LTE is set up properly
+        # such that "mom_aper" calculation does NOT end up computing the whole
+        # ring, when it is only necessary to compute only in the super-cell.
+        # When the whole ring is simply a multiple of super-cells, this variable
+        # should be set to "True".
+        conf['ring_is_a_simple_multiple_of_cells'] = True
 
         # Add "forbid_resonance_crossing" and "soft_failure"
         test = conf['nonlin']['calc_opts']['mom_aper']['test']

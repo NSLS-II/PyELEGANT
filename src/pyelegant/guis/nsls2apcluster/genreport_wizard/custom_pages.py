@@ -1768,6 +1768,9 @@ class PageLTE(PageStandard):
             'date_LTE_received*',
             self.safeFindChild(QtWidgets.QDateEdit, 'dateEdit_LTE_received'))
         self.registerFieldOnFirstShow(
+            'check_ring_is_simple_mult_cells',
+            self.safeFindChild(QtWidgets.QCheckBox, 'checkBox_ring_is_simple_mult_cells'))
+        self.registerFieldOnFirstShow(
             'check_pyele_stdout',
             self.safeFindChild(QtWidgets.QCheckBox, 'checkBox_pyelegant_stdout'))
 
@@ -1834,6 +1837,9 @@ class PageLTE(PageStandard):
         self.setField('edit_use_beamline_ring',
                       str(self.conf.get('use_beamline_ring', '').strip()))
 
+        self.setField('check_ring_is_simple_mult_cells',
+                      self.conf.get('ring_is_a_simple_multiple_of_cells', True))
+
         self.setField('check_pyele_stdout',
                       self.conf.get('enable_pyelegant_stdout', False))
 
@@ -1873,6 +1879,8 @@ class PageLTE(PageStandard):
         use_beamline_cell = self.field('edit_use_beamline_cell').strip()
         use_beamline_ring = self.field('edit_use_beamline_ring').strip()
 
+        ring_is_simple_mult_cells = self.field('check_ring_is_simple_mult_cells')
+
         report_folder = Path(self.wizardObj.pdf_filepath).parent
 
         kickmap_filepaths = {'raw': {}, 'abs': {}}
@@ -1891,6 +1899,7 @@ class PageLTE(PageStandard):
         try:
             LTE = pe.ltemanager.Lattice(LTE_filepath=orig_LTE_filepath,
                                         used_beamline_name=use_beamline_ring)
+            LTE_ring = LTE
         except:
             text = 'Invalid beamline name for "Ring Beamline Name"'
             info_text = f'Specified name "{use_beamline_ring}" does not exist!'
@@ -1905,6 +1914,7 @@ class PageLTE(PageStandard):
         try:
             LTE = pe.ltemanager.Lattice(LTE_filepath=orig_LTE_filepath,
                                         used_beamline_name=use_beamline_cell)
+            LTE_cell = LTE
         except:
             text = 'Invalid beamline name for "Super-Period Beamline Name"'
             info_text = f'Specified name "{use_beamline_cell}" does not exist!'
@@ -1929,6 +1939,31 @@ class PageLTE(PageStandard):
                     ', '.join(all_beamline_names))
                 showInvalidPageInputDialog(text, info_text)
                 return False
+
+        if ring_is_simple_mult_cells: # Must check if the ring beamline is indeed
+            # a simple multiple of thr cell beamlines. If not, advise the user
+            # to correct the LTE file.
+            est_ring_mult = int(np.floor(len(LTE_ring.flat_used_elem_names)
+                                         / len(LTE_cell.flat_used_elem_names)))
+            ext_flat_used_elem_names = \
+                LTE_cell.flat_used_elem_names * est_ring_mult
+
+            err_text = f'"{use_beamline_cell}" * {est_ring_mult} != "{use_beamline_ring}"'
+            err_info_text = (
+                f'Ring Beamline "{use_beamline_ring}" is NOT a simple '
+                f'multiple of Super-Period Beamline "{use_beamline_cell}". \nTo fix '
+                f'this problem, you may want to define the Ring Beamline as \n'
+                f'    `{use_beamline_ring}: LINE=({est_ring_mult}*{use_beamline_cell})`')
+            if len(ext_flat_used_elem_names) != len(LTE_ring.flat_used_elem_names):
+                showInvalidPageInputDialog(err_text, err_info_text)
+                return False
+            else:
+                if np.all(np.array(ext_flat_used_elem_names) ==
+                          np.array(LTE_ring.flat_used_elem_names)):
+                    pass
+                else:
+                    showInvalidPageInputDialog(err_text, err_info_text)
+                    return False
 
         mod_conf = duplicate_yaml_conf(self.conf)
 
