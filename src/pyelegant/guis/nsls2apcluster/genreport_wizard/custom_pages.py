@@ -4002,7 +4002,244 @@ class PageRfTau(PageGenReport):
                                f'pushButton_edit_loss_plots_set')
         w.clicked.connect(self.edit_loss_plots_set)
 
+        w = self.safeFindChild(QtWidgets.QPushButton,
+                               f'pushButton_pre_scan_V_tau')
+        w.clicked.connect(self.pre_scan_V_tau)
+
         self._pageInitialized = True
+
+    def pre_scan_V_tau(self):
+        """"""
+
+        spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
+                                    QtWidgets.QCheckBox, QtWidgets.QComboBox)
+
+        w = self.findChild(edit, 'lineEdit_bucket_height_min')
+        min_height_percent = float(w.text().strip())
+
+        w = self.findChild(edit, 'lineEdit_bucket_height_max')
+        max_height_percent = float(w.text().strip())
+
+        w = self.findChild(spin, 'spinBox_v_scan_npts')
+        v_scan_npts = w.value()
+
+        min_rf_V_step = 0.01e6
+
+        if min_height_percent <= 0.0:
+            text = 'Invalid min RF bucket height'
+            informative_text = 'Min RF bucket height must be positive.'
+            showInvalidPageInputDialog(text, informative_text)
+            return
+
+        if min_height_percent ==  max_height_percent:
+            text = 'Invalid min/max RF bucket heights'
+            informative_text = 'Min and max RF bucket height must be different.'
+            showInvalidPageInputDialog(text, informative_text)
+            return
+        elif min_height_percent >  max_height_percent:
+            text = 'Invalid min/max RF bucket heights'
+            informative_text = 'Min RF bucket height cannot be smaller than max RF bucket height.'
+            showInvalidPageInputDialog(text, informative_text)
+            return
+
+        QtWidgets.QApplication.setOverrideCursor(Qt.WaitCursor)
+
+        yml = yaml.YAML()
+        yml.preserve_quotes = True
+        user_conf = yml.load(Path(self.wizardObj.config_filepath).read_text())
+
+        report_obj = genreport.Report_NSLS2U_Default(
+            self.wizardObj.config_filepath, user_conf=user_conf, build=False)
+
+        rf_volt_ranges = report_obj.calc_rf_volt_range_from_bucket_height_range(
+            min_height_percent, max_height_percent, min_rf_V_step)
+
+
+        E_MeV_list = report_obj._get_E_MeV_list()
+
+        calc_opts = report_obj.conf['lifetime']['calc_opts']
+        #
+        total_beam_current_mA = calc_opts['total_beam_current_mA']
+        if isinstance(total_beam_current_mA, list):
+            total_beam_current_mA_list = total_beam_current_mA
+        else:
+            total_beam_current_mA_list = [total_beam_current_mA] * len(E_MeV_list)
+        #
+        num_filled_bunches = calc_opts['num_filled_bunches']
+        raw_coupling_specs = calc_opts['coupling']
+        #
+        raw_max_mom_aper_percent = calc_opts['max_mom_aper_percent']
+        if raw_max_mom_aper_percent in (None, 'None', 'none'):
+            max_mom_aper_percent = None
+        elif raw_max_mom_aper_percent in ('Auto', 'auto'):
+            raise NotImplementedError((
+                'Automatically determine deltaLimit from nonlin_chrom '
+                'integer-crossing & nan'))
+        else:
+            max_mom_aper_percent = float(raw_max_mom_aper_percent)
+
+        req_d = report_obj.req_data_for_calc['lifetime_props']
+        #
+        T_rev_s = req_d['T_rev_s'] # [s]
+        n_periods_in_ring = req_d['n_periods_in_ring']
+        circumf = req_d['circumf']
+        #
+        # equilibrium emittance [m-rad]
+        eps_0_list = [req_d['eps_x_pm'] * 1e-12]
+        for _d in req_d['extra_Es']:
+            eps_0_list.append(_d['eps_x_pm'] * 1e-12)
+
+        req_d = report_obj.req_data_for_calc['rf_dep_props']
+        #
+        alphac = req_d['alphac'] # momentum compaction
+        U0_ev_list = [req_d['U0_eV']] # energy loss per turn [eV]
+        for _d in req_d['extra_Es']:
+            U0_ev_list.append(_d['U0_eV'])
+
+        h = report_obj.conf['rf']['calc_opts']['harmonic_number']
+
+        try:
+            mmap_pgz_filepath = report_obj.get_nonlin_data_filepaths()['mom_aper']
+            assert os.path.exists(mmap_pgz_filepath)
+            d = pe.util.load_pgz_file(mmap_pgz_filepath)
+            mmap_d = d['data']['mmap']
+        except:
+            raise RuntimeError(('To compute beam lifetime, you must first '
+                                'compute momentum aperture.'))
+
+        # Since the momentum aperture data only extend to one super period,
+        # the data must be duplicated to cover the whole ring. Also, create
+        # an SDDS file from the .pgz/.hdf5 file, which can be directly fed
+        # into the ELEGANT's lifetime calculation function.
+        mmap_sdds_filepath_cell = mmap_pgz_filepath[:-4] + '.mmap'
+        mmap_sdds_filepath_ring = mmap_pgz_filepath[:-4] + '.mmapxt'
+        pe.sdds.dicts2sdds(
+            mmap_sdds_filepath_cell, params=mmap_d['scalars'],
+            columns=mmap_d['arrays'], outputMode='binary')
+        # Based on computeLifetime.py used with MOGA (geneopt.py)
+        if report_obj.is_ring_a_multiple_of_superperiods():
+            dup_filenames = ' '.join(
+                [mmap_sdds_filepath_cell] * n_periods_in_ring)
+            msectors = 1
+            cmd_list = [
+                f'sddscombine {dup_filenames} -pipe=out',
+                f'sddsprocess -pipe "-redefine=col,s,s i_page 1 - {circumf:.16g} {n_periods_in_ring} / * {msectors} * +,units=m"',
+                f'sddscombine -pipe -merge',
+                f'sddsprocess -pipe=in {mmap_sdds_filepath_ring} -filter=col,s,0,{circumf:.16g}',
+            ]
+            if False: print(cmd_list)
+            result, err, returncode = pe.util.chained_Popen(cmd_list)
+        else:
+            # "mmap_sdds_filepath_cell" actually covers the whole ring,
+            # even though the name name implies only one super-period.
+            # So, there is no need for extending it.
+            shutil.copy(mmap_sdds_filepath_cell, mmap_sdds_filepath_ring)
+
+
+        output_filepath = os.path.join(
+            report_obj.report_folderpath, 'pre_scan_lifetime.pgz')
+        LTE_filepath = report_obj.input_LTE_filepath
+        use_beamline_ring = report_obj.conf['use_beamline_ring']
+
+        rf_Vs_LoL, bucket_heights_percent_LoL, taus_LoL = [], [], []
+        coupling_percent_str_LoL, eps_y_str_LoL = [], []
+        for iEnergy, (E_MeV, eps_0, total_beam_current_mA, U0_eV) in enumerate(
+                zip(E_MeV_list, eps_0_list, total_beam_current_mA_list, U0_ev_list)):
+
+            total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
+            charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
+            charge_C = charge_per_bunch_nC * 1e-9
+
+            eps_ys = []
+            for s in raw_coupling_specs:
+                if s.endswith('pm'):
+                    ey_pm = float(s[:-2].strip())
+                    eps_ys.append(ey_pm * 1e-12)
+                elif s.endswith('%'):
+                    kappa = float(s[:-1].strip()) * 1e-2
+                    eps_ys.append(kappa / (1+kappa) * eps_0)
+                else:
+                    raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
+                                      'must end with either "pm" or "%"'))
+            eps_ys = np.array(eps_ys) # [m-rad]
+            coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
+            # used in ELEGANT's "touschekLifetime" function.
+
+            rf_Vs_list, bucket_heights_percent_list, taus_list = [], [], []
+            coupling_percent_str_list, eps_y_str_list = [], []
+            for emit_ratio, ey in zip(coupling, eps_ys):
+                coupling_percent_str_list.append(f'{emit_ratio * 1e2:.1f}%')
+                eps_y_str_list.append(f'{ey * 1e12:.1f}pm')
+                min_rf_V = rf_volt_ranges[iEnergy]['min']
+                max_rf_V = rf_volt_ranges[iEnergy]['max']
+                #rf_v_array = np.arange(min_rf_V, max_rf_V, min_rf_V_step)
+                #if rf_v_array[-1] != max_rf_V:
+                    #rf_v_array = np.append(rf_v_array, max_rf_V)
+                rf_v_array = np.linspace(min_rf_V, max_rf_V, v_scan_npts)
+
+                rf_Vs_list.append(rf_v_array)
+
+                bucket_heights_percent = report_obj.calc_rf_bucket_heights(
+                    E_MeV / 1e3, alphac, U0_eV, h, rf_v_array)
+                bucket_heights_percent_list.append(bucket_heights_percent)
+
+                tau_hrs = []
+                for RFvolt in rf_v_array:
+                    pe.nonlin.calc_Touschek_lifetime(
+                        output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
+                        charge_C, emit_ratio, RFvolt, h,
+                        max_mom_aper_percent=max_mom_aper_percent,
+                        ignoreMismatch=True, use_beamline=use_beamline_ring,
+                        del_tmp_files=True)
+
+                    d = pe.util.load_pgz_file(output_filepath)
+                    tau_hrs.append(d['data']['life']['scalars']['tLifetime'])
+                taus_list.append(tau_hrs)
+
+            rf_Vs_LoL.append(rf_Vs_list)
+            bucket_heights_percent_LoL.append(bucket_heights_percent_list)
+            taus_LoL.append(taus_list)
+            coupling_percent_str_LoL.append(coupling_percent_str_list)
+            eps_y_str_LoL.append(eps_y_str_list)
+
+        import matplotlib.pyplot as plt
+
+        figs, axs = [], []
+        for _ in raw_coupling_specs:
+            fig1, ax1 = plt.subplots()
+            plt.xlabel(r'$\mathrm{RF\, Voltage\, [MV]}$', size=18)
+            fig2, ax2 = plt.subplots()
+            plt.xlabel(r'$\mathrm{RF\, Bucket\, Height\, [\%]}$', size=18)
+            figs.append({'MV': fig1, '%': fig2})
+            axs.append({'MV': ax1, '%': ax2})
+
+        for iEnergy, (E_MeV, rf_Vs_list, bucket_heights_percent_list, taus_list,
+             coupling_percent_str_list, eps_y_str_list) in enumerate(zip(
+                 E_MeV_list, rf_Vs_LoL, bucket_heights_percent_LoL, taus_LoL,
+                 coupling_percent_str_LoL, eps_y_str_LoL)):
+
+            for iCoup, (rf_Vs, bucket_heights_percent, tau_hrs,
+                        coupling_percent_str, eps_y_str) in enumerate(zip(
+                            rf_Vs_list, bucket_heights_percent_list, taus_list,
+                            coupling_percent_str_list, eps_y_str_list)):
+
+                ax1, ax2 = axs[iCoup]['MV'], axs[iCoup]['%']
+                label = (f'{E_MeV/1e3:.1f} GeV; '
+                         f'({coupling_percent_str}/{eps_y_str}) Coup.')
+                label = r'$\mathrm{' + \
+                    label.replace('%', r'\%').replace(' ', r'\, ') + '}$'
+                ax1.plot(rf_Vs/1e6, tau_hrs, '.-', label=label)
+                ax2.plot(bucket_heights_percent, tau_hrs, '.-', label=label)
+        for ax_d in axs:
+            for ax in [ax_d['MV'], ax_d['%']]:
+                plt.sca(ax)
+                plt.ylabel(r'$\mathrm{{Beam\, Lifetime\, [hr]}}$', size=18)
+                plt.legend(loc='best')
+                plt.tight_layout()
+
+        plt.show()
+
+        QtWidgets.QApplication.restoreOverrideCursor()
 
     def edit_total_beam_current(self):
         """"""

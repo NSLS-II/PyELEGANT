@@ -149,7 +149,8 @@ def _yaml_set_comment_after_key(com_map, key, comment, indent):
 class Report_NSLS2U_Default:
     """"""
 
-    def __init__(self, config_filepath, user_conf=None, example_args=None):
+    def __init__(self, config_filepath, user_conf=None, example_args=None,
+                 build=True):
         """Constructor"""
 
         self.all_nonlin_calc_types = [
@@ -186,11 +187,12 @@ class Report_NSLS2U_Default:
                 yml = yaml.YAML(typ='safe')
                 self.conf = yml.load(Path(tmp.name).read_text())
 
-            twiss_plot_captions = self.calc_plot()
+            if build:
+                twiss_plot_captions = self.calc_plot()
 
-            self.build(twiss_plot_captions)
+                self.build(twiss_plot_captions)
 
-            print('\n* Finished writing a PDF/Excel report.')
+                print('\n* Finished writing a PDF/Excel report.')
 
         else:
             full_or_min, example_report_version = example_args
@@ -7281,8 +7283,6 @@ class Report_NSLS2U_Default:
             h = calc_opts['harmonic_number']
 
             c = scipy.constants.c
-            m_e_eV = physical_constants[
-                'electron mass energy equivalent in MeV'][0] * 1e6
 
             req_d = self.req_data_for_calc['rf_dep_props']
             #
@@ -7347,21 +7347,8 @@ class Report_NSLS2U_Default:
                         sigma_z_ps_list.append(sigma_z_ps)
 
                     # RF Bucket Height (RF Acceptance)
-                    #
-                    # See Section 3.1.4.6 on p.212 of Chao & Tigner, "Handbook
-                    # of Accelerator Physics and Engineering" for analytical
-                    # formula of RF bucket height, which is "A_s" in Eq. (32),
-                    # which is equal to (epsilon_max/E_0) [fraction] in Eq. (33).
-                    #
-                    # Note that the slip factor (eta) is approximately equal
-                    # to momentum compaction in the case of NSLS-II.
-                    gamma = 1.0 + E_GeV * 1e9 / m_e_eV
-                    gamma_t = 1.0 / np.sqrt(alphac)
-                    slip_fac = 1.0 / (gamma_t**2) - 1.0 / (gamma**2) # approx. equal to "mom_compac"
-                    q = rf_volts / U0_eV # overvoltage factor
-                    F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
-                    rf_bucket_heights_percent = 1e2 * np.sqrt(
-                        U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
+                    rf_bucket_heights_percent = self.calc_rf_bucket_heights(
+                        E_GeV, alphac, U0_eV, h, rf_volts)
                     if self._version == '1.1':
                         rf_bucket_heights_percent_list.append(rf_bucket_heights_percent)
 
@@ -7411,21 +7398,8 @@ class Report_NSLS2U_Default:
                     sigma_z_ps_list.append(sigma_z_ps)
 
                     # RF Bucket Height (RF Acceptance)
-                    #
-                    # See Section 3.1.4.6 on p.212 of Chao & Tigner, "Handbook
-                    # of Accelerator Physics and Engineering" for analytical
-                    # formula of RF bucket height, which is "A_s" in Eq. (32),
-                    # which is equal to (epsilon_max/E_0) [fraction] in Eq. (33).
-                    #
-                    # Note that the slip factor (eta) is approximately equal
-                    # to momentum compaction in the case of NSLS-II.
-                    gamma = 1.0 + E_GeV * 1e9 / m_e_eV
-                    gamma_t = 1.0 / np.sqrt(alphac)
-                    slip_fac = 1.0 / (gamma_t**2) - 1.0 / (gamma**2) # approx. equal to "mom_compac"
-                    q = rf_v_array / U0_eV # overvoltage factor
-                    F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
-                    rf_bucket_heights_percent = 1e2 * np.sqrt(
-                        U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
+                    rf_bucket_heights_percent = self.calc_rf_bucket_heights(
+                        E_GeV, alphac, U0_eV, h, rf_v_array)
                     rf_bucket_heights_percent_list.append(rf_bucket_heights_percent)
 
                 self.rf_dep_props = dict(
@@ -7440,6 +7414,128 @@ class Report_NSLS2U_Default:
 
             with open(output_filepath, 'wb') as f:
                 pickle.dump(self.rf_dep_props, f)
+
+    def calc_rf_volt_range_from_bucket_height_range(
+        self, min_height_percent, max_height_percent, min_rf_volt_step):
+        """"""
+
+        rf = self.conf['rf']
+        calc_opts = rf['calc_opts']
+
+        h = calc_opts['harmonic_number']
+
+        self.req_data_for_calc = {}
+        os.chdir(Path(self.config_filepath).parent) # CRITICAL
+        self.set_up_lattice()
+        self.get_lin_data()
+        req_d = self.req_data_for_calc['rf_dep_props']
+        #
+        alphac = req_d['alphac'] # momentum compaction
+
+        E_GeV_list = [req_d['E_GeV']] # [GeV]
+        U0_ev_list = [req_d['U0_eV']] # energy loss per turn [eV]
+        for _d in req_d['extra_Es']:
+            E_GeV_list.append(_d['E_GeV'])
+            U0_ev_list.append(_d['U0_eV'])
+
+        results = [{} for _ in E_GeV_list]
+
+        #debug = True
+        debug = False
+
+        for r, E_GeV, U0_eV in zip(results, E_GeV_list, U0_ev_list):
+
+            rf_V = 3e6
+
+            # First find a voltage for a non-zero bucket height
+            if debug:
+                print('First find a voltage for a non-zero bucket height')
+            while True:
+                rf_bucket_heights_percent = self.calc_rf_bucket_heights(
+                    E_GeV, alphac, U0_eV, h, rf_V)
+                if debug:
+                    print(f'Height [%] = {rf_bucket_heights_percent:.2f} @ {rf_V/1e6:.2} MV')
+
+                if np.isnan(rf_bucket_heights_percent):
+                    rf_V += min_rf_volt_step
+                else:
+                    break
+
+            # Scan to find the upper voltage limit
+            if debug:
+                print('Scan to find the upper voltage limit')
+            if rf_bucket_heights_percent < max_height_percent:
+                v_dir = 'up'
+            elif rf_bucket_heights_percent > max_height_percent:
+                v_dir = 'down'
+            else:
+                v_dir = 'already_satisfied'
+            #
+            while v_dir != 'already_satisfied':
+                if v_dir == 'up':
+                    rf_V += min_rf_volt_step
+                else:
+                    rf_V -= min_rf_volt_step
+
+                rf_bucket_heights_percent = self.calc_rf_bucket_heights(
+                    E_GeV, alphac, U0_eV, h, rf_V)
+                if debug:
+                    print(f'Height [%] = {rf_bucket_heights_percent:.2f} @ {rf_V/1e6:.2} MV')
+
+                if (v_dir == 'up') and (
+                    rf_bucket_heights_percent > max_height_percent):
+                    rf_V -= min_rf_volt_step
+                    break
+                elif (v_dir == 'down') and (
+                    rf_bucket_heights_percent < max_height_percent):
+                    break
+            #
+            r['max'] = rf_V
+
+            # Scan to find the lower voltage limit
+            if debug:
+                print('Scan to find the lower voltage limit')
+            while True:
+                rf_V -= min_rf_volt_step
+
+                rf_bucket_heights_percent = self.calc_rf_bucket_heights(
+                    E_GeV, alphac, U0_eV, h, rf_V)
+                if debug:
+                    print(f'Height [%] = {rf_bucket_heights_percent:.2f} @ {rf_V/1e6:.2} MV')
+
+                if (rf_bucket_heights_percent < min_height_percent) or \
+                   np.isnan(rf_bucket_heights_percent):
+                    rf_V += min_rf_volt_step
+                    break
+                elif rf_bucket_heights_percent == min_height_percent:
+                    break
+            #
+            r['min'] = rf_V
+
+        return results
+
+    def calc_rf_bucket_heights(self, E_GeV, alphac, U0_eV, h, rf_volts):
+        """"""
+
+        m_e_eV = physical_constants[
+            'electron mass energy equivalent in MeV'][0] * 1e6
+
+        # See Section 3.1.4.6 on p.212 of Chao & Tigner, "Handbook
+        # of Accelerator Physics and Engineering" for analytical
+        # formula of RF bucket height, which is "A_s" in Eq. (32),
+        # which is equal to (epsilon_max/E_0) [fraction] in Eq. (33).
+        #
+        # Note that the slip factor (eta) is approximately equal
+        # to momentum compaction in the case of NSLS-II.
+        gamma = 1.0 + E_GeV * 1e9 / m_e_eV
+        gamma_t = 1.0 / np.sqrt(alphac)
+        slip_fac = 1.0 / (gamma_t**2) - 1.0 / (gamma**2) # approx. equal to "mom_compac"
+        q = rf_volts / U0_eV # overvoltage factor
+        F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
+        rf_bucket_heights_percents = 1e2 * np.sqrt(
+            U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
+
+        return rf_bucket_heights_percents
 
     def calc_lifetime_props(self, recalc):
         """"""
