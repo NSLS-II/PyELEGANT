@@ -4042,7 +4042,12 @@ class PageRfTau(PageGenReport):
             showInvalidPageInputDialog(text, informative_text)
             return
 
+        w = self.findChild(spin, 'spinBox_ntasks_rf_tau')
+        ntasks = w.value()
+
         QtWidgets.QApplication.setOverrideCursor(Qt.WaitCursor)
+
+        QtWidgets.QApplication.processEvents()
 
         yml = yaml.YAML()
         yml.preserve_quotes = True
@@ -4136,71 +4141,159 @@ class PageRfTau(PageGenReport):
             shutil.copy(mmap_sdds_filepath_cell, mmap_sdds_filepath_ring)
 
 
-        output_filepath = os.path.join(
-            report_obj.report_folderpath, 'pre_scan_lifetime.pgz')
         LTE_filepath = report_obj.input_LTE_filepath
         use_beamline_ring = report_obj.conf['use_beamline_ring']
 
-        rf_Vs_LoL, bucket_heights_percent_LoL, taus_LoL = [], [], []
-        coupling_percent_str_LoL, eps_y_str_LoL = [], []
-        for iEnergy, (E_MeV, eps_0, total_beam_current_mA, U0_eV) in enumerate(
-                zip(E_MeV_list, eps_0_list, total_beam_current_mA_list, U0_ev_list)):
+        if ntasks == 0: # Run locally
 
-            total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
-            charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
-            charge_C = charge_per_bunch_nC * 1e-9
+            output_filepath = os.path.join(
+                report_obj.report_folderpath, 'pre_scan_lifetime.pgz')
 
-            eps_ys = []
-            for s in raw_coupling_specs:
-                if s.endswith('pm'):
-                    ey_pm = float(s[:-2].strip())
-                    eps_ys.append(ey_pm * 1e-12)
-                elif s.endswith('%'):
-                    kappa = float(s[:-1].strip()) * 1e-2
-                    eps_ys.append(kappa / (1+kappa) * eps_0)
-                else:
-                    raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
-                                      'must end with either "pm" or "%"'))
-            eps_ys = np.array(eps_ys) # [m-rad]
-            coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
-            # used in ELEGANT's "touschekLifetime" function.
+            rf_Vs_LoL, bucket_heights_percent_LoL, taus_LoL = [], [], []
+            coupling_percent_str_LoL, eps_y_str_LoL = [], []
+            for iEnergy, (E_MeV, eps_0, total_beam_current_mA, U0_eV) in enumerate(
+                    zip(E_MeV_list, eps_0_list, total_beam_current_mA_list, U0_ev_list)):
 
-            rf_Vs_list, bucket_heights_percent_list, taus_list = [], [], []
-            coupling_percent_str_list, eps_y_str_list = [], []
-            for emit_ratio, ey in zip(coupling, eps_ys):
-                coupling_percent_str_list.append(f'{emit_ratio * 1e2:.1f}%')
-                eps_y_str_list.append(f'{ey * 1e12:.1f}pm')
-                min_rf_V = rf_volt_ranges[iEnergy]['min']
-                max_rf_V = rf_volt_ranges[iEnergy]['max']
-                #rf_v_array = np.arange(min_rf_V, max_rf_V, min_rf_V_step)
-                #if rf_v_array[-1] != max_rf_V:
-                    #rf_v_array = np.append(rf_v_array, max_rf_V)
-                rf_v_array = np.linspace(min_rf_V, max_rf_V, v_scan_npts)
+                total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
+                charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
+                charge_C = charge_per_bunch_nC * 1e-9
 
-                rf_Vs_list.append(rf_v_array)
+                eps_ys = []
+                for s in raw_coupling_specs:
+                    if s.endswith('pm'):
+                        ey_pm = float(s[:-2].strip())
+                        eps_ys.append(ey_pm * 1e-12)
+                    elif s.endswith('%'):
+                        kappa = float(s[:-1].strip()) * 1e-2
+                        eps_ys.append(kappa / (1+kappa) * eps_0)
+                    else:
+                        raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
+                                          'must end with either "pm" or "%"'))
+                eps_ys = np.array(eps_ys) # [m-rad]
+                coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
+                # used in ELEGANT's "touschekLifetime" function.
 
-                bucket_heights_percent = report_obj.calc_rf_bucket_heights(
-                    E_MeV / 1e3, alphac, U0_eV, h, rf_v_array)
-                bucket_heights_percent_list.append(bucket_heights_percent)
+                rf_Vs_list, bucket_heights_percent_list, taus_list = [], [], []
+                coupling_percent_str_list, eps_y_str_list = [], []
+                for emit_ratio, ey in zip(coupling, eps_ys):
+                    coupling_percent_str_list.append(f'{emit_ratio * 1e2:.1f}%')
+                    eps_y_str_list.append(f'{ey * 1e12:.1f}pm')
+                    min_rf_V = rf_volt_ranges[iEnergy]['min']
+                    max_rf_V = rf_volt_ranges[iEnergy]['max']
+                    #rf_v_array = np.arange(min_rf_V, max_rf_V, min_rf_V_step)
+                    #if rf_v_array[-1] != max_rf_V:
+                        #rf_v_array = np.append(rf_v_array, max_rf_V)
+                    rf_v_array = np.linspace(min_rf_V, max_rf_V, v_scan_npts)
 
-                tau_hrs = []
-                for RFvolt in rf_v_array:
-                    pe.nonlin.calc_Touschek_lifetime(
-                        output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
-                        charge_C, emit_ratio, RFvolt, h,
-                        max_mom_aper_percent=max_mom_aper_percent,
-                        ignoreMismatch=True, use_beamline=use_beamline_ring,
-                        del_tmp_files=True)
+                    rf_Vs_list.append(rf_v_array)
 
-                    d = pe.util.load_pgz_file(output_filepath)
-                    tau_hrs.append(d['data']['life']['scalars']['tLifetime'])
-                taus_list.append(tau_hrs)
+                    bucket_heights_percent = report_obj.calc_rf_bucket_heights(
+                        E_MeV / 1e3, alphac, U0_eV, h, rf_v_array)
+                    bucket_heights_percent_list.append(bucket_heights_percent)
 
-            rf_Vs_LoL.append(rf_Vs_list)
-            bucket_heights_percent_LoL.append(bucket_heights_percent_list)
-            taus_LoL.append(taus_list)
-            coupling_percent_str_LoL.append(coupling_percent_str_list)
-            eps_y_str_LoL.append(eps_y_str_list)
+                    tau_hrs = []
+                    for RFvolt in rf_v_array:
+                        pe.nonlin.calc_Touschek_lifetime(
+                            output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
+                            charge_C, emit_ratio, RFvolt, h,
+                            max_mom_aper_percent=max_mom_aper_percent,
+                            ignoreMismatch=True, use_beamline=use_beamline_ring,
+                            del_tmp_files=True)
+
+                        d = pe.util.load_pgz_file(output_filepath)
+                        tau_hrs.append(d['data']['life']['scalars']['tLifetime'])
+                    taus_list.append(tau_hrs)
+
+                rf_Vs_LoL.append(rf_Vs_list)
+                bucket_heights_percent_LoL.append(bucket_heights_percent_list)
+                taus_LoL.append(taus_list)
+                coupling_percent_str_LoL.append(coupling_percent_str_list)
+                eps_y_str_LoL.append(eps_y_str_list)
+
+        else:
+
+            rfV_EMeV_C_kappa_list = []
+            rf_Vs_LoL, bucket_heights_percent_LoL = [], []
+            coupling_percent_str_LoL, eps_y_str_LoL = [], []
+            for iEnergy, (E_MeV, eps_0, total_beam_current_mA, U0_eV) in enumerate(
+                    zip(E_MeV_list, eps_0_list, total_beam_current_mA_list, U0_ev_list)):
+
+                total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
+                charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
+                charge_C = charge_per_bunch_nC * 1e-9
+
+                eps_ys = []
+                for s in raw_coupling_specs:
+                    if s.endswith('pm'):
+                        ey_pm = float(s[:-2].strip())
+                        eps_ys.append(ey_pm * 1e-12)
+                    elif s.endswith('%'):
+                        kappa = float(s[:-1].strip()) * 1e-2
+                        eps_ys.append(kappa / (1+kappa) * eps_0)
+                    else:
+                        raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
+                                          'must end with either "pm" or "%"'))
+                eps_ys = np.array(eps_ys) # [m-rad]
+                coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
+                # used in ELEGANT's "touschekLifetime" function.
+
+                rf_Vs_list, bucket_heights_percent_list = [], []
+                coupling_percent_str_list, eps_y_str_list = [], []
+                for emit_ratio, ey in zip(coupling, eps_ys):
+                    coupling_percent_str_list.append(f'{emit_ratio * 1e2:.1f}%')
+                    eps_y_str_list.append(f'{ey * 1e12:.1f}pm')
+                    min_rf_V = rf_volt_ranges[iEnergy]['min']
+                    max_rf_V = rf_volt_ranges[iEnergy]['max']
+                    rf_v_array = np.linspace(min_rf_V, max_rf_V, v_scan_npts)
+
+                    rf_Vs_list.append(rf_v_array)
+
+                    bucket_heights_percent = report_obj.calc_rf_bucket_heights(
+                        E_MeV / 1e3, alphac, U0_eV, h, rf_v_array)
+                    bucket_heights_percent_list.append(bucket_heights_percent)
+
+                    for RFvolt in rf_v_array:
+                        rfV_EMeV_C_kappa_list.append(
+                            (RFvolt, E_MeV, charge_C, emit_ratio))
+
+                rf_Vs_LoL.append(rf_Vs_list)
+                bucket_heights_percent_LoL.append(bucket_heights_percent_list)
+                coupling_percent_str_LoL.append(coupling_percent_str_list)
+                eps_y_str_LoL.append(eps_y_str_list)
+
+            ncases = len(rfV_EMeV_C_kappa_list)
+            est_comp_seconds = ncases / ntasks * 10.0 # assuming 10 sec to compute each case
+            sec = datetime.timedelta(seconds=est_comp_seconds * 3) # Give margin of a factor of 3
+            dobj = datetime.datetime(1,1,1) + sec
+            if dobj.day - 1 != 0:
+                timelimit_str = '{:d}-'.format(dobj.day - 1)
+            else:
+                timelimit_str = ''
+            timelimit_str += '{:02d}:{:02d}:{:02d}'.format(
+                dobj.hour, dobj.minute, dobj.second)
+
+            remote_opts = dict(ntasks=ntasks, partition='short',
+                               time=timelimit_str, job_name='lifetime')
+
+            module_name = 'pyelegant.scripts.genreport'
+            func_name = 'get_ELE_Touschek_lifetime'
+            flat_results = pe.remote.run_mpi_python(
+                remote_opts, module_name, func_name, rfV_EMeV_C_kappa_list,
+                (LTE_filepath, mmap_sdds_filepath_ring, h, max_mom_aper_percent,
+                 use_beamline_ring),
+            )
+
+            counter = 0
+            taus_LoL = []
+            for E_MeV in E_MeV_list:
+                taus_list = []
+                for emit_ratio in coupling:
+                    tau_hrs = []
+                    for RFvolt in rf_v_array:
+                        tau_hrs.append(flat_results[counter])
+                        counter += 1
+                    taus_list.append(tau_hrs)
+                taus_LoL.append(taus_list)
 
         import matplotlib.pyplot as plt
 

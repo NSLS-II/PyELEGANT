@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>538</width>
+    <width>535</width>
     <height>422</height>
    </rect>
   </property>
@@ -9913,14 +9913,14 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
    <property name="subTitle">
     <string>Calculate RF-voltage-dependent properties and beam lifetime properties.</string>
    </property>
-   <layout class="QVBoxLayout" name="verticalLayout_195">
+   <layout class="QVBoxLayout" name="verticalLayout_188">
     <item>
      <widget class="QSplitter" name="splitter_10">
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
       <widget class="QWidget" name="">
-       <layout class="QVBoxLayout" name="verticalLayout_194">
+       <layout class="QVBoxLayout" name="verticalLayout_195">
         <item>
          <widget class="QTabWidget" name="tabWidget_rf_tau_opts">
           <property name="toolTip">
@@ -9933,7 +9933,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
            <attribute name="title">
             <string>RF</string>
            </attribute>
-           <layout class="QVBoxLayout" name="verticalLayout_193">
+           <layout class="QVBoxLayout" name="verticalLayout_194">
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_106">
               <item>
@@ -10040,26 +10040,52 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_115">
               <item>
-               <widget class="QLabel" name="label_205">
-                <property name="minimumSize">
-                 <size>
-                  <width>71</width>
-                  <height>22</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>71</width>
-                  <height>16777215</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Voltage Scan:</string>
-                </property>
-                <property name="alignment">
-                 <set>Qt::AlignCenter</set>
-                </property>
-               </widget>
+               <layout class="QVBoxLayout" name="verticalLayout_193">
+                <item>
+                 <widget class="QLabel" name="label_205">
+                  <property name="minimumSize">
+                   <size>
+                    <width>41</width>
+                    <height>21</height>
+                   </size>
+                  </property>
+                  <property name="maximumSize">
+                   <size>
+                    <width>41</width>
+                    <height>16777215</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>Voltage</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="label_207">
+                  <property name="minimumSize">
+                   <size>
+                    <width>31</width>
+                    <height>22</height>
+                   </size>
+                  </property>
+                  <property name="maximumSize">
+                   <size>
+                    <width>31</width>
+                    <height>16777215</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>Scan</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
               </item>
               <item>
                <widget class="QFrame" name="frame_2">
@@ -10069,9 +10095,9 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                 <property name="frameShadow">
                  <enum>QFrame::Raised</enum>
                 </property>
-                <layout class="QVBoxLayout" name="verticalLayout_190">
+                <layout class="QHBoxLayout" name="horizontalLayout_118">
                  <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_114">
+                  <layout class="QVBoxLayout" name="verticalLayout_190">
                    <item>
                     <widget class="QLabel" name="label_201">
                      <property name="minimumSize">
@@ -10095,139 +10121,231 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                     </widget>
                    </item>
                    <item>
-                    <widget class="QLabel" name="label_202">
-                     <property name="minimumSize">
-                      <size>
-                       <width>21</width>
-                       <height>0</height>
-                      </size>
-                     </property>
-                     <property name="maximumSize">
-                      <size>
-                       <width>21</width>
-                       <height>16777215</height>
-                      </size>
-                     </property>
-                     <property name="text">
-                      <string>Min:</string>
-                     </property>
-                     <property name="alignment">
-                      <set>Qt::AlignCenter</set>
-                     </property>
-                    </widget>
+                    <layout class="QHBoxLayout" name="horizontalLayout_114">
+                     <item>
+                      <widget class="QLabel" name="label_202">
+                       <property name="minimumSize">
+                        <size>
+                         <width>21</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                       <property name="maximumSize">
+                        <size>
+                         <width>21</width>
+                         <height>16777215</height>
+                        </size>
+                       </property>
+                       <property name="text">
+                        <string>Min:</string>
+                       </property>
+                       <property name="alignment">
+                        <set>Qt::AlignCenter</set>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLineEdit" name="lineEdit_bucket_height_min">
+                       <property name="minimumSize">
+                        <size>
+                         <width>31</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                       <property name="maximumSize">
+                        <size>
+                         <width>31</width>
+                         <height>16777215</height>
+                        </size>
+                       </property>
+                       <property name="toolTip">
+                        <string>Valid examples: &quot;1.5, 2, 2.5&quot;, for single or multiple beam energies; &quot;[1, 1.5], [1.5, 2, 2.5]&quot; for 2 beam energies</string>
+                       </property>
+                       <property name="text">
+                        <string>1</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="label_203">
+                       <property name="minimumSize">
+                        <size>
+                         <width>21</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                       <property name="maximumSize">
+                        <size>
+                         <width>21</width>
+                         <height>16777215</height>
+                        </size>
+                       </property>
+                       <property name="text">
+                        <string>Max:</string>
+                       </property>
+                       <property name="alignment">
+                        <set>Qt::AlignCenter</set>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLineEdit" name="lineEdit_bucket_height_max">
+                       <property name="minimumSize">
+                        <size>
+                         <width>31</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                       <property name="maximumSize">
+                        <size>
+                         <width>31</width>
+                         <height>16777215</height>
+                        </size>
+                       </property>
+                       <property name="toolTip">
+                        <string>Valid examples: &quot;1.5, 2, 2.5&quot;, for single or multiple beam energies; &quot;[1, 1.5], [1.5, 2, 2.5]&quot; for 2 beam energies</string>
+                       </property>
+                       <property name="text">
+                        <string>6</string>
+                       </property>
+                      </widget>
+                     </item>
+                    </layout>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <layout class="QVBoxLayout" name="verticalLayout_196">
+                   <item>
+                    <layout class="QHBoxLayout" name="horizontalLayout_116">
+                     <item>
+                      <widget class="QLabel" name="label_204">
+                       <property name="minimumSize">
+                        <size>
+                         <width>161</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                       <property name="maximumSize">
+                        <size>
+                         <width>161</width>
+                         <height>16777215</height>
+                        </size>
+                       </property>
+                       <property name="text">
+                        <string>Voltage #Points for Lifetime Calc.:</string>
+                       </property>
+                       <property name="alignment">
+                        <set>Qt::AlignCenter</set>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QSpinBox" name="spinBox_v_scan_npts">
+                       <property name="minimumSize">
+                        <size>
+                         <width>41</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                       <property name="maximumSize">
+                        <size>
+                         <width>41</width>
+                         <height>16777215</height>
+                        </size>
+                       </property>
+                       <property name="minimum">
+                        <number>2</number>
+                       </property>
+                       <property name="maximum">
+                        <number>200</number>
+                       </property>
+                       <property name="value">
+                        <number>51</number>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <spacer name="horizontalSpacer_21">
+                       <property name="orientation">
+                        <enum>Qt::Horizontal</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>40</width>
+                         <height>20</height>
+                        </size>
+                       </property>
+                      </spacer>
+                     </item>
+                    </layout>
                    </item>
                    <item>
-                    <widget class="QLineEdit" name="lineEdit_bucket_height_min">
-                     <property name="minimumSize">
-                      <size>
-                       <width>31</width>
-                       <height>0</height>
-                      </size>
-                     </property>
-                     <property name="maximumSize">
-                      <size>
-                       <width>31</width>
-                       <height>16777215</height>
-                      </size>
-                     </property>
-                     <property name="toolTip">
-                      <string>Valid examples: &quot;1.5, 2, 2.5&quot;, for single or multiple beam energies; &quot;[1, 1.5], [1.5, 2, 2.5]&quot; for 2 beam energies</string>
-                     </property>
-                     <property name="text">
-                      <string>1</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QLabel" name="label_203">
-                     <property name="minimumSize">
-                      <size>
-                       <width>21</width>
-                       <height>0</height>
-                      </size>
-                     </property>
-                     <property name="maximumSize">
-                      <size>
-                       <width>21</width>
-                       <height>16777215</height>
-                      </size>
-                     </property>
-                     <property name="text">
-                      <string>Max:</string>
-                     </property>
-                     <property name="alignment">
-                      <set>Qt::AlignCenter</set>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QLineEdit" name="lineEdit_bucket_height_max">
-                     <property name="minimumSize">
-                      <size>
-                       <width>31</width>
-                       <height>0</height>
-                      </size>
-                     </property>
-                     <property name="maximumSize">
-                      <size>
-                       <width>31</width>
-                       <height>16777215</height>
-                      </size>
-                     </property>
-                     <property name="toolTip">
-                      <string>Valid examples: &quot;1.5, 2, 2.5&quot;, for single or multiple beam energies; &quot;[1, 1.5], [1.5, 2, 2.5]&quot; for 2 beam energies</string>
-                     </property>
-                     <property name="text">
-                      <string>6</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QLabel" name="label_204">
-                     <property name="minimumSize">
-                      <size>
-                       <width>111</width>
-                       <height>0</height>
-                      </size>
-                     </property>
-                     <property name="maximumSize">
-                      <size>
-                       <width>200</width>
-                       <height>16777215</height>
-                      </size>
-                     </property>
-                     <property name="text">
-                      <string>#Points for Lifetime Calc.:</string>
-                     </property>
-                     <property name="alignment">
-                      <set>Qt::AlignCenter</set>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QSpinBox" name="spinBox_v_scan_npts">
-                     <property name="minimumSize">
-                      <size>
-                       <width>41</width>
-                       <height>0</height>
-                      </size>
-                     </property>
-                     <property name="maximumSize">
-                      <size>
-                       <width>41</width>
-                       <height>16777215</height>
-                      </size>
-                     </property>
-                     <property name="minimum">
-                      <number>2</number>
-                     </property>
-                     <property name="maximum">
-                      <number>200</number>
-                     </property>
-                     <property name="value">
-                      <number>11</number>
-                     </property>
-                    </widget>
+                    <layout class="QHBoxLayout" name="horizontalLayout_117">
+                     <item>
+                      <widget class="QLabel" name="label_206">
+                       <property name="minimumSize">
+                        <size>
+                         <width>41</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                       <property name="maximumSize">
+                        <size>
+                         <width>41</width>
+                         <height>16777215</height>
+                        </size>
+                       </property>
+                       <property name="text">
+                        <string>ntasks:</string>
+                       </property>
+                       <property name="alignment">
+                        <set>Qt::AlignCenter</set>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QSpinBox" name="spinBox_ntasks_rf_tau">
+                       <property name="maximumSize">
+                        <size>
+                         <width>52</width>
+                         <height>16777215</height>
+                        </size>
+                       </property>
+                       <property name="toolTip">
+                        <string>Set 0 to run locally</string>
+                       </property>
+                       <property name="specialValueText">
+                        <string/>
+                       </property>
+                       <property name="minimum">
+                        <number>0</number>
+                       </property>
+                       <property name="maximum">
+                        <number>1000</number>
+                       </property>
+                       <property name="singleStep">
+                        <number>2</number>
+                       </property>
+                       <property name="value">
+                        <number>50</number>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <spacer name="horizontalSpacer_20">
+                       <property name="orientation">
+                        <enum>Qt::Horizontal</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>40</width>
+                         <height>20</height>
+                        </size>
+                       </property>
+                      </spacer>
+                     </item>
+                    </layout>
                    </item>
                   </layout>
                  </item>
@@ -10241,8 +10359,8 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                 </property>
                 <property name="sizeHint" stdset="0">
                  <size>
-                  <width>40</width>
-                  <height>20</height>
+                  <width>25</width>
+                  <height>17</height>
                  </size>
                 </property>
                </spacer>
@@ -10665,7 +10783,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
         <attribute name="title">
          <string>stdout</string>
         </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_188">
+        <layout class="QVBoxLayout" name="verticalLayout_197">
          <item>
           <widget class="QListView" name="listView_stdout_rf_tau"/>
          </item>

@@ -9611,6 +9611,29 @@ def make_legend_arrow(
         head_width=0.75*height)
     return p
 
+def get_ELE_Touschek_lifetime(
+    rfV_EMeV_C_kappa, LTE_filepath, mmap_sdds_filepath_ring, h,
+    max_mom_aper_percent, use_beamline_ring):
+    """"""
+
+    RFvolt, E_MeV, charge_C, emit_ratio = rfV_EMeV_C_kappa
+
+    with tempfile.NamedTemporaryFile(suffix='.pgz', dir=None, delete=True) as tmp:
+        output_filepath = tmp.name
+
+        pe.nonlin.calc_Touschek_lifetime(
+            output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
+            charge_C, emit_ratio, RFvolt, h,
+            max_mom_aper_percent=max_mom_aper_percent,
+            ignoreMismatch=True, use_beamline=use_beamline_ring,
+            del_tmp_files=True)
+
+        d = pe.util.load_pgz_file(output_filepath)
+
+    tau_hr = d['data']['life']['scalars']['tLifetime']
+
+    return tau_hr
+
 def get_parsed_args():
     """"""
 
