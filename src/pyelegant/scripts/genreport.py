@@ -1796,7 +1796,380 @@ class Report_NSLS2U_Default:
             'sigma_delta', # Energy spread
         ]
 
-        if self._version in ('1.1', '1.2'):
+        if self._version == '1.2':
+            if 'rf' not in self.conf:
+                return
+            if not self.conf['rf'].get('include', False):
+                return
+
+            nEnergies = 1 + len(self.lin_data['extra_energy_data_list'])
+
+            with doc.create(plx.Section('RF-related Properties & Beam Lifetime')):
+
+                table_spec = ' '.join(['l'] + ['l'] * nEnergies)
+
+                with doc.create(plx.LongTable(table_spec)) as table:
+
+                    doc.append(plx.NoEscape(
+                        r'\caption[table]{Lattice Properties}\\'))
+
+                    table.add_hline()
+                    if nEnergies == 1:
+                        table.add_row(['Property', 'Value'])
+                        ncol = 2
+                    else:
+                        table.add_row(['Property', 'Values'] + [''] * (nEnergies - 1))
+                        ncol = 2 + (nEnergies - 1)
+                    table.add_hline()
+                    table.end_table_header()
+                    table.add_hline()
+                    table.add_row((
+                        plx.MultiColumn(ncol, align='r', data='Continued onto Next Page'),))
+                    table.add_hline()
+                    table.end_table_footer()
+                    table.add_hline()
+                    table.end_table_last_footer()
+
+                    for row_spec in table_order:
+                        label_symb_unit, val_str = \
+                            self.get_pdf_lattice_prop_row(row_spec)
+
+                        # Deal with multi-line property label
+                        if r'\n ' in label_symb_unit:
+                            lines = label_symb_unit.split(r'\n ')
+                            table.add_row([plx.NoEscape(lines[0])] +
+                                          [plx.NoEscape(' ')] * nEnergies)
+                            _indent = '\quad' * 4 + ' '
+                            for L in lines[1:-1]:
+                                table.add_row([plx.NoEscape(_indent + L)] +
+                                              [plx.NoEscape(' ')] * nEnergies)
+                            label_symb_unit = _indent + lines[-1]
+
+                        if isinstance(val_str, str):
+                            if nEnergies == 1:
+                                table.add_row([plx.NoEscape(label_symb_unit),
+                                               plx.NoEscape(val_str)])
+                            else:
+                                table.add_row([plx.NoEscape(label_symb_unit)] +
+                                               [plx.NoEscape(val_str)] * nEnergies)
+                        elif isinstance(val_str, list):
+                            table.add_row([plx.NoEscape(label_symb_unit)] +
+                                           [plx.NoEscape(_s) for _s in val_str])
+                        else:
+                            raise ValueError
+
+                if self.rf_dep_props is not None:
+
+                    with doc.create(plx.LongTable('l l')) as table:
+                        doc.append(plx.NoEscape(
+                            r'\caption[table]{Voltage-independent Properties}\\'))
+                        table.add_hline()
+                        table.add_row(['Voltage-independent Property', 'Value'])
+                        table.add_hline()
+                        table.end_table_header()
+                        table.add_hline()
+                        table.add_row((
+                            plx.MultiColumn(2, align='r', data='Continued onto Next Page'),))
+                        table.add_hline()
+                        table.end_table_footer()
+                        table.add_hline()
+                        table.end_table_last_footer()
+
+                        table.add_row([
+                            plx.NoEscape('Harmonic Number ()'),
+                            plx.NoEscape(f'{self.rf_dep_props["h"]:d}')])
+                        table.add_row([
+                            plx.NoEscape('RF Frequency (MHz)'),
+                            plx.NoEscape(f'{self.rf_dep_props["f_rf"] / 1e6:.3f}')])
+
+                    for iEnergy, (E_GeV, rf_v_array) in enumerate(zip(
+                        self.rf_dep_props['E_GeV_list'], self.rf_dep_props['rf_volts'])):
+
+                        n_rf_volts = len(rf_v_array)
+
+                        ncol = n_rf_volts + 1
+                        with doc.create(plx.LongTable(' '.join(['l'] * ncol))) as table:
+                            doc.append(plx.NoEscape(
+                                fr'\caption[table]{{Voltage-dependent Properties for Beam Energy of {E_GeV:.1f} GeV}}\\'))
+                            table.add_hline()
+                            table.add_row([
+                                'Voltage-dependent Property', 'Values']
+                                          + [''] * (ncol - 2))
+                            table.add_hline()
+                            table.end_table_header()
+                            table.add_hline()
+                            table.add_row((
+                                plx.MultiColumn(ncol, align='r',
+                                                data='Continued onto Next Page'),))
+                            table.add_hline()
+                            table.end_table_footer()
+                            table.add_hline()
+                            table.end_table_last_footer()
+
+                            row_list = [plx.NoEscape('RF Voltage (MV)')]
+                            for v in rf_v_array:
+                                row_list.append(plx.NoEscape(f'{v/1e6:.1f}'))
+                            table.add_row(row_list)
+
+                            row_list = [plx.NoEscape('Synchrotron Tune ()')]
+                            for v in self.rf_dep_props['nu_s_list'][iEnergy]:
+                                row_list.append(plx.NoEscape(f'{v:.6f}'))
+                            table.add_row(row_list)
+
+                            row_list = [plx.NoEscape('Synchronous Phase (deg)')]
+                            for v in self.rf_dep_props['synch_phases_deg_list'][iEnergy]:
+                                row_list.append(plx.NoEscape(f'{v:.2f}'))
+                            table.add_row(row_list)
+
+                            row_list = [plx.NoEscape('RF Bucket Height (\%)')]
+                            for v in self.rf_dep_props['rf_bucket_heights_percent_list'][iEnergy]:
+                                row_list.append(plx.NoEscape(f'{v:.1f}'))
+                            table.add_row(row_list)
+
+                            row_list = [plx.NoEscape('Zero-Current RMS Bunch Length (mm)')]
+                            for v in self.rf_dep_props['sigma_z_m_list'][iEnergy]:
+                                row_list.append(plx.NoEscape(f'{v * 1e3:.2f}'))
+                            table.add_row(row_list)
+
+                            row_list = [plx.NoEscape('Zero-Current RMS Bunch Length (ps)')]
+                            for v in self.rf_dep_props['sigma_z_ps_list'][iEnergy]:
+                                row_list.append(plx.NoEscape(f'{v:.2f}'))
+                            table.add_row(row_list)
+
+                if 'lifetime' not in self.conf:
+                    return
+                if not self.conf['lifetime'].get('include', False):
+                    return
+
+                if self.lifetime_props is not None:
+
+                    table_spec = ' '.join(['l'] + ['l'] * nEnergies)
+
+                    with doc.create(plx.LongTable(table_spec)) as table:
+
+                        doc.append(plx.NoEscape(
+                            r'\caption[table]{Beam Current Properties}\\'))
+
+                        table.add_hline()
+                        if nEnergies == 1:
+                            table.add_row(['Beam Current Property', 'Value'])
+                            ncol = 2
+                        else:
+                            table.add_row(['Beam Current Property', 'Values']
+                                          + [''] * (nEnergies - 1))
+                            ncol = 2 + (nEnergies - 1)
+                        table.add_hline()
+                        table.end_table_header()
+                        table.add_hline()
+                        table.add_row((
+                            plx.MultiColumn(ncol, align='r',
+                                            data='Continued onto Next Page'),))
+                        table.add_hline()
+                        table.end_table_footer()
+                        table.add_hline()
+                        table.end_table_last_footer()
+
+                        label = plx.NoEscape('Beam Energy (GeV)')
+                        val_str_list = [
+                            plx.NoEscape(f'{v:.2g}') for v in
+                            self.rf_dep_props['E_GeV_list']]
+                        table.add_row([label] + val_str_list)
+
+                        label = plx.NoEscape('Number of Filled Bunches ()')
+                        val_str = plx.NoEscape(
+                            f'{self.lifetime_props["num_filled_bunches"]:d}')
+                        table.add_row([label] + [val_str] * nEnergies)
+                        #
+                        label = plx.NoEscape('Total Beam Current (mA)')
+                        val_str_list = [
+                            plx.NoEscape(f'{v:.0f}') for v in
+                            self.lifetime_props["total_beam_current_mA_list"]]
+                        table.add_row([label] + val_str_list)
+                        #
+                        label = plx.NoEscape('Beam Current per Bunch (mA)')
+                        val_str_list = [
+                            plx.NoEscape(f'{v:.2f}') for v in
+                            self.lifetime_props["beam_current_per_bunch_mA_list"]]
+                        table.add_row([label] + val_str_list)
+                        #
+                        label = plx.NoEscape('Total Beam Charge ($\mu$C)')
+                        val_str_list = [
+                            plx.NoEscape(f'{v:.2f}') for v in
+                            self.lifetime_props["total_charge_uC_list"]]
+                        table.add_row([label] + val_str_list)
+                        #
+                        label = plx.NoEscape('Beam Charge per Bunch (nC)')
+                        val_str_list = [
+                            plx.NoEscape(f'{v:.2f}') for v in
+                            self.lifetime_props["charge_per_bunch_nC_list"]]
+                        table.add_row([label] + val_str_list)
+
+                    for iEnergy, (E_GeV, rf_v_array) in enumerate(zip(
+                        self.rf_dep_props['E_GeV_list'], self.rf_dep_props['rf_volts'])):
+
+                        n_rf_volts = len(rf_v_array)
+                        ncol = n_rf_volts + 3
+
+                        with doc.create(plx.LongTable(' '.join(['l'] * ncol))) as table:
+
+                            doc.append(plx.NoEscape(
+                                (fr'\caption[table]{{Beam Lifetime for '
+                                 fr'Beam Energy of {E_GeV:.2g} GeV}}\\')))
+
+                            table.add_hline()
+                            table.add_row([
+                                plx.MultiColumn(
+                                    3, align='c|',
+                                    data=plx.NoEscape(r'\textbf{Beam Lifetime (hr)}')),
+                                plx.MultiColumn(
+                                    ncol - 3, align='c', data = 'RF Voltage (MV)')])
+                            table.add_hline(start=0, end=2)
+                            table.add_row(
+                                [plx.NoEscape(r'$\epsilon_y$ (pm-rad)'),
+                                 plx.NoEscape(r'$\epsilon_x$ (pm-rad)'),
+                                 plx.MultiColumn(
+                                     1, align='c|',
+                                     data=plx.NoEscape(r'$\epsilon_y / \epsilon_x$ (\%)'))
+                                 ] +
+                                [plx.NoEscape(f'{v/1e6:.1f}') for v in
+                                 rf_v_array])
+                            table.end_table_header()
+                            table.add_hline()
+                            table.add_row((
+                                plx.MultiColumn(ncol, align='r',
+                                                data='Continued onto Next Page'),))
+                            table.add_hline()
+                            table.end_table_footer()
+                            table.add_hline()
+                            table.end_table_last_footer()
+
+                            table.add_hline()
+
+                            for (eps_y, eps_x, kappa, tau_hr_array) in zip(
+                                self.lifetime_props['eps_ys_list'][iEnergy],
+                                self.lifetime_props['eps_xs_list'][iEnergy],
+                                self.lifetime_props['coupling_percent_list'][iEnergy],
+                                self.lifetime_props['tau_hrs_list'][iEnergy]):
+                                row_list = [
+                                    plx.NoEscape(f'{eps_y * 1e12:.1f}'),
+                                    plx.NoEscape(f'{eps_x * 1e12:.1f}'),
+                                    plx.MultiColumn(1, align='l|',
+                                                    data=plx.NoEscape(f'{kappa:.1f}'))
+                                ]
+                                for tau_hr in tau_hr_array:
+                                    row_list.append(plx.NoEscape(fr'\textbf{{{tau_hr:.2f}}}'))
+                                table.add_row(row_list)
+
+                    plot_meta_filepath = os.path.join(self.report_folderpath,
+                                                      'lifetime_plots.pgz')
+
+                    lifetime_pdf_filepath = os.path.join(
+                        self.report_folderpath, 'lifetime.pdf')
+
+                    if not (os.path.exists(plot_meta_filepath) and
+                            os.path.exists(lifetime_pdf_filepath)):
+                        return
+
+                    meta = pe.util.load_pgz_file(plot_meta_filepath)
+                    loss_plots_indexes = meta['loss_plots_indexes']
+
+                    nMaxPlotsPerPage = 6
+
+                    if loss_plots_indexes['E_MeV'] == []:
+                        return
+
+                    elif len(loss_plots_indexes['E_MeV']) <= nMaxPlotsPerPage:
+
+                        with doc.create(plx.Figure(position='h!t')) as fig:
+
+                            doc.append(plx.NoEscape(r'\centering'))
+
+                            for iFig, (iEnergy, iCoup, iVolt) in enumerate(zip(
+                                loss_plots_indexes['E_MeV'], loss_plots_indexes['coupling'],
+                                loss_plots_indexes['rf_V'])):
+                                page = iFig + 1
+                                caption = (
+                                    r'$E$ (GeV) = ${0:.2g}$, '
+                                    r'$V_{{\mathrm{{RF}}}}$ (MV) = ${1:.2g}$, '
+                                    r'$I_{{\mathrm{{bunch}}}}$ (mA) = ${2:.3g}$, '
+                                    r'$(\epsilon_x, \epsilon_y)$ (pm) = '
+                                    r'$({3:.1f}, {4:.1f})$').format(
+                                    self.lifetime_props['E_MeV_list'][iEnergy] / 1e3,
+                                    self.rf_dep_props['rf_volts'][iEnergy][iVolt] / 1e6,
+                                    self.lifetime_props[
+                                        'beam_current_per_bunch_mA_list'][iEnergy],
+                                    self.lifetime_props['eps_xs_list'][iEnergy][iCoup] * 1e12,
+                                    self.lifetime_props['eps_ys_list'][iEnergy][iCoup] * 1e12)
+                                with doc.create(plx.SubFigureForMultiPagePDF(
+                                    position='b', width=plx.utils.NoEscape(r'0.45\linewidth'))
+                                                ) as subfig:
+                                    subfig.add_image(
+                                        os.path.basename(lifetime_pdf_filepath), page=page,
+                                        width=plx.utils.NoEscape(r'\linewidth'))
+                                    doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                                    subfig.add_caption(plx.NoEscape(caption))
+
+                                doc.append(plx.HorizontalSpace(plx.NoEscape('+20pt')))
+
+                                if np.mod(iFig, 2) == 1:
+                                    doc.append(plx.NewLine())
+
+                            #doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                            fig.add_caption('Local Particle Loss Rate')
+
+                    else:
+                        nFigPages = int(np.ceil(
+                            len(loss_plots_indexes['E_MeV']) / nMaxPlotsPerPage))
+                        for iFigPage in range(nFigPages):
+
+                            if iFigPage != 0:
+                                doc.append(plx.ClearPage())
+
+                            iOffset = iFigPage * nMaxPlotsPerPage
+
+                            with doc.create(plx.Figure(position='h!t')) as fig:
+
+                                doc.append(plx.NoEscape(r'\centering'))
+
+                                _slice = slice(iOffset, iOffset + nMaxPlotsPerPage)
+
+                                for iFig, (iEnergy, iCoup, iVolt) in enumerate(zip(
+                                    loss_plots_indexes['E_MeV'][_slice],
+                                    loss_plots_indexes['coupling'][_slice],
+                                    loss_plots_indexes['rf_V'][_slice])):
+                                    page = iFig + iOffset + 1
+                                    caption = (
+                                        r'$E$ (GeV) = ${0:.2g}$, '
+                                        r'$V_{{\mathrm{{RF}}}}$ (MV) = ${1:.2g}$, '
+                                        r'$I_{{\mathrm{{bunch}}}}$ (mA) = ${2:.3g}$, '
+                                        r'$(\epsilon_x, \epsilon_y)$ (pm) = '
+                                        r'$({3:.1f}, {4:.1f})$').format(
+                                        self.lifetime_props['E_MeV_list'][iEnergy] / 1e3,
+                                        self.rf_dep_props['rf_volts'][iEnergy][iVolt] / 1e6,
+                                        self.lifetime_props[
+                                            'beam_current_per_bunch_mA_list'][iEnergy],
+                                        self.lifetime_props['eps_xs_list'][iEnergy][iCoup] * 1e12,
+                                        self.lifetime_props['eps_ys_list'][iEnergy][iCoup] * 1e12)
+                                    with doc.create(plx.SubFigureForMultiPagePDF(
+                                        position='b', width=plx.utils.NoEscape(r'0.45\linewidth'))
+                                                    ) as subfig:
+                                        subfig.add_image(
+                                            os.path.basename(lifetime_pdf_filepath), page=page,
+                                            width=plx.utils.NoEscape(r'\linewidth'))
+                                        doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                                        subfig.add_caption(plx.NoEscape(caption))
+
+                                    doc.append(plx.HorizontalSpace(plx.NoEscape('+20pt')))
+
+                                    if np.mod(iFig, 2) == 1:
+                                        doc.append(plx.NewLine())
+
+                                #doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                                fig.add_caption(
+                                    (f'Local Particle Loss Rate for '
+                                     f'Case Group {iFigPage+1:d}'))
+
+        elif self._version == '1.1':
 
             if 'rf' not in self.conf:
                 return
@@ -3685,7 +4058,104 @@ class Report_NSLS2U_Default:
 
         if self.rf_dep_props is not None:
 
-            if self._version != '1.0':
+            if self._version == '1.2':
+
+                if 'rf' not in self.conf:
+                    return
+                if not self.conf['rf'].get('include', False):
+                    return
+
+                row += 1
+
+                ws.write(row, 0, 'Voltage-independent Property', bold)
+                ws.write(row, 1, 'Value', bold)
+                row += 1
+
+                ws.write(row, 0, 'Harmonic Number ()', normal)
+                ws.write(row, 1, self.rf_dep_props['h'], None)
+                row += 1
+
+                ws.write(row, 0, 'RF Frequency (MHz)', normal)
+                ws.write(row, 1, self.rf_dep_props['f_rf'] / 1e6, wb_num_fmts['0.000'])
+                row += 1
+
+                row += 1
+
+                ws.write(row, 0, 'Voltage-dependent Property', bold)
+                ws.write(row, 1, 'Values', bold)
+                row += 1
+
+                col = 0
+                ws.write(row, col, 'Beam Energy (GeV)', normal)
+                col += 1
+                for iEnergy, (E_GeV, rf_v_array) in enumerate(zip(
+                    self.rf_dep_props['E_GeV_list'], self.rf_dep_props['rf_volts'])):
+                    for iVolt, v in enumerate(rf_v_array):
+                        ws.write(row, col, E_GeV, wb_num_fmts['0.0'])
+                        col += 1
+                row += 1
+
+                col = 0
+                ws.write(row, col, 'RF Voltage (MV)', normal)
+                col += 1
+                for iEnergy, E_GeV in enumerate(self.rf_dep_props['E_GeV_list']):
+                    for iVolt, v in enumerate(self.rf_dep_props['rf_volts'][iEnergy]):
+                        ws.write(row, col, v / 1e6, wb_num_fmts['0.0'])
+                        col += 1
+                row += 1
+
+                col = 0
+                ws.write(row, col, 'Synchrotron Tune ()', normal)
+                col += 1
+                for iEnergy, E_GeV in enumerate(self.rf_dep_props['E_GeV_list']):
+                    for iVolt, v in enumerate(self.rf_dep_props['nu_s_list'][iEnergy]):
+                        ws.write(row, col, v, wb_num_fmts['0.000000'])
+                        col += 1
+                row += 1
+
+                col = 0
+                ws.write(row, col, 'Synchronous Phase (deg)', normal)
+                col += 1
+                for iEnergy, E_GeV in enumerate(self.rf_dep_props['E_GeV_list']):
+                    for iVolt, v in enumerate(self.rf_dep_props['synch_phases_deg_list'][iEnergy]):
+                        ws.write(row, col, v, wb_num_fmts['0.00'])
+                        col += 1
+                row += 1
+
+                col = 0
+                ws.write(row, col, 'RF Bucket Height (%)', normal)
+                col += 1
+                for iEnergy, E_GeV in enumerate(self.rf_dep_props['E_GeV_list']):
+                    for iVolt, v in enumerate(self.rf_dep_props['rf_bucket_heights_percent_list'][iEnergy]):
+                        ws.write(row, col, v, wb_num_fmts['0.0'])
+                        col += 1
+                row += 1
+
+                col = 0
+                ws.write(row, col, 'Zero-Current RMS Bunch Length (mm)', normal)
+                col += 1
+                for iEnergy, E_GeV in enumerate(self.rf_dep_props['E_GeV_list']):
+                    for iVolt, v in enumerate(self.rf_dep_props['sigma_z_m_list'][iEnergy]):
+                        ws.write(row, col, v * 1e3, wb_num_fmts['0.00'])
+                        col += 1
+                row += 1
+
+                if self.lifetime_props is not None:
+                    # Here just write the header. Actual values will be written later.
+                    ws.write(row, 0, 'ELEGANT Zero-Current RMS Bunch Length (mm)', normal)
+                    row_elegant_bunchlen_mm = row
+                    row += 1
+
+                col = 0
+                ws.write(row, col, 'Zero-Current RMS Bunch Length (ps)', normal)
+                col += 1
+                for iEnergy, E_GeV in enumerate(self.rf_dep_props['E_GeV_list']):
+                    for iVolt, v in enumerate(self.rf_dep_props['sigma_z_ps_list'][iEnergy]):
+                        ws.write(row, col, v, wb_num_fmts['0.00'])
+                        col += 1
+                row += 1
+
+            elif self._version == '1.1':
 
                 if 'rf' not in self.conf:
                     return
@@ -3927,7 +4397,124 @@ class Report_NSLS2U_Default:
 
             row += 1
 
-            if self._version != '1.0':
+            if self._version == '1.2':
+
+                col_elegant_bunchlengths_mm = 1
+
+                for iEnergy, (E_GeV, rf_v_array) in enumerate(zip(
+                    self.rf_dep_props['E_GeV_list'], self.rf_dep_props['rf_volts'])):
+
+                    ws.write(row, 0, f'Beam Lifetime (hr) @ {E_GeV:.2g} GeV', bold)
+                    #
+                    col = 1
+                    cell_format = normal_center_wrap
+                    ws.merge_range(row, col, row + 1, col, '', cell_format)
+                    ws.write_rich_string(
+                        row, col, italic, GREEK['epsilon'], italic_sub, 'y', ' (pm-rad)',
+                        cell_format)
+                    col += 1
+                    cell_format = normal_center_wrap
+                    ws.merge_range(row, col, row + 1, col, '', cell_format)
+                    ws.write_rich_string(
+                        row, col, italic, GREEK['epsilon'], italic_sub, 'x', ' (pm-rad)',
+                        cell_format)
+                    #
+                    col += 1
+                    cell_format = normal_center_wrap
+                    ws.merge_range(row, col, row + 1, col, '', cell_format)
+                    ws.write_rich_string(
+                        row, col, 'Coupling ', italic, GREEK['epsilon'], italic_sub, 'y',
+                        '/', italic, GREEK['epsilon'], italic_sub, 'x', ' (%)',
+                        cell_format)
+                    #
+                    col += 1
+                    table_col_offset = col
+                    #
+                    ws.merge_range(
+                        row, table_col_offset, row,
+                        table_col_offset + len(rf_v_array) - 1,
+                        'RF Voltage (MV)', normal_center_border)
+                    row += 1
+                    #
+                    for col, v in enumerate(rf_v_array):
+                        ws.write(row, col+table_col_offset, v / 1e6, wb_num_fmts['0.0'])
+                    row += 1
+                    #
+                    col = 1
+                    for (eps_y, eps_x, kappa, tau_hr_array) in zip(
+                        self.lifetime_props['eps_ys_list'][iEnergy],
+                        self.lifetime_props['eps_xs_list'][iEnergy],
+                        self.lifetime_props['coupling_percent_list'][iEnergy],
+                        self.lifetime_props['tau_hrs_list'][iEnergy]):
+                        ws.write(row, col, eps_y * 1e12, wb_num_fmts['0.0'])
+                        ws.write(row, col+1, eps_x * 1e12, wb_num_fmts['0.0'])
+                        ws.write(row, col+2, kappa, wb_num_fmts['0.0'])
+                        for col_shift, tau_hr in enumerate(tau_hr_array):
+                            ws.write(row, table_col_offset + col_shift, tau_hr,
+                                     wb_num_fmts['bold_border_0.000'])
+                        row += 1
+
+                    row += 1
+
+                    # Fill in the row reserved above for zero-current bunchlength [mm]
+                    # computed by ELEGANT. The bunchlenght [mm] computed by this script
+                    # using analytical formula should agree with the ones from ELEGANT.
+                    # If the momentum aperture data file is not extended from one super-
+                    # period to the full ring, the bunchlength computed by ELEGANT will
+                    # be smaller by a factor of "n_periods_in_ring" roughly (thus, the
+                    # lifetime will be smaller by the same amount)
+                    elegant_bunchlengths_mm = np.array([
+                        d['data']['life']['scalars']['sigmaz']
+                        for d in self.lifetime_props[
+                            'sdds_lifetime_data_list'][iEnergy][0]]) * 1e3
+                    for iVolt, v in enumerate(elegant_bunchlengths_mm):
+                        ws.write(
+                            row_elegant_bunchlen_mm, col_elegant_bunchlengths_mm,
+                            v, wb_num_fmts['0.00'])
+                        col_elegant_bunchlengths_mm += 1
+
+                plot_meta_filepath = os.path.join(self.report_folderpath,
+                                                  'lifetime_plots.pgz')
+                if not os.path.exists(plot_meta_filepath):
+                    return
+
+                meta = pe.util.load_pgz_file(plot_meta_filepath)
+                loss_plots_indexes = meta['loss_plots_indexes']
+
+                row += 2
+                img_height = 26
+                for iFig, (iEnergy, iCoup, iVolt) in enumerate(zip(
+                    loss_plots_indexes['E_MeV'], loss_plots_indexes['coupling'],
+                    loss_plots_indexes['rf_V'])):
+
+                    fp = Path(self.report_folderpath).joinpath(
+                        f'lifetime_{iFig:d}.png')
+
+                    iEnergy = loss_plots_indexes['E_MeV'][iFig]
+                    iCoup = loss_plots_indexes['coupling'][iFig]
+                    iVolt = loss_plots_indexes['rf_V'][iFig]
+
+                    E_GeV = self.lifetime_props['E_MeV_list'][iEnergy] / 1e3
+                    rf_MV = self.rf_dep_props['rf_volts'][iEnergy][iVolt] / 1e6
+                    bunch_mA = self.lifetime_props[
+                        'beam_current_per_bunch_mA_list'][iEnergy]
+                    eps_x_pm = self.lifetime_props['eps_xs_list'][iEnergy][iCoup] * 1e12
+                    eps_y_pm = self.lifetime_props['eps_ys_list'][iEnergy][iCoup] * 1e12
+                    #
+                    ws.write_rich_string(
+                        row, 0, italic, 'E', normal, f' (GeV) = {E_GeV:.2g}, ',
+                        italic, 'V', sub, 'RF', normal, f' (MV) = {rf_MV:.2g}, ',
+                        italic, 'I', sub, 'bunch', normal, f' (mA) = {bunch_mA:.3g}, ',
+                        normal, '(', italic, GREEK['epsilon'], italic_sub, 'x',
+                        normal, ', ', italic, GREEK['epsilon'], italic_sub, 'y',
+                        normal, f') (pm) = ({eps_x_pm:.1f}, {eps_y_pm:.1f})'
+                    )
+                    row += 1
+
+                    ws.insert_image(row, 0, fp)
+                    row += img_height
+
+            elif self._version == '1.1':
 
                 for iEnergy, E_GeV in enumerate(self.rf_dep_props['E_GeV_list']):
 
@@ -6684,7 +7271,13 @@ class Report_NSLS2U_Default:
 
             calc_opts = rf['calc_opts']
 
-            rf_volts = np.array(calc_opts['rf_V']) # [V]
+            if self._version in ('1.0', '1.1'):
+                rf_volts = np.array(calc_opts['rf_V']) # [V]
+            else:
+                rf_volts = calc_opts['rf_V'] # [V]
+                # ^ At this point, "rf_volts" could be either a list of floats or
+                #   a list of lists of floats with irregular sizes.
+
             h = calc_opts['harmonic_number']
 
             c = scipy.constants.c
@@ -6704,54 +7297,137 @@ class Report_NSLS2U_Default:
                 U0_ev_list.append(_d['U0_eV'])
                 sigma_delta_list.append(_d['sigma_delta_percent'] * 1e-2)
 
+            if self._version not in ('1.0', '1.1'):
+                if isinstance(rf_volts[0], list):
+                    try:
+                        assert len(rf_volts) == len(E_GeV_list)
+                    except AssertionError:
+                        raise ValueError(
+                            ('If "rf_V" is specified as a list of lists of floats, '
+                             'then the number of lists must be the same as the number '
+                             'of specified beam energy values.'))
+                    rf_volts = np.array([np.array(L) for L in rf_volts])
+                else:
+                    # Convert 1-D rf voltage array into a 2-D array by duplicating.
+                    rf_volts = (
+                        np.array(rf_volts).reshape((-1,1)) @
+                        np.ones((1,len(E_GeV_list)))).T
+                # ^ Each row of "rf_volts" now corresponds to each beam energy.
+                assert len(rf_volts) == len(E_GeV_list)
+
+
             f_rf = h * c / circumf # RF frequency [Hz]
 
-            synch_phases_deg_list, nu_s_list = [], []
-            sigma_z_m_list, sigma_z_ps_list = [], []
-            rf_bucket_heights_percent_list = []
+            if self._version in ('1.0', '1.1'):
 
-            for E_GeV, U0_eV, sigma_delta in zip(
-                E_GeV_list, U0_ev_list, sigma_delta_list):
+                synch_phases_deg_list, nu_s_list = [], []
+                sigma_z_m_list, sigma_z_ps_list = [], []
+                rf_bucket_heights_percent_list = []
 
-                # Synchronous Phase
-                synch_phases_deg = np.rad2deg(np.pi - np.arcsin(U0_eV / rf_volts))
-                if self._version in ('1.1', '1.2'):
+                for E_GeV, U0_eV, sigma_delta in zip(
+                    E_GeV_list, U0_ev_list, sigma_delta_list):
+
+                    # Synchronous Phase
+                    synch_phases_deg = np.rad2deg(np.pi - np.arcsin(U0_eV / rf_volts))
+                    if self._version == '1.1':
+                        synch_phases_deg_list.append(synch_phases_deg)
+
+                    # Synchrotron Tune
+                    nu_s = np.sqrt(
+                        -rf_volts / (E_GeV * 1e9) * np.cos(np.deg2rad(synch_phases_deg))
+                        * alphac * h / (2 * np.pi))
+                    if self._version == '1.1':
+                        nu_s_list.append(nu_s)
+
+                    # Bunch Length
+                    sigma_z_m = alphac * sigma_delta * circumf / (2 * np.pi * nu_s) # [m]
+                    sigma_z_ps = sigma_z_m / c * 1e12 # [ps]
+                    if self._version == '1.1':
+                        sigma_z_m_list.append(sigma_z_m)
+                        sigma_z_ps_list.append(sigma_z_ps)
+
+                    # RF Bucket Height (RF Acceptance)
+                    #
+                    # See Section 3.1.4.6 on p.212 of Chao & Tigner, "Handbook
+                    # of Accelerator Physics and Engineering" for analytical
+                    # formula of RF bucket height, which is "A_s" in Eq. (32),
+                    # which is equal to (epsilon_max/E_0) [fraction] in Eq. (33).
+                    #
+                    # Note that the slip factor (eta) is approximately equal
+                    # to momentum compaction in the case of NSLS-II.
+                    gamma = 1.0 + E_GeV * 1e9 / m_e_eV
+                    gamma_t = 1.0 / np.sqrt(alphac)
+                    slip_fac = 1.0 / (gamma_t**2) - 1.0 / (gamma**2) # approx. equal to "mom_compac"
+                    q = rf_volts / U0_eV # overvoltage factor
+                    F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
+                    rf_bucket_heights_percent = 1e2 * np.sqrt(
+                        U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
+                    if self._version == '1.1':
+                        rf_bucket_heights_percent_list.append(rf_bucket_heights_percent)
+
+                if self._version == '1.1':
+                    self.rf_dep_props = dict(
+                        # Inputs
+                        E_GeV_list=E_GeV_list, rf_volts=rf_volts, h=h,
+                        # Outputs
+                        f_rf=f_rf, synch_phases_deg_list=synch_phases_deg_list,
+                        nu_s_list=nu_s_list, sigma_z_m_list=sigma_z_m_list,
+                        sigma_z_ps_list=sigma_z_ps_list,
+                        rf_bucket_heights_percent_list=rf_bucket_heights_percent_list,
+                    )
+                elif self._version == '1.0':
+                    self.rf_dep_props = dict(
+                        # Inputs
+                        rf_volts=rf_volts, h=h,
+                        # Outputs
+                        f_rf=f_rf, synch_phases_deg=synch_phases_deg,
+                        nu_s=nu_s, sigma_z_m=sigma_z_m, sigma_z_ps=sigma_z_ps,
+                        rf_bucket_heights_percent=rf_bucket_heights_percent,
+                    )
+                else:
+                    raise ValueError
+            else:
+                synch_phases_deg_list, nu_s_list = [], []
+                sigma_z_m_list, sigma_z_ps_list = [], []
+                rf_bucket_heights_percent_list = []
+
+                for E_GeV, U0_eV, sigma_delta, rf_v_array in zip(
+                    E_GeV_list, U0_ev_list, sigma_delta_list, rf_volts):
+
+                    # Synchronous Phase
+                    synch_phases_deg = np.rad2deg(np.pi - np.arcsin(U0_eV / rf_v_array))
                     synch_phases_deg_list.append(synch_phases_deg)
 
-                # Synchrotron Tune
-                nu_s = np.sqrt(
-                    -rf_volts / (E_GeV * 1e9) * np.cos(np.deg2rad(synch_phases_deg))
-                    * alphac * h / (2 * np.pi))
-                if self._version in ('1.1', '1.2'):
+                    # Synchrotron Tune
+                    nu_s = np.sqrt(
+                        -rf_v_array / (E_GeV * 1e9) * np.cos(np.deg2rad(synch_phases_deg))
+                        * alphac * h / (2 * np.pi))
                     nu_s_list.append(nu_s)
 
-                # Bunch Length
-                sigma_z_m = alphac * sigma_delta * circumf / (2 * np.pi * nu_s) # [m]
-                sigma_z_ps = sigma_z_m / c * 1e12 # [ps]
-                if self._version in ('1.1', '1.2'):
+                    # Bunch Length
+                    sigma_z_m = alphac * sigma_delta * circumf / (2 * np.pi * nu_s) # [m]
+                    sigma_z_ps = sigma_z_m / c * 1e12 # [ps]
                     sigma_z_m_list.append(sigma_z_m)
                     sigma_z_ps_list.append(sigma_z_ps)
 
-                # RF Bucket Height (RF Acceptance)
-                #
-                # See Section 3.1.4.6 on p.212 of Chao & Tigner, "Handbook
-                # of Accelerator Physics and Engineering" for analytical
-                # formula of RF bucket height, which is "A_s" in Eq. (32),
-                # which is equal to (epsilon_max/E_0) [fraction] in Eq. (33).
-                #
-                # Note that the slip factor (eta) is approximately equal
-                # to momentum compaction in the case of NSLS-II.
-                gamma = 1.0 + E_GeV * 1e9 / m_e_eV
-                gamma_t = 1.0 / np.sqrt(alphac)
-                slip_fac = 1.0 / (gamma_t**2) - 1.0 / (gamma**2) # approx. equal to "mom_compac"
-                q = rf_volts / U0_eV # overvoltage factor
-                F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
-                rf_bucket_heights_percent = 1e2 * np.sqrt(
-                    U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
-                if self._version in ('1.1', '1.2'):
+                    # RF Bucket Height (RF Acceptance)
+                    #
+                    # See Section 3.1.4.6 on p.212 of Chao & Tigner, "Handbook
+                    # of Accelerator Physics and Engineering" for analytical
+                    # formula of RF bucket height, which is "A_s" in Eq. (32),
+                    # which is equal to (epsilon_max/E_0) [fraction] in Eq. (33).
+                    #
+                    # Note that the slip factor (eta) is approximately equal
+                    # to momentum compaction in the case of NSLS-II.
+                    gamma = 1.0 + E_GeV * 1e9 / m_e_eV
+                    gamma_t = 1.0 / np.sqrt(alphac)
+                    slip_fac = 1.0 / (gamma_t**2) - 1.0 / (gamma**2) # approx. equal to "mom_compac"
+                    q = rf_v_array / U0_eV # overvoltage factor
+                    F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
+                    rf_bucket_heights_percent = 1e2 * np.sqrt(
+                        U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
                     rf_bucket_heights_percent_list.append(rf_bucket_heights_percent)
 
-            if self._version in ('1.1', '1.2'):
                 self.rf_dep_props = dict(
                     # Inputs
                     E_GeV_list=E_GeV_list, rf_volts=rf_volts, h=h,
@@ -6761,17 +7437,6 @@ class Report_NSLS2U_Default:
                     sigma_z_ps_list=sigma_z_ps_list,
                     rf_bucket_heights_percent_list=rf_bucket_heights_percent_list,
                 )
-            elif self._version == '1.0':
-                self.rf_dep_props = dict(
-                    # Inputs
-                    rf_volts=rf_volts, h=h,
-                    # Outputs
-                    f_rf=f_rf, synch_phases_deg=synch_phases_deg,
-                    nu_s=nu_s, sigma_z_m=sigma_z_m, sigma_z_ps=sigma_z_ps,
-                    rf_bucket_heights_percent=rf_bucket_heights_percent,
-                )
-            else:
-                raise ValueError
 
             with open(output_filepath, 'wb') as f:
                 pickle.dump(self.rf_dep_props, f)
@@ -6870,244 +7535,7 @@ class Report_NSLS2U_Default:
             else:
                 max_mom_aper_percent = float(raw_max_mom_aper_percent)
 
-            if self._version != 1.0:
-
-                E_MeV_list = self._get_E_MeV_list()
-
-                assert len(eps_0_list) == len(total_beam_current_mA_list) \
-                       == len(E_MeV_list)
-                beam_current_per_bunch_mA_list = []
-                total_charge_uC_list, charge_per_bunch_nC_list = [], []
-                eps_ys_list, eps_xs_list, coupling_percent_list = [], [], []
-                tau_hrs_list = []
-                sdds_lifetime_data_list = []
-                tau_hrs_SLS_list, tau_hrs_SLS_1c_list = [], []
-                touscheck_spos_list = []
-                touscheck_Fargs_minus_list = []
-                touscheck_Fargs_plus_list = []
-                touscheck_Fvals_minus_list = []
-                touscheck_Fvals_plus_list = []
-                touscheck_Fargs_1c_minus_list = []
-                touscheck_Fargs_1c_plus_list = []
-                touscheck_Fvals_1c_minus_list = []
-                touscheck_Fvals_1c_plus_list = []
-                for iEnergy, (E_MeV, eps_0, total_beam_current_mA) in enumerate(
-                    zip(E_MeV_list, eps_0_list, total_beam_current_mA_list)):
-
-                    beam_current_per_bunch_mA = total_beam_current_mA / num_filled_bunches
-                    #
-                    beam_current_per_bunch_mA_list.append(beam_current_per_bunch_mA)
-
-                    total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
-                    total_charge_uC = total_charge_C * 1e6
-                    charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
-                    #
-                    total_charge_uC_list.append(total_charge_uC)
-                    charge_per_bunch_nC_list.append(charge_per_bunch_nC)
-
-                    eps_ys = []
-                    for s in raw_coupling_specs:
-                        if s.endswith('pm'):
-                            ey_pm = float(s[:-2].strip())
-                            eps_ys.append(ey_pm * 1e-12)
-                        elif s.endswith('%'):
-                            kappa = float(s[:-1].strip()) * 1e-2
-                            eps_ys.append(kappa / (1+kappa) * eps_0)
-                        else:
-                            raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
-                                              'must end with either "pm" or "%"'))
-                    eps_ys = np.array(eps_ys) # [m-rad]
-                    coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
-                    # used in ELEGANT's "touschekLifetime" function.
-                    coupling_percent = coupling * 1e2
-
-                    eps_xs = eps_0 / (1 + coupling) # [m-rad]
-
-                    eps_ys_list.append(eps_ys)
-                    eps_xs_list.append(eps_xs)
-                    coupling_percent_list.append(coupling_percent)
-
-                    LTE_filepath = self.input_LTE_filepath
-                    use_beamline_ring = self.conf['use_beamline_ring']
-
-                    charge_C = charge_per_bunch_nC * 1e-9
-
-                    mmap_ring = pe.sdds.sdds2dicts(mmap_sdds_filepath_ring)
-                    spos = mmap_ring[0]['columns']['s']
-                    deltaLostNegative = mmap_ring[0]['columns']['deltaLostNegative']
-                    deltaLostPositive = mmap_ring[0]['columns']['deltaLostPositive']
-                    delta_accep = np.min(
-                        np.vstack((np.abs(deltaLostNegative), deltaLostPositive)), axis=0)
-
-                    const = scipy.constants
-                    m_e_eV = const.m_e * (const.c**2) / const.electron_volt
-                    gamma = E_MeV * 1e6 / m_e_eV
-                    N_e = charge_C / const.elementary_charge
-                    assert const.mu_0 == 4*np.pi*1e-7
-                    assert const.epsilon_0 == 1.0/((const.c**2)*const.mu_0)
-                    r_e = const.elementary_charge / (4*np.pi*const.epsilon_0*m_e_eV)
-                    F_interp = pe.nonlin.get_Touschek_F_interpolator()
-                    #
-                    touscheck_Fvals_plus, touscheck_Fvals_minus = [], []
-                    touscheck_Fargs_plus, touscheck_Fargs_minus = [], []
-                    touscheck_Fvals_1c_plus, touscheck_Fvals_1c_minus = [], []
-                    touscheck_Fargs_1c_plus, touscheck_Fargs_1c_minus = [], []
-                    tau_hrs_SLS = np.full((len(coupling), len(rf_volts)), np.nan)
-                    tau_hrs_SLS_1c = np.full((len(coupling), len(rf_volts)), np.nan)
-                    #
-                    tau_hrs = np.full((len(coupling), len(rf_volts)), np.nan)
-                    sdds_lifetime_data = [
-                        [None for _ in range(len(rf_volts))] for _ in range(len(coupling))]
-                    print('\n* Start computing beam lifetimes...\n')
-                    for i, emit_ratio in enumerate(coupling):
-                        for j, RFvolt in enumerate(rf_volts):
-                            pe.nonlin.calc_Touschek_lifetime(
-                                output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
-                                charge_C, emit_ratio, RFvolt, h,
-                                max_mom_aper_percent=max_mom_aper_percent,
-                                ignoreMismatch=True, use_beamline=use_beamline_ring,
-                                del_tmp_files=True)
-
-                            d = pe.util.load_pgz_file(output_filepath)
-                            sdds_lifetime_data[i][j] = d
-                            tau_hrs[i][j] = d['data']['life']['scalars']['tLifetime']
-
-                            twi_a = d['data']['twi']['arrays']
-                            betax = twi_a['betax']
-                            alphax = twi_a['alphax']
-                            etax = twi_a['etax']
-                            etaxp = twi_a['etaxp']
-                            betay = twi_a['betay']
-                            etay = twi_a['etay']
-                            gammax = (1 + alphax**2) / betax
-                            curly_Hx = betax * (etaxp**2) + 2 * alphax * etax * etaxp \
-                                + gammax * (etax**2)
-                            eps_x = d['data']['life']['scalars']['emitx']
-                            eps_y = d['data']['life']['scalars']['emity']
-                            sigma_delta = d['data']['life']['scalars']['Sdelta']
-                            sigma_x = np.sqrt(eps_x * betax + (sigma_delta * etax)**2)
-                            sigma_xp = np.sqrt(eps_x * gammax + (sigma_delta * etaxp)**2)
-                            sigma_xp_1c = eps_x / sigma_x * np.sqrt(
-                                1 + curly_Hx * (sigma_delta**2) / eps_x) # Eq.(1c) of A. Streun, SLS Note 18/97
-                            sigma_y = np.sqrt(eps_y * betay + (sigma_delta * etay)**2)
-                            sigma_s = self.rf_dep_props['sigma_z_m_list'][iEnergy][j]
-
-                            rf_bucket = self.rf_dep_props[
-                                'rf_bucket_heights_percent_list'][iEnergy][j] * 1e-2
-                            F_args_d = {'+': None, '-': None}
-                            F_vals_d = {'+': None, '-': None}
-                            tau_SLS_d = {'+': None, '-': None}
-                            F_args_1c_d = {'+': None, '-': None}
-                            F_vals_1c_d = {'+': None, '-': None}
-                            tau_SLS_1c_d = {'+': None, '-': None}
-                            for local_mom_aper, sign in [
-                                (np.abs(deltaLostNegative), '-'),
-                                (deltaLostPositive, '+')]:
-
-                                delta = np.interp(
-                                    twi_a['s'], spos, local_mom_aper,
-                                    left=local_mom_aper[0], right=local_mom_aper[-1])
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], delta, '.-')
-                                delta[delta > rf_bucket] = rf_bucket
-
-                                F_args = (delta / (gamma * sigma_xp))**2
-                                F_args_1c = (delta / (gamma * sigma_xp_1c))**2
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], F_args, '.-')
-
-                                F_vals = F_interp(F_args)
-                                F_vals_1c = F_interp(F_args_1c)
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], F_vals, '.-')
-
-                                F_args_d[sign] = F_args
-                                F_vals_d[sign] = F_vals
-                                F_args_1c_d[sign] = F_args_1c
-                                F_vals_1c_d[sign] = F_vals_1c
-
-                                dtau_inv = F_vals / (sigma_x * sigma_y * sigma_xp)
-                                dtau_inv_1c = F_vals_1c / (sigma_x * sigma_y * sigma_xp_1c)
-                                if False:
-                                    dtau_inv_before_delta_div = dtau_inv.copy()
-                                dtau_inv /= delta**2
-                                dtau_inv_1c /= delta**2
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], dtau_inv_before_delta_div
-                                             / np.max(dtau_inv_before_delta_div), 'b.-')
-                                    plt.plot(twi_a['s'], dtau_inv / np.max(dtau_inv), 'r.-')
-                                tau_inv = np.trapz(dtau_inv, twi_a['s'])
-                                tau_inv *= N_e * (r_e**2) * const.c / circumf / (
-                                    8*np.pi*(gamma**3)* sigma_s)
-                                tau_SLS_d[sign] = 1 / tau_inv # [s] # Eq.(1) of A. Streun, SLS Note 18/97
-                                tau_inv_1c = np.trapz(dtau_inv_1c, twi_a['s'])
-                                tau_inv_1c *= N_e * (r_e**2) * const.c / circumf / (
-                                    8*np.pi*(gamma**3)* sigma_s)
-                                tau_SLS_1c_d[sign] = 1 / tau_inv_1c # [s] # Eq.(1) of A. Streun, SLS Note 18/97
-
-                            touscheck_Fargs_plus.append(F_args_d['+'])
-                            touscheck_Fargs_minus.append(F_args_d['-'])
-                            touscheck_Fvals_plus.append(F_vals_d['+'])
-                            touscheck_Fvals_minus.append(F_vals_d['-'])
-                            touscheck_Fargs_1c_plus.append(F_args_1c_d['+'])
-                            touscheck_Fargs_1c_minus.append(F_args_1c_d['-'])
-                            touscheck_Fvals_1c_plus.append(F_vals_1c_d['+'])
-                            touscheck_Fvals_1c_minus.append(F_vals_1c_d['-'])
-                            touscheck_spos = twi_a['s']
-
-                            tau_hrs_SLS[i][j] = np.sqrt(
-                                (tau_SLS_d['+']**2 + tau_SLS_d['-']**2) / 2) / 60 / 60
-                            tau_hrs_SLS_1c[i][j] = np.sqrt(
-                                (tau_SLS_1c_d['+']**2 + tau_SLS_1c_d['-']**2) / 2) / 60 / 60
-
-                    tau_hrs_list.append(tau_hrs)
-                    sdds_lifetime_data_list.append(sdds_lifetime_data)
-                    tau_hrs_SLS_list.append(tau_hrs_SLS)
-                    tau_hrs_SLS_1c_list.append(tau_hrs_SLS_1c)
-                    touscheck_spos_list.append(touscheck_spos)
-                    touscheck_Fargs_minus_list.append(np.array(touscheck_Fargs_minus).T)
-                    touscheck_Fargs_plus_list.append(np.array(touscheck_Fargs_plus).T)
-                    touscheck_Fvals_minus_list.append(np.array(touscheck_Fvals_minus).T)
-                    touscheck_Fvals_plus_list.append(np.array(touscheck_Fvals_plus).T)
-                    touscheck_Fargs_1c_minus_list.append(np.array(touscheck_Fargs_1c_minus).T)
-                    touscheck_Fargs_1c_plus_list.append(np.array(touscheck_Fargs_1c_plus).T)
-                    touscheck_Fvals_1c_minus_list.append(np.array(touscheck_Fvals_1c_minus).T)
-                    touscheck_Fvals_1c_plus_list.append(np.array(touscheck_Fvals_1c_plus).T)
-
-                self.lifetime_props = dict(
-                    # Inputs
-                    E_MeV_list=E_MeV_list,
-                    total_beam_current_mA_list=total_beam_current_mA_list,
-                    num_filled_bunches=num_filled_bunches,
-                    raw_coupling_specs=raw_coupling_specs,
-                    raw_max_mom_aper_percent=raw_max_mom_aper_percent,
-                    # Outputs
-                    beam_current_per_bunch_mA_list=beam_current_per_bunch_mA_list,
-                    total_charge_uC_list=total_charge_uC_list,
-                    charge_per_bunch_nC_list=charge_per_bunch_nC_list,
-                    eps_ys_list=eps_ys_list, eps_xs_list=eps_xs_list,
-                    eps_0_list=eps_0_list,
-                    coupling_percent_list=coupling_percent_list,
-                    tau_hrs_list=tau_hrs_list,
-                    sdds_lifetime_data_list=sdds_lifetime_data_list,
-                    tau_hrs_SLS_list=tau_hrs_SLS_list,
-                    tau_hrs_SLS_1c_list=tau_hrs_SLS_1c_list,
-                    touscheck_spos_list=touscheck_spos_list,
-                    touscheck_Fargs_minus_list=touscheck_Fargs_minus_list,
-                    touscheck_Fargs_plus_list=touscheck_Fargs_plus_list,
-                    touscheck_Fvals_minus_list=touscheck_Fvals_minus_list,
-                    touscheck_Fvals_plus_list=touscheck_Fvals_plus_list,
-                    touscheck_Fargs_1c_minus_list=touscheck_Fargs_1c_minus_list,
-                    touscheck_Fargs_1c_plus_list=touscheck_Fargs_1c_plus_list,
-                    touscheck_Fvals_1c_minus_list=touscheck_Fvals_1c_minus_list,
-                    touscheck_Fvals_1c_plus_list=touscheck_Fvals_1c_plus_list,
-                )
-
-            else:
+            if self._version == '1.0':
                 eps_0 = eps_0_list[0]
                 total_beam_current_mA = total_beam_current_mA_list[0]
 
@@ -7347,6 +7775,482 @@ class Report_NSLS2U_Default:
                     touscheck_Fvals_1c_minus=np.array(touscheck_Fvals_1c_minus).T,
                     touscheck_Fvals_1c_plus=np.array(touscheck_Fvals_1c_plus).T,
                 )
+
+            elif self._version == '1.1':
+
+                E_MeV_list = self._get_E_MeV_list()
+
+                assert len(eps_0_list) == len(total_beam_current_mA_list) \
+                       == len(E_MeV_list)
+                beam_current_per_bunch_mA_list = []
+                total_charge_uC_list, charge_per_bunch_nC_list = [], []
+                eps_ys_list, eps_xs_list, coupling_percent_list = [], [], []
+                tau_hrs_list = []
+                sdds_lifetime_data_list = []
+                tau_hrs_SLS_list, tau_hrs_SLS_1c_list = [], []
+                touscheck_spos_list = []
+                touscheck_Fargs_minus_list = []
+                touscheck_Fargs_plus_list = []
+                touscheck_Fvals_minus_list = []
+                touscheck_Fvals_plus_list = []
+                touscheck_Fargs_1c_minus_list = []
+                touscheck_Fargs_1c_plus_list = []
+                touscheck_Fvals_1c_minus_list = []
+                touscheck_Fvals_1c_plus_list = []
+                for iEnergy, (E_MeV, eps_0, total_beam_current_mA) in enumerate(
+                    zip(E_MeV_list, eps_0_list, total_beam_current_mA_list)):
+
+                    beam_current_per_bunch_mA = total_beam_current_mA / num_filled_bunches
+                    #
+                    beam_current_per_bunch_mA_list.append(beam_current_per_bunch_mA)
+
+                    total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
+                    total_charge_uC = total_charge_C * 1e6
+                    charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
+                    #
+                    total_charge_uC_list.append(total_charge_uC)
+                    charge_per_bunch_nC_list.append(charge_per_bunch_nC)
+
+                    eps_ys = []
+                    for s in raw_coupling_specs:
+                        if s.endswith('pm'):
+                            ey_pm = float(s[:-2].strip())
+                            eps_ys.append(ey_pm * 1e-12)
+                        elif s.endswith('%'):
+                            kappa = float(s[:-1].strip()) * 1e-2
+                            eps_ys.append(kappa / (1+kappa) * eps_0)
+                        else:
+                            raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
+                                              'must end with either "pm" or "%"'))
+                    eps_ys = np.array(eps_ys) # [m-rad]
+                    coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
+                    # used in ELEGANT's "touschekLifetime" function.
+                    coupling_percent = coupling * 1e2
+
+                    eps_xs = eps_0 / (1 + coupling) # [m-rad]
+
+                    eps_ys_list.append(eps_ys)
+                    eps_xs_list.append(eps_xs)
+                    coupling_percent_list.append(coupling_percent)
+
+                    LTE_filepath = self.input_LTE_filepath
+                    use_beamline_ring = self.conf['use_beamline_ring']
+
+                    charge_C = charge_per_bunch_nC * 1e-9
+
+                    mmap_ring = pe.sdds.sdds2dicts(mmap_sdds_filepath_ring)
+                    spos = mmap_ring[0]['columns']['s']
+                    deltaLostNegative = mmap_ring[0]['columns']['deltaLostNegative']
+                    deltaLostPositive = mmap_ring[0]['columns']['deltaLostPositive']
+                    delta_accep = np.min(
+                        np.vstack((np.abs(deltaLostNegative), deltaLostPositive)), axis=0)
+
+                    const = scipy.constants
+                    m_e_eV = const.m_e * (const.c**2) / const.electron_volt
+                    gamma = E_MeV * 1e6 / m_e_eV
+                    N_e = charge_C / const.elementary_charge
+                    assert const.mu_0 == 4*np.pi*1e-7
+                    assert const.epsilon_0 == 1.0/((const.c**2)*const.mu_0)
+                    r_e = const.elementary_charge / (4*np.pi*const.epsilon_0*m_e_eV)
+                    F_interp = pe.nonlin.get_Touschek_F_interpolator()
+                    #
+                    touscheck_Fvals_plus, touscheck_Fvals_minus = [], []
+                    touscheck_Fargs_plus, touscheck_Fargs_minus = [], []
+                    touscheck_Fvals_1c_plus, touscheck_Fvals_1c_minus = [], []
+                    touscheck_Fargs_1c_plus, touscheck_Fargs_1c_minus = [], []
+                    tau_hrs_SLS = np.full((len(coupling), len(rf_volts)), np.nan)
+                    tau_hrs_SLS_1c = np.full((len(coupling), len(rf_volts)), np.nan)
+                    #
+                    tau_hrs = np.full((len(coupling), len(rf_volts)), np.nan)
+                    sdds_lifetime_data = [
+                        [None for _ in range(len(rf_volts))] for _ in range(len(coupling))]
+                    print('\n* Start computing beam lifetimes...\n')
+                    for i, emit_ratio in enumerate(coupling):
+                        for j, RFvolt in enumerate(rf_volts):
+                            pe.nonlin.calc_Touschek_lifetime(
+                                output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
+                                charge_C, emit_ratio, RFvolt, h,
+                                max_mom_aper_percent=max_mom_aper_percent,
+                                ignoreMismatch=True, use_beamline=use_beamline_ring,
+                                del_tmp_files=True)
+
+                            d = pe.util.load_pgz_file(output_filepath)
+                            sdds_lifetime_data[i][j] = d
+                            tau_hrs[i][j] = d['data']['life']['scalars']['tLifetime']
+
+                            twi_a = d['data']['twi']['arrays']
+                            betax = twi_a['betax']
+                            alphax = twi_a['alphax']
+                            etax = twi_a['etax']
+                            etaxp = twi_a['etaxp']
+                            betay = twi_a['betay']
+                            etay = twi_a['etay']
+                            gammax = (1 + alphax**2) / betax
+                            curly_Hx = betax * (etaxp**2) + 2 * alphax * etax * etaxp \
+                                + gammax * (etax**2)
+                            eps_x = d['data']['life']['scalars']['emitx']
+                            eps_y = d['data']['life']['scalars']['emity']
+                            sigma_delta = d['data']['life']['scalars']['Sdelta']
+                            sigma_x = np.sqrt(eps_x * betax + (sigma_delta * etax)**2)
+                            sigma_xp = np.sqrt(eps_x * gammax + (sigma_delta * etaxp)**2)
+                            sigma_xp_1c = eps_x / sigma_x * np.sqrt(
+                                1 + curly_Hx * (sigma_delta**2) / eps_x) # Eq.(1c) of A. Streun, SLS Note 18/97
+                            sigma_y = np.sqrt(eps_y * betay + (sigma_delta * etay)**2)
+                            sigma_s = self.rf_dep_props['sigma_z_m_list'][iEnergy][j]
+
+                            rf_bucket = self.rf_dep_props[
+                                'rf_bucket_heights_percent_list'][iEnergy][j] * 1e-2
+                            F_args_d = {'+': None, '-': None}
+                            F_vals_d = {'+': None, '-': None}
+                            tau_SLS_d = {'+': None, '-': None}
+                            F_args_1c_d = {'+': None, '-': None}
+                            F_vals_1c_d = {'+': None, '-': None}
+                            tau_SLS_1c_d = {'+': None, '-': None}
+                            for local_mom_aper, sign in [
+                                (np.abs(deltaLostNegative), '-'),
+                                (deltaLostPositive, '+')]:
+
+                                delta = np.interp(
+                                    twi_a['s'], spos, local_mom_aper,
+                                    left=local_mom_aper[0], right=local_mom_aper[-1])
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], delta, '.-')
+                                delta[delta > rf_bucket] = rf_bucket
+
+                                F_args = (delta / (gamma * sigma_xp))**2
+                                F_args_1c = (delta / (gamma * sigma_xp_1c))**2
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], F_args, '.-')
+
+                                F_vals = F_interp(F_args)
+                                F_vals_1c = F_interp(F_args_1c)
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], F_vals, '.-')
+
+                                F_args_d[sign] = F_args
+                                F_vals_d[sign] = F_vals
+                                F_args_1c_d[sign] = F_args_1c
+                                F_vals_1c_d[sign] = F_vals_1c
+
+                                dtau_inv = F_vals / (sigma_x * sigma_y * sigma_xp)
+                                dtau_inv_1c = F_vals_1c / (sigma_x * sigma_y * sigma_xp_1c)
+                                if False:
+                                    dtau_inv_before_delta_div = dtau_inv.copy()
+                                dtau_inv /= delta**2
+                                dtau_inv_1c /= delta**2
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], dtau_inv_before_delta_div
+                                             / np.max(dtau_inv_before_delta_div), 'b.-')
+                                    plt.plot(twi_a['s'], dtau_inv / np.max(dtau_inv), 'r.-')
+                                tau_inv = np.trapz(dtau_inv, twi_a['s'])
+                                tau_inv *= N_e * (r_e**2) * const.c / circumf / (
+                                    8*np.pi*(gamma**3)* sigma_s)
+                                tau_SLS_d[sign] = 1 / tau_inv # [s] # Eq.(1) of A. Streun, SLS Note 18/97
+                                tau_inv_1c = np.trapz(dtau_inv_1c, twi_a['s'])
+                                tau_inv_1c *= N_e * (r_e**2) * const.c / circumf / (
+                                    8*np.pi*(gamma**3)* sigma_s)
+                                tau_SLS_1c_d[sign] = 1 / tau_inv_1c # [s] # Eq.(1) of A. Streun, SLS Note 18/97
+
+                            touscheck_Fargs_plus.append(F_args_d['+'])
+                            touscheck_Fargs_minus.append(F_args_d['-'])
+                            touscheck_Fvals_plus.append(F_vals_d['+'])
+                            touscheck_Fvals_minus.append(F_vals_d['-'])
+                            touscheck_Fargs_1c_plus.append(F_args_1c_d['+'])
+                            touscheck_Fargs_1c_minus.append(F_args_1c_d['-'])
+                            touscheck_Fvals_1c_plus.append(F_vals_1c_d['+'])
+                            touscheck_Fvals_1c_minus.append(F_vals_1c_d['-'])
+                            touscheck_spos = twi_a['s']
+
+                            tau_hrs_SLS[i][j] = np.sqrt(
+                                (tau_SLS_d['+']**2 + tau_SLS_d['-']**2) / 2) / 60 / 60
+                            tau_hrs_SLS_1c[i][j] = np.sqrt(
+                                (tau_SLS_1c_d['+']**2 + tau_SLS_1c_d['-']**2) / 2) / 60 / 60
+
+                    tau_hrs_list.append(tau_hrs)
+                    sdds_lifetime_data_list.append(sdds_lifetime_data)
+                    tau_hrs_SLS_list.append(tau_hrs_SLS)
+                    tau_hrs_SLS_1c_list.append(tau_hrs_SLS_1c)
+                    touscheck_spos_list.append(touscheck_spos)
+                    touscheck_Fargs_minus_list.append(np.array(touscheck_Fargs_minus).T)
+                    touscheck_Fargs_plus_list.append(np.array(touscheck_Fargs_plus).T)
+                    touscheck_Fvals_minus_list.append(np.array(touscheck_Fvals_minus).T)
+                    touscheck_Fvals_plus_list.append(np.array(touscheck_Fvals_plus).T)
+                    touscheck_Fargs_1c_minus_list.append(np.array(touscheck_Fargs_1c_minus).T)
+                    touscheck_Fargs_1c_plus_list.append(np.array(touscheck_Fargs_1c_plus).T)
+                    touscheck_Fvals_1c_minus_list.append(np.array(touscheck_Fvals_1c_minus).T)
+                    touscheck_Fvals_1c_plus_list.append(np.array(touscheck_Fvals_1c_plus).T)
+
+                self.lifetime_props = dict(
+                    # Inputs
+                    E_MeV_list=E_MeV_list,
+                    total_beam_current_mA_list=total_beam_current_mA_list,
+                    num_filled_bunches=num_filled_bunches,
+                    raw_coupling_specs=raw_coupling_specs,
+                    raw_max_mom_aper_percent=raw_max_mom_aper_percent,
+                    # Outputs
+                    beam_current_per_bunch_mA_list=beam_current_per_bunch_mA_list,
+                    total_charge_uC_list=total_charge_uC_list,
+                    charge_per_bunch_nC_list=charge_per_bunch_nC_list,
+                    eps_ys_list=eps_ys_list, eps_xs_list=eps_xs_list,
+                    eps_0_list=eps_0_list,
+                    coupling_percent_list=coupling_percent_list,
+                    tau_hrs_list=tau_hrs_list,
+                    sdds_lifetime_data_list=sdds_lifetime_data_list,
+                    tau_hrs_SLS_list=tau_hrs_SLS_list,
+                    tau_hrs_SLS_1c_list=tau_hrs_SLS_1c_list,
+                    touscheck_spos_list=touscheck_spos_list,
+                    touscheck_Fargs_minus_list=touscheck_Fargs_minus_list,
+                    touscheck_Fargs_plus_list=touscheck_Fargs_plus_list,
+                    touscheck_Fvals_minus_list=touscheck_Fvals_minus_list,
+                    touscheck_Fvals_plus_list=touscheck_Fvals_plus_list,
+                    touscheck_Fargs_1c_minus_list=touscheck_Fargs_1c_minus_list,
+                    touscheck_Fargs_1c_plus_list=touscheck_Fargs_1c_plus_list,
+                    touscheck_Fvals_1c_minus_list=touscheck_Fvals_1c_minus_list,
+                    touscheck_Fvals_1c_plus_list=touscheck_Fvals_1c_plus_list,
+                )
+
+            else: # v1.2 and up
+                E_MeV_list = self._get_E_MeV_list()
+
+                assert len(eps_0_list) == len(total_beam_current_mA_list) \
+                       == len(E_MeV_list)
+                beam_current_per_bunch_mA_list = []
+                total_charge_uC_list, charge_per_bunch_nC_list = [], []
+                eps_ys_list, eps_xs_list, coupling_percent_list = [], [], []
+                tau_hrs_list = []
+                sdds_lifetime_data_list = []
+                tau_hrs_SLS_list, tau_hrs_SLS_1c_list = [], []
+                touscheck_spos_list = []
+                touscheck_Fargs_minus_list = []
+                touscheck_Fargs_plus_list = []
+                touscheck_Fvals_minus_list = []
+                touscheck_Fvals_plus_list = []
+                touscheck_Fargs_1c_minus_list = []
+                touscheck_Fargs_1c_plus_list = []
+                touscheck_Fvals_1c_minus_list = []
+                touscheck_Fvals_1c_plus_list = []
+                for iEnergy, (E_MeV, eps_0, total_beam_current_mA, rf_v_array
+                    ) in enumerate(
+                        zip(E_MeV_list, eps_0_list, total_beam_current_mA_list,
+                            rf_volts)):
+
+                    beam_current_per_bunch_mA = total_beam_current_mA / num_filled_bunches
+                    #
+                    beam_current_per_bunch_mA_list.append(beam_current_per_bunch_mA)
+
+                    total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
+                    total_charge_uC = total_charge_C * 1e6
+                    charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
+                    #
+                    total_charge_uC_list.append(total_charge_uC)
+                    charge_per_bunch_nC_list.append(charge_per_bunch_nC)
+
+                    eps_ys = []
+                    for s in raw_coupling_specs:
+                        if s.endswith('pm'):
+                            ey_pm = float(s[:-2].strip())
+                            eps_ys.append(ey_pm * 1e-12)
+                        elif s.endswith('%'):
+                            kappa = float(s[:-1].strip()) * 1e-2
+                            eps_ys.append(kappa / (1+kappa) * eps_0)
+                        else:
+                            raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
+                                              'must end with either "pm" or "%"'))
+                    eps_ys = np.array(eps_ys) # [m-rad]
+                    coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
+                    # used in ELEGANT's "touschekLifetime" function.
+                    coupling_percent = coupling * 1e2
+
+                    eps_xs = eps_0 / (1 + coupling) # [m-rad]
+
+                    eps_ys_list.append(eps_ys)
+                    eps_xs_list.append(eps_xs)
+                    coupling_percent_list.append(coupling_percent)
+
+                    LTE_filepath = self.input_LTE_filepath
+                    use_beamline_ring = self.conf['use_beamline_ring']
+
+                    charge_C = charge_per_bunch_nC * 1e-9
+
+                    mmap_ring = pe.sdds.sdds2dicts(mmap_sdds_filepath_ring)
+                    spos = mmap_ring[0]['columns']['s']
+                    deltaLostNegative = mmap_ring[0]['columns']['deltaLostNegative']
+                    deltaLostPositive = mmap_ring[0]['columns']['deltaLostPositive']
+                    delta_accep = np.min(
+                        np.vstack((np.abs(deltaLostNegative), deltaLostPositive)), axis=0)
+
+                    const = scipy.constants
+                    m_e_eV = const.m_e * (const.c**2) / const.electron_volt
+                    gamma = E_MeV * 1e6 / m_e_eV
+                    N_e = charge_C / const.elementary_charge
+                    assert const.mu_0 == 4*np.pi*1e-7
+                    assert const.epsilon_0 == 1.0/((const.c**2)*const.mu_0)
+                    r_e = const.elementary_charge / (4*np.pi*const.epsilon_0*m_e_eV)
+                    F_interp = pe.nonlin.get_Touschek_F_interpolator()
+                    #
+                    touscheck_Fvals_plus, touscheck_Fvals_minus = [], []
+                    touscheck_Fargs_plus, touscheck_Fargs_minus = [], []
+                    touscheck_Fvals_1c_plus, touscheck_Fvals_1c_minus = [], []
+                    touscheck_Fargs_1c_plus, touscheck_Fargs_1c_minus = [], []
+                    tau_hrs_SLS = np.full((len(coupling), len(rf_v_array)), np.nan)
+                    tau_hrs_SLS_1c = np.full((len(coupling), len(rf_v_array)), np.nan)
+                    #
+                    tau_hrs = np.full((len(coupling), len(rf_v_array)), np.nan)
+                    sdds_lifetime_data = [
+                        [None for _ in range(len(rf_v_array))] for _ in range(len(coupling))]
+                    print('\n* Start computing beam lifetimes...\n')
+                    for i, emit_ratio in enumerate(coupling):
+                        for j, RFvolt in enumerate(rf_v_array):
+                            pe.nonlin.calc_Touschek_lifetime(
+                                output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
+                                charge_C, emit_ratio, RFvolt, h,
+                                max_mom_aper_percent=max_mom_aper_percent,
+                                ignoreMismatch=True, use_beamline=use_beamline_ring,
+                                del_tmp_files=True)
+
+                            d = pe.util.load_pgz_file(output_filepath)
+                            sdds_lifetime_data[i][j] = d
+                            tau_hrs[i][j] = d['data']['life']['scalars']['tLifetime']
+
+                            twi_a = d['data']['twi']['arrays']
+                            betax = twi_a['betax']
+                            alphax = twi_a['alphax']
+                            etax = twi_a['etax']
+                            etaxp = twi_a['etaxp']
+                            betay = twi_a['betay']
+                            etay = twi_a['etay']
+                            gammax = (1 + alphax**2) / betax
+                            curly_Hx = betax * (etaxp**2) + 2 * alphax * etax * etaxp \
+                                + gammax * (etax**2)
+                            eps_x = d['data']['life']['scalars']['emitx']
+                            eps_y = d['data']['life']['scalars']['emity']
+                            sigma_delta = d['data']['life']['scalars']['Sdelta']
+                            sigma_x = np.sqrt(eps_x * betax + (sigma_delta * etax)**2)
+                            sigma_xp = np.sqrt(eps_x * gammax + (sigma_delta * etaxp)**2)
+                            sigma_xp_1c = eps_x / sigma_x * np.sqrt(
+                                1 + curly_Hx * (sigma_delta**2) / eps_x) # Eq.(1c) of A. Streun, SLS Note 18/97
+                            sigma_y = np.sqrt(eps_y * betay + (sigma_delta * etay)**2)
+                            sigma_s = self.rf_dep_props['sigma_z_m_list'][iEnergy][j]
+
+                            rf_bucket = self.rf_dep_props[
+                                'rf_bucket_heights_percent_list'][iEnergy][j] * 1e-2
+                            F_args_d = {'+': None, '-': None}
+                            F_vals_d = {'+': None, '-': None}
+                            tau_SLS_d = {'+': None, '-': None}
+                            F_args_1c_d = {'+': None, '-': None}
+                            F_vals_1c_d = {'+': None, '-': None}
+                            tau_SLS_1c_d = {'+': None, '-': None}
+                            for local_mom_aper, sign in [
+                                (np.abs(deltaLostNegative), '-'),
+                                (deltaLostPositive, '+')]:
+
+                                delta = np.interp(
+                                    twi_a['s'], spos, local_mom_aper,
+                                    left=local_mom_aper[0], right=local_mom_aper[-1])
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], delta, '.-')
+                                delta[delta > rf_bucket] = rf_bucket
+
+                                F_args = (delta / (gamma * sigma_xp))**2
+                                F_args_1c = (delta / (gamma * sigma_xp_1c))**2
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], F_args, '.-')
+
+                                F_vals = F_interp(F_args)
+                                F_vals_1c = F_interp(F_args_1c)
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], F_vals, '.-')
+
+                                F_args_d[sign] = F_args
+                                F_vals_d[sign] = F_vals
+                                F_args_1c_d[sign] = F_args_1c
+                                F_vals_1c_d[sign] = F_vals_1c
+
+                                dtau_inv = F_vals / (sigma_x * sigma_y * sigma_xp)
+                                dtau_inv_1c = F_vals_1c / (sigma_x * sigma_y * sigma_xp_1c)
+                                if False:
+                                    dtau_inv_before_delta_div = dtau_inv.copy()
+                                dtau_inv /= delta**2
+                                dtau_inv_1c /= delta**2
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], dtau_inv_before_delta_div
+                                             / np.max(dtau_inv_before_delta_div), 'b.-')
+                                    plt.plot(twi_a['s'], dtau_inv / np.max(dtau_inv), 'r.-')
+                                tau_inv = np.trapz(dtau_inv, twi_a['s'])
+                                tau_inv *= N_e * (r_e**2) * const.c / circumf / (
+                                    8*np.pi*(gamma**3)* sigma_s)
+                                tau_SLS_d[sign] = 1 / tau_inv # [s] # Eq.(1) of A. Streun, SLS Note 18/97
+                                tau_inv_1c = np.trapz(dtau_inv_1c, twi_a['s'])
+                                tau_inv_1c *= N_e * (r_e**2) * const.c / circumf / (
+                                    8*np.pi*(gamma**3)* sigma_s)
+                                tau_SLS_1c_d[sign] = 1 / tau_inv_1c # [s] # Eq.(1) of A. Streun, SLS Note 18/97
+
+                            touscheck_Fargs_plus.append(F_args_d['+'])
+                            touscheck_Fargs_minus.append(F_args_d['-'])
+                            touscheck_Fvals_plus.append(F_vals_d['+'])
+                            touscheck_Fvals_minus.append(F_vals_d['-'])
+                            touscheck_Fargs_1c_plus.append(F_args_1c_d['+'])
+                            touscheck_Fargs_1c_minus.append(F_args_1c_d['-'])
+                            touscheck_Fvals_1c_plus.append(F_vals_1c_d['+'])
+                            touscheck_Fvals_1c_minus.append(F_vals_1c_d['-'])
+                            touscheck_spos = twi_a['s']
+
+                            tau_hrs_SLS[i][j] = np.sqrt(
+                                (tau_SLS_d['+']**2 + tau_SLS_d['-']**2) / 2) / 60 / 60
+                            tau_hrs_SLS_1c[i][j] = np.sqrt(
+                                (tau_SLS_1c_d['+']**2 + tau_SLS_1c_d['-']**2) / 2) / 60 / 60
+
+                    tau_hrs_list.append(tau_hrs)
+                    sdds_lifetime_data_list.append(sdds_lifetime_data)
+                    tau_hrs_SLS_list.append(tau_hrs_SLS)
+                    tau_hrs_SLS_1c_list.append(tau_hrs_SLS_1c)
+                    touscheck_spos_list.append(touscheck_spos)
+                    touscheck_Fargs_minus_list.append(np.array(touscheck_Fargs_minus).T)
+                    touscheck_Fargs_plus_list.append(np.array(touscheck_Fargs_plus).T)
+                    touscheck_Fvals_minus_list.append(np.array(touscheck_Fvals_minus).T)
+                    touscheck_Fvals_plus_list.append(np.array(touscheck_Fvals_plus).T)
+                    touscheck_Fargs_1c_minus_list.append(np.array(touscheck_Fargs_1c_minus).T)
+                    touscheck_Fargs_1c_plus_list.append(np.array(touscheck_Fargs_1c_plus).T)
+                    touscheck_Fvals_1c_minus_list.append(np.array(touscheck_Fvals_1c_minus).T)
+                    touscheck_Fvals_1c_plus_list.append(np.array(touscheck_Fvals_1c_plus).T)
+
+                self.lifetime_props = dict(
+                    # Inputs
+                    E_MeV_list=E_MeV_list,
+                    total_beam_current_mA_list=total_beam_current_mA_list,
+                    num_filled_bunches=num_filled_bunches,
+                    raw_coupling_specs=raw_coupling_specs,
+                    raw_max_mom_aper_percent=raw_max_mom_aper_percent,
+                    # Outputs
+                    beam_current_per_bunch_mA_list=beam_current_per_bunch_mA_list,
+                    total_charge_uC_list=total_charge_uC_list,
+                    charge_per_bunch_nC_list=charge_per_bunch_nC_list,
+                    eps_ys_list=eps_ys_list, eps_xs_list=eps_xs_list,
+                    eps_0_list=eps_0_list,
+                    coupling_percent_list=coupling_percent_list,
+                    tau_hrs_list=tau_hrs_list,
+                    sdds_lifetime_data_list=sdds_lifetime_data_list,
+                    tau_hrs_SLS_list=tau_hrs_SLS_list,
+                    tau_hrs_SLS_1c_list=tau_hrs_SLS_1c_list,
+                    touscheck_spos_list=touscheck_spos_list,
+                    touscheck_Fargs_minus_list=touscheck_Fargs_minus_list,
+                    touscheck_Fargs_plus_list=touscheck_Fargs_plus_list,
+                    touscheck_Fvals_minus_list=touscheck_Fvals_minus_list,
+                    touscheck_Fvals_plus_list=touscheck_Fvals_plus_list,
+                    touscheck_Fargs_1c_minus_list=touscheck_Fargs_1c_minus_list,
+                    touscheck_Fargs_1c_plus_list=touscheck_Fargs_1c_plus_list,
+                    touscheck_Fvals_1c_minus_list=touscheck_Fvals_1c_minus_list,
+                    touscheck_Fvals_1c_plus_list=touscheck_Fvals_1c_plus_list,
+                )
+
 
             pe.util.robust_pgz_file_write(
                 output_filepath, self.lifetime_props, nMaxTry=10, sleep=10.0)
