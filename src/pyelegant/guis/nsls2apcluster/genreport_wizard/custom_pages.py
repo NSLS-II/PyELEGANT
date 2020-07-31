@@ -646,7 +646,41 @@ class PageGenReport(PageStandard):
             return [s.strip() for s in v.split(',')]
         elif name == 'rf_voltages':
             #return [float(s.strip()) * 1e6 for s in v.split(',')]
-            return [yaml.YAML().load(s.strip() + 'e6') for s in v.split(',')]
+
+            valid_example_str = (
+                'Valid examples: "1.5, 2, 2.5" for single or any multiple beam '
+                'energies; "[1, 1.5], [1.5, 2, 2.5]" for 2 beam energies.')
+
+            if ('[' in v) or (']' in v):
+                if ('[' in v) and (']' in v):
+                    try:
+                        list_strs = re.findall('\[[^\]]+\]', v)
+                        list_strs = [s[1:-1] for s in list_strs] # remove "[" & "]"
+                        rf_voltages = []
+                        for list_s in list_strs:
+                            rf_voltages.append(
+                                [yaml.YAML().load(s.strip() + 'e6')
+                                 for s in list_s.split(',') if s.strip() != ''])
+                        return rf_voltages
+                    except:
+                        text = f'Invalid input string for RF voltages: {v}'
+                        info_text = valid_example_str
+                        showInvalidPageInputDialog(text, info_text)
+                        return
+                else:
+                    text = f'Invalid input string for RF voltages: {v}'
+                    info_text = 'Unmatched square brackets.\n\n' + valid_example_str
+                    showInvalidPageInputDialog(text, info_text)
+                    return
+            else:
+                try:
+                    return [yaml.YAML().load(s.strip() + 'e6')
+                            for s in v.split(',') if s.strip() != '']
+                except:
+                    text = f'Invalid input string for RF voltages: {v}'
+                    info_text = valid_example_str
+                    showInvalidPageInputDialog(text, info_text)
+                    return
         else:
             raise ValueError()
 
@@ -658,8 +692,19 @@ class PageGenReport(PageStandard):
             v_list = v
             return ', '.join([v.strip() for v in v_list])
         elif name == 'rf_voltages':
-            v_list = v
-            return ', '.join([f'{v/1e6:.6g}' for v in v_list])
+            try:
+                iter(v[0])
+            except TypeError:
+                v_list = v
+                return ', '.join([f'{v/1e6:.6g}' for v in v_list])
+            else:
+                v_LoL = v
+                list_strs = []
+                for v_list in v_LoL:
+                    list_s = '[{}]'.format(
+                        ', '.join([f'{v/1e6:.6g}' for v in v_list]))
+                    list_strs.append(list_s)
+                return ', '.join(list_strs)
         else:
             raise ValueError()
 
@@ -745,11 +790,15 @@ class PageGenReport(PageStandard):
         config_filename = config_file.name
         config_filedirpath = str(config_file.parent)
 
-        if recalc_replot is None:
-            mod_conf = self.modify_conf(self.conf)
-        else:
-            mod_conf = self.modify_conf(self.conf,
-                                        recalc_replot=recalc_replot)
+        try:
+            if recalc_replot is None:
+                mod_conf = self.modify_conf(self.conf)
+            else:
+                mod_conf = self.modify_conf(self.conf,
+                                            recalc_replot=recalc_replot)
+        except:
+            traceback.print_exc()
+            return
 
         yml = yaml.YAML()
         yml.preserve_quotes = True
@@ -3997,7 +4046,11 @@ class PageRfTau(PageGenReport):
         data['E_GeV'] = np.array(self.E_MeV_list) / 1e3
 
         rf_volts = self._get_rf_volts()
-        data['rf_MV'] = np.array(rf_volts) / 1e6
+        if rf_volts is None: return
+        try:
+            data['rf_MV'] = np.array(rf_volts) / 1e6
+        except TypeError:
+            data['rf_MV'] = np.array([np.array(_v) for _v in rf_volts]) / 1e6
 
         coupling_list = self._get_coupling_list()
         data['coupling'] = coupling_list
@@ -4006,7 +4059,6 @@ class PageRfTau(PageGenReport):
         dialog.exec()
 
         if dialog.result() == QtWidgets.QDialog.Accepted:
-            loss_plots_set = data['loss_plots_set']
             loss_plots_indexes = {'E_MeV': [], 'rf_V': [], 'coupling': []}
             for iGeV, iVolt, iCoup in data['loss_plots_set']:
                 loss_plots_indexes['E_MeV'].append(iGeV)
@@ -4036,15 +4088,28 @@ class PageRfTau(PageGenReport):
         self, loss_plots_indexes, rf_volts, coupling_list):
         """"""
 
+        if rf_volts is None:
+            return
+
         self.tau_special_data['loss_plots_set'] = loss_plots_indexes
 
         try:
-            s = ', '.join([
-                (f'({self.E_MeV_list[iGeV]/1e3:.2g}GeV, '
-                 f'{rf_volts[iVolt]/1e6:.2g}MV, {coupling_list[iCoup]})')
-                for iGeV, iVolt, iCoup in zip(
-                    loss_plots_indexes['E_MeV'], loss_plots_indexes['rf_V'],
-                    loss_plots_indexes['coupling'])])
+            try:
+                iter(rf_volts[0])
+            except TypeError:
+                s = ', '.join([
+                    (f'({self.E_MeV_list[iGeV]/1e3:.2g}GeV, '
+                     f'{rf_volts[iVolt]/1e6:.2g}MV, {coupling_list[iCoup]})')
+                    for iGeV, iVolt, iCoup in zip(
+                        loss_plots_indexes['E_MeV'], loss_plots_indexes['rf_V'],
+                        loss_plots_indexes['coupling'])])
+            else:
+                s = ', '.join([
+                    (f'({self.E_MeV_list[iGeV]/1e3:.2g}GeV, '
+                     f'{rf_volts[iGeV][iVolt]/1e6:.2g}MV, {coupling_list[iCoup]})')
+                    for iGeV, iVolt, iCoup in zip(
+                        loss_plots_indexes['E_MeV'], loss_plots_indexes['rf_V'],
+                        loss_plots_indexes['coupling'])])
         except:
             s = ''
             for k, v in self.tau_special_data['loss_plots_set'].items():
@@ -4306,6 +4371,8 @@ class PageRfTau(PageGenReport):
             conv_type = self.setter_getter['rf']['rf_voltages']
             conv = partial(self.converters[conv_type]['get'], 'rf_voltages')
             v = conv(self.field('edit_rf_voltages'))
+            if v is None:
+                raise AssertionError('Invalid RF voltages')
             seq = CommentedSeq(v)
             seq.fa.set_flow_style()
             calc_opts['rf_V'] = seq
@@ -4500,21 +4567,38 @@ class LossPlotsSetEditor(QtWidgets.QDialog):
 
         t = self.tableWidget
 
-        t.setRowCount(len(E_GeV_list) * len(rf_MV_list) * len(coupling_list) + 1)
         t.setColumnCount(4)
         self.iSel, self.iGeV, self.iVolt, self.iCoup = 0, 1, 2, 3
         t.setHorizontalHeaderItem(self.iSel, QTableWidgetItem('Plot'))
         t.setHorizontalHeaderItem(self.iGeV, QTableWidgetItem('E [GeV]'))
         t.setHorizontalHeaderItem(self.iVolt, QTableWidgetItem('V_RF [MV]'))
         t.setHorizontalHeaderItem(self.iCoup, QTableWidgetItem('Couplng'))
-        iRow = 0
+        #
         check_all_item = QTableWidgetItem('All')
         check_all_item.setFlags(check_all_item.flags() | Qt.ItemIsUserCheckable)
+        #
+        try:
+            iter(rf_MV_list[0])
+        except TypeError:
+            self.is_rf_MV_list_LoL = False
+        else:
+            self.is_rf_MV_list_LoL = True
+        #
+        if self.is_rf_MV_list_LoL:
+            t.setRowCount(sum([len(_v) for _v in rf_MV_list]) * len(coupling_list) + 1)
+        else:
+            t.setRowCount(len(E_GeV_list) * len(rf_MV_list) * len(coupling_list) + 1)
+        iRow = 0
         t.setItem(iRow, self.iSel, check_all_item)
         iRow += 1
         all_checked = True
         for iGeV, E_GeV in enumerate(E_GeV_list):
-            for iVolt, MV in enumerate(rf_MV_list):
+            if self.is_rf_MV_list_LoL:
+                rf_MV_1d = rf_MV_list[iGeV]
+            else:
+                rf_MV_1d = rf_MV_list
+            #
+            for iVolt, MV in enumerate(rf_MV_1d):
                 for iCoup, coupling in enumerate(coupling_list):
                     item = QTableWidgetItem()
                     item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
@@ -4538,6 +4622,7 @@ class LossPlotsSetEditor(QtWidgets.QDialog):
                     t.setItem(iRow, self.iCoup, item)
 
                     iRow += 1
+
 
         if all_checked:
             check_all_item.setCheckState(Qt.Checked)
@@ -4576,7 +4661,12 @@ class LossPlotsSetEditor(QtWidgets.QDialog):
 
         iRow = 1
         for iGeV, E_GeV in enumerate(E_GeV_list):
-            for iVolt, MV in enumerate(rf_MV_list):
+            if self.is_rf_MV_list_LoL:
+                rf_MV_1d = rf_MV_list[iGeV]
+            else:
+                rf_MV_1d = rf_MV_list
+            #
+            for iVolt, MV in enumerate(rf_MV_1d):
                 for iCoup, coupling in enumerate(coupling_list):
 
                     if t.item(iRow, self.iSel).checkState() == Qt.Checked:

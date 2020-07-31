@@ -9923,6 +9923,9 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
        <layout class="QVBoxLayout" name="verticalLayout_192">
         <item>
          <widget class="QTabWidget" name="tabWidget_rf_tau_opts">
+          <property name="toolTip">
+           <string/>
+          </property>
           <property name="currentIndex">
            <number>0</number>
           </property>
@@ -10025,6 +10028,9 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                     <width>16777215</width>
                     <height>16777215</height>
                    </size>
+                  </property>
+                  <property name="toolTip">
+                   <string>Valid examples: &quot;1.5, 2, 2.5&quot;, for single or multiple beam energies; &quot;[1, 1.5], [1.5, 2, 2.5]&quot; for 2 beam energies</string>
                   </property>
                   <property name="text">
                    <string>1.5, 2, 2.5, 3</string>
