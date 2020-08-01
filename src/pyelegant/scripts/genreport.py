@@ -2062,6 +2062,78 @@ class Report_NSLS2U_Default:
                                     row_list.append(plx.NoEscape(fr'\textbf{{{tau_hr:.2f}}}'))
                                 table.add_row(row_list)
 
+                    V_scan_pdf_filepath = os.path.join(
+                        self.report_folderpath, 'lifetime_V_scan.pdf')
+                    if os.path.exists(V_scan_pdf_filepath):
+
+                        doc.append(plx.ClearPage())
+
+                        page = 0
+
+                        with doc.create(plx.Figure(position='h!t')) as fig:
+
+                            doc.append(plx.NoEscape(r'\centering'))
+
+                            for caption in [
+                                r'Versus $V_{\mathrm{RF}}$',
+                                r'Versus Bucket Height',
+                                ]:
+
+                                page += 1
+                                with doc.create(plx.SubFigureForMultiPagePDF(
+                                    position='b', width=plx.utils.NoEscape(r'0.45\linewidth'))
+                                                ) as subfig:
+                                    subfig.add_image(
+                                        os.path.basename(V_scan_pdf_filepath), page=page,
+                                        width=plx.utils.NoEscape(r'\linewidth'))
+                                    doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                                    subfig.add_caption(plx.NoEscape(caption))
+
+                                doc.append(plx.HorizontalSpace(plx.NoEscape('+20pt')))
+
+                            doc.append(plx.NewLine())
+
+                        #doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                        fig.add_caption('Bunch Length vs. RF Voltage & Beam Energy')
+
+                        for iCoup, raw_coup_spec in enumerate(
+                            self.lifetime_props['raw_coupling_specs']):
+
+                            coupling_caption = (
+                                f'{raw_coup_spec[:-1]}\% Coupling'
+                                if raw_coup_spec.endswith('%')
+                                else fr'$\epsilon_y$ = {raw_coup_spec[:-2]} pm')
+
+                            with doc.create(plx.Figure(position='h!t')) as fig:
+
+                                doc.append(plx.NoEscape(r'\centering'))
+
+                                for caption in [
+                                    r'Versus $V_{\mathrm{RF}}$',
+                                    r'Versus Bucket Height',
+                                    ]:
+
+                                    page += 1
+                                    with doc.create(plx.SubFigureForMultiPagePDF(
+                                        position='b', width=plx.utils.NoEscape(r'0.45\linewidth'))
+                                                    ) as subfig:
+                                        subfig.add_image(
+                                            os.path.basename(V_scan_pdf_filepath), page=page,
+                                            width=plx.utils.NoEscape(r'\linewidth'))
+                                        doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                                        subfig.add_caption(plx.NoEscape(caption))
+
+                                    doc.append(plx.HorizontalSpace(plx.NoEscape('+20pt')))
+
+                                doc.append(plx.NewLine())
+
+                            #doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
+                            fig.add_caption(plx.NoEscape(
+                                'Beam Lifetime vs. RF Voltage \& Beam Energy (' +
+                                coupling_caption + ')'))
+
+                        doc.append(plx.ClearPage())
+
                     plot_meta_filepath = os.path.join(self.report_folderpath,
                                                       'lifetime_plots.pgz')
 
@@ -7537,6 +7609,203 @@ class Report_NSLS2U_Default:
 
         return rf_bucket_heights_percents
 
+    def scan_V_tau(
+        self, rf_volt_ranges, v_scan_npts, ntasks, E_MeV_list, eps_0_list,
+        total_beam_current_mA_list, U0_ev_list, sigma_delta_list, T_rev_s,
+        num_filled_bunches, raw_coupling_specs, alphac, circumf, LTE_filepath, h,
+        mmap_sdds_filepath_ring, max_mom_aper_percent, use_beamline_ring):
+        """"""
+
+        c = scipy.constants.c
+
+        if ntasks == 0: # Run locally
+
+            output_filepath = os.path.join(
+                self.report_folderpath, 'pre_scan_lifetime.pgz')
+
+            rf_Vs_LoL, sigma_z_ps_LoL = [], []
+            bucket_heights_percent_LoL, taus_LoL = [], []
+            coupling_percent_str_LoL, eps_y_str_LoL = [], []
+            for iEnergy, (E_MeV, eps_0, total_beam_current_mA, U0_eV,
+                          sigma_delta) in enumerate(
+                    zip(E_MeV_list, eps_0_list, total_beam_current_mA_list,
+                        U0_ev_list, sigma_delta_list)):
+
+                total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
+                charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
+                charge_C = charge_per_bunch_nC * 1e-9
+
+                eps_ys = []
+                for s in raw_coupling_specs:
+                    if s.endswith('pm'):
+                        ey_pm = float(s[:-2].strip())
+                        eps_ys.append(ey_pm * 1e-12)
+                    elif s.endswith('%'):
+                        kappa = float(s[:-1].strip()) * 1e-2
+                        eps_ys.append(kappa / (1+kappa) * eps_0)
+                    else:
+                        raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
+                                          'must end with either "pm" or "%"'))
+                eps_ys = np.array(eps_ys) # [m-rad]
+                coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
+                # used in ELEGANT's "touschekLifetime" function.
+
+                rf_Vs_list, sigma_z_ps_list = [], []
+                bucket_heights_percent_list, taus_list = [], []
+                coupling_percent_str_list, eps_y_str_list = [], []
+                for emit_ratio, ey in zip(coupling, eps_ys):
+                    coupling_percent_str_list.append(f'{emit_ratio * 1e2:.1f}%')
+                    eps_y_str_list.append(f'{ey * 1e12:.1f}pm')
+                    min_rf_V = rf_volt_ranges[iEnergy]['min']
+                    max_rf_V = rf_volt_ranges[iEnergy]['max']
+                    #rf_v_array = np.arange(min_rf_V, max_rf_V, min_rf_V_step)
+                    #if rf_v_array[-1] != max_rf_V:
+                        #rf_v_array = np.append(rf_v_array, max_rf_V)
+                    rf_v_array = np.linspace(min_rf_V, max_rf_V, v_scan_npts)
+
+                    rf_Vs_list.append(rf_v_array)
+
+                    # Synchronous Phase
+                    synch_phases_deg = np.rad2deg(np.pi - np.arcsin(U0_eV / rf_v_array))
+                    # Synchrotron Tune
+                    nu_s = np.sqrt(
+                        -rf_v_array / (E_MeV * 1e6) * np.cos(np.deg2rad(synch_phases_deg))
+                        * alphac * h / (2 * np.pi))
+                    # Bunch Length
+                    sigma_z_m = alphac * sigma_delta * circumf / (2 * np.pi * nu_s) # [m]
+                    sigma_z_ps = sigma_z_m / c * 1e12 # [ps]
+                    sigma_z_ps_list.append(sigma_z_ps)
+
+                    bucket_heights_percent = self.calc_rf_bucket_heights(
+                        E_MeV / 1e3, alphac, U0_eV, h, rf_v_array)
+                    bucket_heights_percent_list.append(bucket_heights_percent)
+
+                    tau_hrs = []
+                    for RFvolt in rf_v_array:
+                        pe.nonlin.calc_Touschek_lifetime(
+                            output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
+                            charge_C, emit_ratio, RFvolt, h,
+                            max_mom_aper_percent=max_mom_aper_percent,
+                            ignoreMismatch=True, use_beamline=use_beamline_ring,
+                            del_tmp_files=True)
+
+                        d = pe.util.load_pgz_file(output_filepath)
+                        tau_hrs.append(d['data']['life']['scalars']['tLifetime'])
+                    taus_list.append(tau_hrs)
+
+                rf_Vs_LoL.append(rf_Vs_list)
+                sigma_z_ps_LoL.append(sigma_z_ps_list)
+                bucket_heights_percent_LoL.append(bucket_heights_percent_list)
+                taus_LoL.append(taus_list)
+                coupling_percent_str_LoL.append(coupling_percent_str_list)
+                eps_y_str_LoL.append(eps_y_str_list)
+
+        else:
+
+            rfV_EMeV_C_kappa_list = []
+            rf_Vs_LoL, sigma_z_ps_LoL, bucket_heights_percent_LoL = [], [], []
+            coupling_percent_str_LoL, eps_y_str_LoL = [], []
+            for iEnergy, (E_MeV, eps_0, total_beam_current_mA, U0_eV,
+                          sigma_delta) in enumerate(
+                    zip(E_MeV_list, eps_0_list, total_beam_current_mA_list,
+                        U0_ev_list, sigma_delta_list)):
+
+                total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
+                charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
+                charge_C = charge_per_bunch_nC * 1e-9
+
+                eps_ys = []
+                for s in raw_coupling_specs:
+                    if s.endswith('pm'):
+                        ey_pm = float(s[:-2].strip())
+                        eps_ys.append(ey_pm * 1e-12)
+                    elif s.endswith('%'):
+                        kappa = float(s[:-1].strip()) * 1e-2
+                        eps_ys.append(kappa / (1+kappa) * eps_0)
+                    else:
+                        raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
+                                          'must end with either "pm" or "%"'))
+                eps_ys = np.array(eps_ys) # [m-rad]
+                coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
+                # used in ELEGANT's "touschekLifetime" function.
+
+                rf_Vs_list, sigma_z_ps_list, bucket_heights_percent_list = [], [], []
+                coupling_percent_str_list, eps_y_str_list = [], []
+                for emit_ratio, ey in zip(coupling, eps_ys):
+                    coupling_percent_str_list.append(f'{emit_ratio * 1e2:.1f}%')
+                    eps_y_str_list.append(f'{ey * 1e12:.1f}pm')
+                    min_rf_V = rf_volt_ranges[iEnergy]['min']
+                    max_rf_V = rf_volt_ranges[iEnergy]['max']
+                    rf_v_array = np.linspace(min_rf_V, max_rf_V, v_scan_npts)
+
+                    rf_Vs_list.append(rf_v_array)
+
+                    # Synchronous Phase
+                    synch_phases_deg = np.rad2deg(np.pi - np.arcsin(U0_eV / rf_v_array))
+                    # Synchrotron Tune
+                    nu_s = np.sqrt(
+                        -rf_v_array / (E_MeV * 1e6) * np.cos(np.deg2rad(synch_phases_deg))
+                        * alphac * h / (2 * np.pi))
+                    # Bunch Length
+                    sigma_z_m = alphac * sigma_delta * circumf / (2 * np.pi * nu_s) # [m]
+                    sigma_z_ps = sigma_z_m / c * 1e12 # [ps]
+                    sigma_z_ps_list.append(sigma_z_ps)
+
+                    bucket_heights_percent = self.calc_rf_bucket_heights(
+                        E_MeV / 1e3, alphac, U0_eV, h, rf_v_array)
+                    bucket_heights_percent_list.append(bucket_heights_percent)
+
+                    for RFvolt in rf_v_array:
+                        rfV_EMeV_C_kappa_list.append(
+                            (RFvolt, E_MeV, charge_C, emit_ratio))
+
+                rf_Vs_LoL.append(rf_Vs_list)
+                sigma_z_ps_LoL.append(sigma_z_ps_list)
+                bucket_heights_percent_LoL.append(bucket_heights_percent_list)
+                coupling_percent_str_LoL.append(coupling_percent_str_list)
+                eps_y_str_LoL.append(eps_y_str_list)
+
+            ncases = len(rfV_EMeV_C_kappa_list)
+            est_comp_seconds = ncases / ntasks * 10.0 # assuming 10 sec to compute each case
+            sec = datetime.timedelta(seconds=est_comp_seconds * 3) # Give margin of a factor of 3
+            dobj = datetime.datetime(1,1,1) + sec
+            if dobj.day - 1 != 0:
+                timelimit_str = '{:d}-'.format(dobj.day - 1)
+            else:
+                timelimit_str = ''
+            timelimit_str += '{:02d}:{:02d}:{:02d}'.format(
+                dobj.hour, dobj.minute, dobj.second)
+
+            remote_opts = dict(ntasks=ntasks, partition='short',
+                               time=timelimit_str, job_name='lifetime')
+
+            module_name = 'pyelegant.scripts.genreport'
+            func_name = 'get_ELE_Touschek_lifetime'
+            flat_results = pe.remote.run_mpi_python(
+                remote_opts, module_name, func_name, rfV_EMeV_C_kappa_list,
+                (LTE_filepath, mmap_sdds_filepath_ring, h, max_mom_aper_percent,
+                 use_beamline_ring),
+            )
+
+            counter = 0
+            taus_LoL = []
+            for E_MeV in E_MeV_list:
+                taus_list = []
+                for emit_ratio in coupling:
+                    tau_hrs = []
+                    for RFvolt in rf_v_array:
+                        tau_hrs.append(flat_results[counter])
+                        counter += 1
+                    taus_list.append(tau_hrs)
+                taus_LoL.append(taus_list)
+
+        return dict(
+            rf_V=rf_Vs_LoL, sigma_z_ps=sigma_z_ps_LoL,
+            bucket_height_percent=bucket_heights_percent_LoL,
+            tau=taus_LoL, coupling_percent_str=coupling_percent_str_LoL,
+            eps_y_str=eps_y_str_LoL,
+        )
+
     def calc_lifetime_props(self, recalc):
         """"""
 
@@ -8347,6 +8616,52 @@ class Report_NSLS2U_Default:
                     touscheck_Fvals_1c_plus_list=touscheck_Fvals_1c_plus_list,
                 )
 
+                if 'V_scan' in calc_opts:
+                    scan_opts = calc_opts['V_scan']
+
+                    min_height_percent = scan_opts['min_bucket_height_percent']
+                    max_height_percent = scan_opts['max_bucket_height_percent']
+                    if min_height_percent <= 0.0:
+                        raise ValueError(
+                            ('Invalid min RF bucket height. Min RF bucket height '
+                             'must be positive.'))
+                    if min_height_percent ==  max_height_percent:
+                        raise ValueError(
+                            ('Invalid min/max RF bucket heights. Min and max RF '
+                             'bucket height must be different.'))
+                    elif min_height_percent >  max_height_percent:
+                        raise ValueError(
+                            ('Invalid min/max RF bucket heights. Min RF bucket '
+                             'height cannot be smaller than max RF bucket height.'))
+
+                         #'nVolts': 51, 'ntasks': 50})
+
+                    ntasks = scan_opts['ntasks']
+                    v_scan_npts = scan_opts['nVolts']
+
+                    min_rf_V_step = 0.01e6
+
+                    rf_volt_ranges = self.calc_rf_volt_range_from_bucket_height_range(
+                        min_height_percent, max_height_percent, min_rf_V_step)
+
+                    req_d = self.req_data_for_calc['rf_dep_props']
+                    #
+                    alphac = req_d['alphac'] # momentum compaction
+                    U0_ev_list = [req_d['U0_eV']] # energy loss per turn [eV]
+                    sigma_delta_list = [req_d['sigma_delta_percent'] * 1e-2] # energy spread [frac]
+                    for _d in req_d['extra_Es']:
+                        U0_ev_list.append(_d['U0_eV'])
+                        sigma_delta_list.append(_d['sigma_delta_percent'] * 1e-2)
+
+                    V_scan_LoLs = self.scan_V_tau(
+                        rf_volt_ranges, v_scan_npts, ntasks, E_MeV_list,
+                        eps_0_list, total_beam_current_mA_list, U0_ev_list,
+                        sigma_delta_list, T_rev_s, num_filled_bunches,
+                        raw_coupling_specs, alphac, circumf, LTE_filepath, h,
+                        mmap_sdds_filepath_ring, max_mom_aper_percent,
+                        use_beamline_ring)
+
+                    self.lifetime_props['V_scan_LoLs'] = V_scan_LoLs
 
             pe.util.robust_pgz_file_write(
                 output_filepath, self.lifetime_props, nMaxTry=10, sleep=10.0)
@@ -8359,11 +8674,140 @@ class Report_NSLS2U_Default:
     def plot_lifetime_props(self, replot):
         """"""
 
+        output_filepath = os.path.join(self.report_folderpath, 'lifetime.pgz')
+
+        if not os.path.exists(output_filepath):
+            print('No calculation result file for lifetime exists. Skipping plots.')
+            return
+
+        self.lifetime_props = pe.util.load_pgz_file(output_filepath)
+
         report_folderpath = self.report_folderpath
         lifetime_pdf_filepath = os.path.join(report_folderpath, 'lifetime.pdf')
+        if self._version not in ('1.0', '1.1'):
+            V_scan_pdf_filepath = os.path.join(
+                report_folderpath, 'lifetime_V_scan.pdf')
+            if Path(lifetime_pdf_filepath).exists() and \
+               Path(V_scan_pdf_filepath).exists() and (not replot):
+                return
 
-        if Path(lifetime_pdf_filepath).exists() and (not replot):
-            return
+            raw_coupling_specs = self.lifetime_props['raw_coupling_specs']
+            E_MeV_list = self.lifetime_props['E_MeV_list']
+            #
+            LoLs = self.lifetime_props['V_scan_LoLs']
+            rf_Vs_LoL = LoLs['rf_V']
+            bucket_heights_percent_LoL = LoLs['bucket_height_percent']
+            taus_LoL = LoLs['tau']
+            coupling_percent_str_LoL = LoLs['coupling_percent_str']
+            eps_y_str_LoL = LoLs['eps_y_str']
+            sigma_z_ps_LoL = LoLs['sigma_z_ps']
+
+            existing_fignums = plt.get_fignums()
+
+            fig1sigz, ax1sigz = plt.subplots()
+            plt.xlabel(r'$\mathrm{RF\, Voltage\, [MV]}$', size=18)
+            fig2sigz, ax2sigz = plt.subplots()
+            plt.xlabel(r'$\mathrm{RF\, Bucket\, Height\, [\%]}$', size=18)
+
+            figs, axs = [], []
+            for _ in raw_coupling_specs:
+                fig1, ax1tau = plt.subplots()
+                plt.xlabel(r'$\mathrm{RF\, Voltage\, [MV]}$', size=18)
+                fig2, ax2tau = plt.subplots()
+                plt.xlabel(r'$\mathrm{RF\, Bucket\, Height\, [\%]}$', size=18)
+                figs.append({'MV': fig1, '%': fig2})
+                axs.append({'tau_MV': ax1tau, 'tau_%': ax2tau})
+
+            table_tau_hrs_LoL = self.lifetime_props['tau_hrs_list']
+            table_rf_Vs_list = self.rf_dep_props['rf_volts']
+            table_rf_bucket_heights_percent_list = \
+                self.rf_dep_props['rf_bucket_heights_percent_list']
+            table_sigma_z_ps_list = self.rf_dep_props['sigma_z_ps_list']
+
+            lw = 1
+            ms = 2
+            table_ms = 5
+
+            for iEnergy, (E_MeV, rf_Vs_list, bucket_heights_percent_list, taus_list,
+                 coupling_percent_str_list, eps_y_str_list, sigma_z_ps_list,
+                 table_taus_list, table_rf_Vs, table_rf_bucket_heights_percent,
+                 table_sigma_z_ps,
+                 ) in enumerate(zip(
+                     E_MeV_list, rf_Vs_LoL, bucket_heights_percent_LoL, taus_LoL,
+                     coupling_percent_str_LoL, eps_y_str_LoL, sigma_z_ps_LoL,
+                     table_tau_hrs_LoL, table_rf_Vs_list,
+                     table_rf_bucket_heights_percent_list, table_sigma_z_ps_list)):
+
+                for iCoup, (rf_Vs, bucket_heights_percent, tau_hrs,
+                            coupling_percent_str, eps_y_str, sigma_zs_ps,
+                            table_tau_hrs) in enumerate(zip(
+                        rf_Vs_list, bucket_heights_percent_list, taus_list,
+                        coupling_percent_str_list, eps_y_str_list, sigma_z_ps_list,
+                        table_taus_list)):
+
+                    if iCoup == 0: # Bunchlength does not change with coupling
+                        label = f'$\mathrm{{{E_MeV/1e3:.1f}\, GeV}}$'
+                        h1, = ax1sigz.plot(
+                            rf_Vs/1e6, sigma_zs_ps, '.-', lw=lw, ms=ms,
+                            label=label)
+                        h2, = ax2sigz.plot(
+                            bucket_heights_percent, sigma_zs_ps, '.-', lw=lw,
+                            ms=ms, label=label)
+                        ax1sigz.plot(table_rf_Vs/1e6, table_sigma_z_ps, 'o',
+                                     color=h1.get_color(), ms=table_ms)
+                        ax2sigz.plot(
+                            table_rf_bucket_heights_percent, table_sigma_z_ps,
+                            'o', color=h1.get_color(), ms=table_ms)
+
+                    ax1, ax2 = axs[iCoup]['tau_MV'], axs[iCoup]['tau_%']
+                    label = (f'{E_MeV/1e3:.1f} GeV; '
+                             f'({coupling_percent_str}/{eps_y_str}) Coup.')
+                    label = r'$\mathrm{' + \
+                        label.replace('%', r'\%').replace(' ', r'\, ') + '}$'
+                    h1, = ax1.plot(rf_Vs/1e6, tau_hrs, '.-', lw=lw, ms=ms,
+                                   label=label)
+                    h2, = ax2.plot(bucket_heights_percent, tau_hrs, '.-', lw=lw,
+                                   ms=ms, label=label)
+                    ax1.plot(table_rf_Vs/1e6, table_tau_hrs, 'o',
+                             color=h1.get_color(), ms=table_ms)
+                    ax2.plot(table_rf_bucket_heights_percent, table_tau_hrs, 'o',
+                             color=h2.get_color(), ms=table_ms)
+
+            for ax_d in axs:
+                for ax in [ax_d['tau_MV'], ax_d['tau_%']]:
+                    plt.sca(ax)
+                    plt.ylabel(r'$\tau\, \mathrm{[hr]}$', size=18)
+                    plt.legend(loc='best', prop=dict(size=16))
+                    plt.tight_layout()
+            for ax in [ax1sigz, ax2sigz]:
+                plt.sca(ax)
+                plt.ylabel(r'$\sigma_z\, \mathrm{[ps]}$', size=18)
+                plt.legend(loc='best', prop=dict(size=16))
+                plt.tight_layout()
+
+
+            pp = PdfPages(V_scan_pdf_filepath)
+            page = 0
+            fignums_to_delete = []
+            for fignum in plt.get_fignums():
+                if fignum not in existing_fignums:
+                    pp.savefig(figure=fignum)
+                    #plt.savefig(os.path.join(
+                        #report_folderpath, f'lifetime_V_scan_{page:d}.svg'))
+                    plt.savefig(os.path.join(
+                        report_folderpath, f'lifetime_V_scan_{page:d}.png'),
+                                dpi=200)
+                    page += 1
+                    fignums_to_delete.append(fignum)
+
+            for fignum in fignums_to_delete:
+                plt.close(fignum)
+
+            pp.close()
+
+        else:
+            if Path(lifetime_pdf_filepath).exists() and (not replot):
+                return
 
         if 'plot_opts' not in self.conf['lifetime']:
             return
@@ -8376,13 +8820,6 @@ class Report_NSLS2U_Default:
         if loss_plots_indexes is None:
             return
 
-        output_filepath = os.path.join(self.report_folderpath, 'lifetime.pgz')
-
-        if not os.path.exists(output_filepath):
-            print('No calculation result file for lifetime exists. Skipping plots.')
-            return
-
-        self.lifetime_props = pe.util.load_pgz_file(output_filepath)
 
         slim = [0.0,
                 self.lin_data['circumf'] / self.lin_data['n_periods_in_ring']]
@@ -8419,9 +8856,6 @@ class Report_NSLS2U_Default:
         pp.close()
 
         #plt.show()
-
-        for fignum in fignums_to_delete:
-            plt.close(fignum)
 
         plot_meta_filepath = os.path.join(self.report_folderpath,
                                           'lifetime_plots.pgz')
@@ -8539,6 +8973,13 @@ class Report_NSLS2U_Default:
             # auto-upgrade function.
             test['soft_failure'] = False
 
+            if 'lifetime' in conf:
+                if 'calc_opts' in conf['lifetime']:
+                    conf['lifetime']['calc_opts']['V_scan'] = yaml.comments.CommentedMap(
+                        {'min_bucket_height_percent': 1.0,
+                         'max_bucket_height_percent': 6.0,
+                         'nVolts': 51, 'ntasks': 50})
+
         elif conf['report_version'] == '1.2':
             pass # Latest version. No need to upgrade.
 
@@ -8557,6 +8998,9 @@ class Report_NSLS2U_Default:
         conf['report_version'] = sqss('1.2')
         self._version = '1.2'
 
+        com_map = yaml.comments.CommentedMap
+        com_seq = yaml.comments.CommentedSeq
+
         # This variable is added to ensure that your LTE is set up properly
         # such that "mom_aper" calculation does NOT end up computing the whole
         # ring, when it is only necessary to compute only in the super-cell.
@@ -8568,6 +9012,12 @@ class Report_NSLS2U_Default:
         test = conf['nonlin']['calc_opts']['mom_aper']['test']
         test['forbid_resonance_crossing'] = True
         test['soft_failure'] = False
+
+        # Add RF voltage scan for beam lifetime & bunch length
+        conf['lifetime']['calc_opts']['V_scan'] = com_map(
+            {'min_bucket_height_percent': 1.0,
+             'max_bucket_height_percent': 6.0,
+             'nVolts': 51, 'ntasks': 50})
 
         return conf
 
@@ -8639,8 +9089,7 @@ class Report_NSLS2U_Default:
             conf.insert(i, 'rf', rf)
             del conf['rf_dep_calc_opts']
         else:
-            if example:
-                _yaml_append_map(conf, 'rf', rf)
+            _yaml_append_map(conf, 'rf', rf)
 
         # Modify "lifetime_calc_opts" to "lifetime" and add "plot_opts" & "include"
         total_beam_current_mA = com_seq([5e2])
@@ -8667,8 +9116,7 @@ class Report_NSLS2U_Default:
             conf.insert(i, 'lifetime', lifetime)
             del conf['lifetime_calc_opts']
         else:
-            if example:
-                _yaml_append_map(conf, 'lifetime', lifetime)
+            _yaml_append_map(conf, 'lifetime', lifetime)
 
         return conf
 
