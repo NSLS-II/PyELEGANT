@@ -4422,6 +4422,35 @@ class PageRfTau(PageGenReport):
                 self.setField('edit_coupling_list', conv(
                     calc_opts.get('coupling', ['8pm', '100%'])))
 
+                if 'V_scan' not in calc_opts:
+                    scan_opts = dict(min_bucket_height_percent=1.0,
+                                     max_bucket_height_percent=6.0,
+                                     nVolts=51, ntasks=50)
+                else:
+                    scan_opts = calc_opts['V_scan']
+                #
+                conv_type = self.setter_getter['rf']['bucket_height_min']
+                conv = self.converters[conv_type]['set']
+                self.setField(
+                    'edit_bucket_height_min',
+                    conv(scan_opts.get('min_bucket_height_percent', 1.0)))
+                #
+                conv_type = self.setter_getter['rf']['bucket_height_max']
+                conv = self.converters[conv_type]['set']
+                self.setField(
+                    'edit_bucket_height_max',
+                    conv(scan_opts.get('max_bucket_height_percent', 6.0)))
+                #
+                conv_type = self.setter_getter['rf']['v_scan_npts']
+                conv = self.converters[conv_type]['set']
+                self.setField(
+                    'spin_v_scan_npts', conv(scan_opts.get('nVolts', 51)))
+                #
+                conv_type = self.setter_getter['rf']['ntasks_rf_tau']
+                conv = self.converters[conv_type]['set']
+                self.setField(
+                    'spin_ntasks_rf_tau', conv(scan_opts.get('ntasks', 50)))
+
             if 'plot_opts' in lifetime:
                 plot_opts = lifetime['plot_opts']
                 loss_plots_indexes = plot_opts.get(
@@ -4649,6 +4678,31 @@ class PageRfTau(PageGenReport):
             seq = CommentedSeq(v)
             seq.fa.set_flow_style()
             calc_opts['coupling'] = seq
+
+            # Modify conf['lifetime']['calc_opts']['V_scan']
+            if 'V_scan' not in calc_opts:
+                yaml_append_map(calc_opts, 'V_scan', CommentedMap({}))
+            #
+            scan_opts = calc_opts['V_scan']
+            #
+            conv_type = self.setter_getter['rf']['bucket_height_min']
+            conv = self.converters[conv_type]['get']
+            scan_opts['min_bucket_height_percent'] = conv(
+                self.field('edit_bucket_height_min'))
+            #
+            conv_type = self.setter_getter['rf']['bucket_height_max']
+            conv = self.converters[conv_type]['get']
+            scan_opts['max_bucket_height_percent'] = conv(
+                self.field('edit_bucket_height_max'))
+            #
+            conv_type = self.setter_getter['rf']['v_scan_npts']
+            conv = self.converters[conv_type]['get']
+            scan_opts['nVolts'] = conv(self.field('spin_v_scan_npts'))
+            #
+            conv_type = self.setter_getter['rf']['ntasks_rf_tau']
+            conv = self.converters[conv_type]['get']
+            scan_opts['ntasks'] = conv(self.field('spin_ntasks_rf_tau'))
+
 
             conv_type = self.setter_getter['tau_plot']['tau_plot_include']
             conv = self.converters[conv_type]['get']
