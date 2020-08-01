@@ -4547,6 +4547,61 @@ class Report_NSLS2U_Default:
                             v, wb_num_fmts['0.00'])
                         col_elegant_bunchlengths_mm += 1
 
+
+                V_scan_pdf_filepath = os.path.join(
+                    self.report_folderpath, 'lifetime_V_scan.pdf')
+                if os.path.exists(V_scan_pdf_filepath):
+                    row += 2
+                    img_height = 26
+
+                    iFig = 0
+
+                    for caption_args in [
+                        [normal, 'Bunch Length vs. RF Voltage & Beam Energy'],
+                        [normal, 'Bunch Length vs. RF Bucket Height & Beam Energy'],
+                        ]:
+                        fp = Path(self.report_folderpath).joinpath(
+                            f'lifetime_V_scan_{iFig:d}.png')
+
+                        ws.write(row, 0, *caption_args[::-1])
+                        row += 1
+
+                        ws.insert_image(row, 0, fp)
+                        row += img_height
+
+                        iFig += 1
+
+                    common_caption_args = [
+                        [normal, 'Beam Lifetime vs. RF Voltage & Beam Energy'],
+                        [normal, 'Beam Lifetime vs. RF Bucket Height & Beam Energy'],
+                    ]
+
+                    for iCoup, raw_coup_spec in enumerate(
+                        self.lifetime_props['raw_coupling_specs']):
+
+                        if raw_coup_spec.endswith('%'):
+                            coupling_caption_args = [
+                                normal, f' ({raw_coup_spec} Coupling)']
+                        else:
+                            coupling_caption_args = [
+                                normal, ' (', italic, GREEK['epsilon'],
+                                italic_sub, 'y', normal,
+                                f' = {raw_coup_spec[:-2]} pm)']
+
+                        for comm_args in common_caption_args:
+                            fp = Path(self.report_folderpath).joinpath(
+                                f'lifetime_V_scan_{iFig:d}.png')
+
+                            ws.write_rich_string(
+                                row, 0, *(comm_args + coupling_caption_args))
+                            row += 1
+
+                            ws.insert_image(row, 0, fp)
+                            row += img_height
+
+                            iFig += 1
+
+
                 plot_meta_filepath = os.path.join(self.report_folderpath,
                                                   'lifetime_plots.pgz')
                 if not os.path.exists(plot_meta_filepath):
