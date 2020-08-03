@@ -1,0 +1,186 @@
+# --- Notes on the manual installation sequence ---
+# $ module load elegant-latest
+# $ conda create -n pyelegant-0.6 python=3.7 jupyter numpy scipy matplotlib h5py scikit-learn cython numba jupytext jupyter_contrib_nbextensions dill deap plotly pandas pytorch -c conda-forge --no-default-packages
+# # ^ This installed Python 3.7.6 on 02/12/2020. PyTorch 1.3.1 pulled from defaults channel, along with "_pytorch_select", "cudatoolkit", "cudnn".
+# (env) $ conda install ruamel.yaml -c conda-forge [v0.16.6 installed to be compatible with YAML 1.2 as of 03/05/2020 to avoid the PyYAML 5.3 (YAML 1.1) bug of not correctly handling scientific notation]
+# (env) $ conda install yapf -c conda-forge [v0.29.0 installed on 03/10/2020]
+# (env) $ conda install xlsxwriter -c conda-forge [v1.2.8 installed on 04/09/2020]
+# (env) $ conda install pillow -c conda-forge [v7.1.1 installed on 04/10/2020]
+# (env) $ conda install qtpy pyqtgraph -c conda-forge [v1.9.0, v0.11.0rc0, respectively, installed on 04/21/2020] (This also installed QT Designer at <env>/bin/designer)
+# (env) $ rm -r ~/.cache/pip
+# (env) $ pip install mpi4py [installed 3.0.3 on 02/12/2020]
+# (env) $ pip install pylatex [installed 1.3.1 on 02/12/2020]
+# (env) $ pip install pylatex[quantities] [installed quantities-0.12.4 on 02/12/20]
+# # ^ To be able to use "pylatex", I needed TeX Live and "texlive-latex-extra" (without the latter, I was getting the error message saying "! LaTeX Error: File `lastpage.sty' not found.")  installed on the cluster by D. Hidas.
+# (env) $ cd git_repos/pyelegant
+# (env) $ python setup.py install --facility-name=nsls2apcluster
+# --- Notes on how this environment was exported into this YAML file.
+# $ conda env export --no-builds -n pyelegant-0.6 > pyelegant-0.6-apcpu.yaml
+# --- Notes on how this environment can be reproduced from this YAML file.
+# $ rm -r ~/.cache/pip
+# $ conda env create -f pyelegant-0.6-apcpu.yaml -n test_env
+name: pyelegant
+channels:
+  - https://conda.anaconda.org/conda-forge
+  - https://repo.anaconda.com/pkgs/main
+dependencies:
+  - _libgcc_mutex=0.1
+  - _openmp_mutex=4.5
+  - _pytorch_select=0.2
+  - attrs=19.3.0
+  - backcall=0.1.0
+  - blas=1.0
+  - bleach=3.1.0
+  - ca-certificates=2020.4.5.1
+  - certifi=2020.4.5.1
+  - cffi=1.13.2
+  - cudatoolkit=10.0.130
+  - cudnn=7.6.5
+  - cycler=0.10.0
+  - cython=0.29.15
+  - dbus=1.13.6
+  - deap=1.3.1
+  - decorator=4.4.1
+  - defusedxml=0.6.0
+  - dill=0.3.1.1
+  - entrypoints=0.3
+  - expat=2.2.9
+  - fontconfig=2.13.1
+  - freetype=2.10.0
+  - gettext=0.19.8.1
+  - glib=2.58.3
+  - gst-plugins-base=1.14.5
+  - gstreamer=1.14.5
+  - h5py=2.10.0
+  - hdf5=1.10.5
+  - icu=64.2
+  - importlib_metadata=1.5.0
+  - ipykernel=5.1.4
+  - ipython=7.12.0
+  - ipython_genutils=0.2.0
+  - ipywidgets=7.5.1
+  - jedi=0.16.0
+  - jinja2=2.11.1
+  - joblib=0.14.1
+  - jpeg=9c
+  - jsonschema=3.2.0
+  - jupyter=1.0.0
+  - jupyter_client=5.3.4
+  - jupyter_console=6.0.0
+  - jupyter_contrib_core=0.3.3
+  - jupyter_contrib_nbextensions=0.5.1
+  - jupyter_core=4.6.2
+  - jupyter_highlight_selected_word=0.2.0
+  - jupyter_latex_envs=1.4.4
+  - jupyter_nbextensions_configurator=0.4.1
+  - jupytext=1.3.3
+  - kiwisolver=1.1.0
+  - ld_impl_linux-64=2.33.1
+  - libblas=3.8.0
+  - libcblas=3.8.0
+  - libclang=9.0.1
+  - libffi=3.2.1
+  - libgcc-ng=9.2.0
+  - libgfortran-ng=7.3.0
+  - libiconv=1.15
+  - liblapack=3.8.0
+  - libllvm8=8.0.1
+  - libllvm9=9.0.1
+  - libpng=1.6.37
+  - libsodium=1.0.17
+  - libstdcxx-ng=9.2.0
+  - libtiff=4.1.0
+  - libuuid=2.32.1
+  - libwebp-base=1.1.0
+  - libxcb=1.13
+  - libxkbcommon=0.10.0
+  - libxml2=2.9.10
+  - libxslt=1.1.33
+  - llvm-openmp=9.0.1
+  - llvmlite=0.31.0
+  - lxml=4.5.0
+  - lz4-c=1.8.3
+  - markupsafe=1.1.1
+  - matplotlib=3.1.3
+  - matplotlib-base=3.1.3
+  - mistune=0.8.4
+  - mkl=2019.5
+  - mkl-service=2.3.0
+  - nbconvert=5.6.1
+  - nbformat=5.0.4
+  - ncurses=6.1
+  - ninja=1.10.0
+  - notebook=6.0.3
+  - nspr=4.25
+  - nss=3.47
+  - numba=0.48.0
+  - numpy=1.18.1
+  - olefile=0.46
+  - openssl=1.1.1f
+  - pandas=1.0.1
+  - pandoc=2.9.1.1
+  - pandocfilters=1.4.2
+  - parso=0.6.1
+  - pcre=8.43
+  - pexpect=4.8.0
+  - pickleshare=0.7.5
+  - pillow=7.1.1
+  - pip=20.0.2
+  - plotly=4.5.0
+  - prometheus_client=0.7.1
+  - prompt_toolkit=2.0.10
+  - pthread-stubs=0.4
+  - ptyprocess=0.6.0
+  - pycparser=2.19
+  - pygments=2.5.2
+  - pyparsing=2.4.6
+  - pyqt=5.12.3
+  - pyqtgraph=0.11.0rc0
+  - pyrsistent=0.15.7
+  - python=3.7.6
+  - python-dateutil=2.8.1
+  - python_abi=3.7
+  - pytorch=1.3.1
+  - pytz=2019.3
+  - pyyaml=5.3
+  - pyzmq=18.1.1
+  - qt=5.12.5
+  - qtconsole=4.6.0
+  - qtpy=1.9.0
+  - readline=8.0
+  - retrying=1.3.3
+  - ruamel.yaml=0.16.6
+  - ruamel.yaml.clib=0.2.0
+  - scikit-learn=0.22.1
+  - scipy=1.4.1
+  - send2trash=1.5.0
+  - setuptools=45.2.0
+  - six=1.14.0
+  - sqlite=3.30.1
+  - terminado=0.8.3
+  - testpath=0.4.4
+  - tk=8.6.10
+  - tornado=6.0.3
+  - traitlets=4.3.3
+  - wcwidth=0.1.8
+  - webencodings=0.5.1
+  - wheel=0.34.2
+  - widgetsnbextension=3.5.1
+  - xlsxwriter=1.2.8
+  - xorg-libxau=1.0.9
+  - xorg-libxdmcp=1.1.3
+  - xz=5.2.4
+  - yaml=0.2.2
+  - yapf=0.29.0
+  - zeromq=4.3.2
+  - zipp=2.2.0
+  - zlib=1.2.11
+  - zstd=1.4.4
+  - pip:
+    - mpi4py==3.0.3
+    - ordered-set==3.1.1
+    - pylatex==1.3.1
+    - pyqt5-sip==4.19.18
+    - pyqtwebengine==5.12.1
+    - quantities==0.12.4
+    - git+http://git@gitlab.cs.nsls2.local/yhidaka/pyelegant.git@v0.6.0 --install-option="--facility-name=nsls2apcluster"
