@@ -444,7 +444,10 @@ def sdds2dicts(sdds_filepath, str_format=''):
     return output, meta
 
 def dicts2sdds(
-    sdds_output_pathobj, params=None, columns=None, outputMode='ascii',
+    sdds_output_pathobj, params=None, columns=None,
+    params_units=None, columns_units=None, params_descr=None, columns_descr=None,
+    params_symbols=None, columns_symbols=None,
+    params_counts=None, columns_counts=None, outputMode='ascii',
     tempdir_path: Optional[str] = None, suppress_err_msg=True):
     """"""
 
@@ -463,11 +466,30 @@ def dicts2sdds(
         param_name_list = []
         param_type_list = []
 
+        param_unit_list = None
+        param_descr_list = None
+        param_symbol_list = None
+        param_count_list = None
+
     else:
 
         param_name_list = list(params)
 
         param_type_list = []
+
+        param_unit_list = []
+        param_descr_list = []
+        param_symbol_list = []
+        param_count_list = []
+
+        if params_units is None:
+            params_units = {}
+        if params_descr is None:
+            params_descr = {}
+        if params_symbols is None:
+            params_symbols = {}
+        if params_counts is None:
+            params_counts = {}
 
         for name in param_name_list:
             v = params[name]
@@ -485,16 +507,46 @@ def dicts2sdds(
 
             lines.append(s)
 
+            param_unit_list.append(params_units.get(name, None))
+            param_descr_list.append(params_descr.get(name, None))
+            param_symbol_list.append(params_symbols.get(name, None))
+            param_count_list.append(params_counts.get(name, None))
+
     if columns is None:
 
         column_name_list = []
         column_type_list = []
+
+        column_unit_list = None
+        column_descr_list = None
+        column_symbol_list = None
+        column_count_list = None
 
     else:
 
         column_name_list = list(columns)
 
         column_type_list = []
+
+        column_unit_list = []
+        column_descr_list = []
+        column_symbol_list = []
+        column_count_list = []
+
+        if columns_units is None:
+            columns_units = {}
+        if columns_descr is None:
+            columns_descr = {}
+        if columns_symbols is None:
+            columns_symbols = {}
+        if columns_counts is None:
+            columns_counts = {}
+
+        for name in column_name_list:
+            column_unit_list.append(columns_units.get(name, None))
+            column_descr_list.append(columns_descr.get(name, None))
+            column_symbol_list.append(columns_symbols.get(name, None))
+            column_count_list.append(columns_counts.get(name, None))
 
         nCols = len(column_name_list)
 
@@ -544,7 +596,11 @@ def dicts2sdds(
     plaindata2sdds(
         plaindata_txt_filepath, sdds_output_filepath, outputMode=outputMode,
         param_name_list=param_name_list, param_type_list=param_type_list,
+        param_unit_list=param_unit_list, param_descr_list=param_descr_list,
+        param_symbol_list=param_symbol_list, param_count_list=param_count_list,
         column_name_list=column_name_list, column_type_list=column_type_list,
+        column_unit_list=column_unit_list, column_descr_list=column_descr_list,
+        column_symbol_list=column_symbol_list, column_count_list=column_count_list,
         suppress_err_msg=suppress_err_msg)
 
     try:
@@ -581,8 +637,10 @@ def sdds2plaindata(
 
 def plaindata2sdds(
     input_txt_filepath, sdds_output_filepath, outputMode='ascii',
-    param_name_list=None, param_type_list=None,
-    column_name_list=None, column_type_list=None,
+    param_name_list=None, param_type_list=None, param_unit_list=None,
+    param_descr_list=None, param_symbol_list=None, param_count_list=None,
+    column_name_list=None, column_type_list=None, column_unit_list=None,
+    column_descr_list=None, column_symbol_list=None, column_count_list=None,
     suppress_err_msg=True):
     """"""
 
@@ -594,16 +652,76 @@ def plaindata2sdds(
         '-inputMode=ascii', f'-outputMode={outputMode}', '"-separator= "',]
 
     if param_name_list is not None:
-        assert len(param_name_list) == len(param_type_list)
-        for name, dtype in zip(param_name_list, param_type_list):
+        n = len(param_name_list)
+        assert n == len(param_type_list)
+
+        if param_unit_list is None:
+            param_unit_list = [None] * n
+        assert n == len(param_unit_list)
+
+        if param_descr_list is None:
+            param_descr_list = [None] * n
+        assert n == len(param_descr_list)
+
+        if param_symbol_list is None:
+            param_symbol_list = [None] * n
+        assert n == len(param_symbol_list)
+
+        if param_count_list is None:
+            param_count_list = [None] * n
+        assert n == len(param_count_list)
+
+        for name, dtype, unit, descr, symbol, count in zip(
+            param_name_list, param_type_list, param_unit_list,
+            param_descr_list, param_symbol_list, param_count_list):
             assert dtype in ('string', 'long', 'short', 'double')
-            cmd_list.append(f'-parameter={name},{dtype}')
+            opt = f'-parameter={name},{dtype}'
+            if unit is not None:
+                opt += f',units="{unit}"'
+            if descr is not None:
+                assert ',' not in descr
+                opt += f',description="{descr}"'
+            if symbol is not None:
+                opt += f',symbol="{symbol}"'
+            if count is not None:
+                opt += f',count={count:d}'
+            cmd_list.append(opt)
 
     if column_name_list is not None:
-        assert len(column_name_list) == len(column_type_list)
-        for name, dtype in zip(column_name_list, column_type_list):
+        n = len(column_name_list)
+        assert n == len(column_type_list)
+
+        if column_unit_list is None:
+            column_unit_list = [None] * n
+        assert n == len(column_unit_list)
+
+        if column_descr_list is None:
+            column_descr_list = [None] * n
+        assert n == len(column_descr_list)
+
+        if column_symbol_list is None:
+            column_symbol_list = [None] * n
+        assert n == len(column_symbol_list)
+
+        if column_count_list is None:
+            column_count_list = [None] * n
+        assert n == len(column_count_list)
+
+        for name, dtype, unit, descr, symbol, count in zip(
+            column_name_list, column_type_list, column_unit_list,
+            column_descr_list, column_symbol_list, column_count_list):
             assert dtype in ('string', 'long', 'short', 'double')
-            cmd_list.append(f'-column={name},{dtype}')
+            opt = f'-column={name},{dtype}'
+            if unit is not None:
+                opt += f',units="{unit}"'
+            if descr is not None:
+                assert ',' not in descr
+                opt += f',description="{descr}"'
+            if symbol is not None:
+                opt += f',symbol="{symbol}"'
+            if count is not None:
+                opt += f',count={count:d}'
+            cmd_list.append(opt)
 
     shell_cmd = ' '.join(cmd_list)
     cmd_list = shlex.split(shell_cmd, posix=True)
