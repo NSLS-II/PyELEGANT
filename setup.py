@@ -58,7 +58,7 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
 
     facility_name = facility_name_opt[0][len(f'--{facility_name_arg}='):]
 
-    available_facility_names = ['local', 'nsls2apcluster',]
+    available_facility_names = ['local', 'nsls2apcluster', 'nsls2cr']
     if facility_name not in available_facility_names:
         print('* Only the following facility names are available:')
         print('      ' + ', '.join(available_facility_names))

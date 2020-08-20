@@ -70,7 +70,7 @@ if out.strip():
         __elegant_version__ = 'unknown'
     del path_tokens
 else:
-    print('\n*** WARNING: ELEGANT not available.')
+    print('\n*** pyelegant:WARNING: ELEGANT not available.')
     __elegant_version__ = None
 del p, out, err
 
