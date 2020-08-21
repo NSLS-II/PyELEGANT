@@ -1,7 +1,10 @@
 import re
 from pathlib import Path
-import numpy as np
 import collections
+import gzip
+import json
+
+import numpy as np
 
 ########################################################################
 class Lattice():
@@ -30,6 +33,14 @@ class Lattice():
         if LTE_filepath != '':
             self.load_LTE(LTE_filepath, used_beamline_name=used_beamline_name)
 
+    def _clean_up_LTE_text(self):
+        """"""
+
+        self.cleaned_LTE_text = '\n' + self.LTE_text
+        # ^ adding "\n" at the beginning for easier search
+        self.cleaned_LTE_text = self.remove_comments(self.cleaned_LTE_text)
+        self.cleaned_LTE_text = self.delete_ampersands(self.cleaned_LTE_text)
+
     def load_LTE(self, LTE_filepath, used_beamline_name='',
                  elem_files_root_folderpath=None):
         """"""
@@ -44,10 +55,7 @@ class Lattice():
         self.LTE_text = LTE_file.read_text()
         self.LTE_filepath = LTE_filepath
 
-        self.cleaned_LTE_text = '\n' + self.LTE_text
-        # ^ adding "\n" at the beginning for easier search
-        self.cleaned_LTE_text = self.remove_comments(self.cleaned_LTE_text)
-        self.cleaned_LTE_text = self.delete_ampersands(self.cleaned_LTE_text)
+        self._clean_up_LTE_text()
 
         d = self.get_used_beamline_element_defs(
             used_beamline_name=used_beamline_name)
@@ -330,6 +338,201 @@ class Lattice():
             if type_name.upper() not in self.handled_element_types]
 
         return list(set(unhandled_list))
+
+    def zip_lte(self, output_ltezip_filepath, header_comment=''):
+        """"""
+
+        contents = dict(
+            header_comment=header_comment,
+            orig_LTE_filepath=str(Path(self.LTE_filepath).resolve()),
+            raw_LTE_text=self.LTE_text, # save raw LTE text
+        )
+
+        km_files = self.get_kickmap_filepaths()
+
+        u_folderpaths = np.unique([
+            str(Path(abs_path).parent)
+            for elem_name, abs_path in km_files['abs'].items()]).tolist()
+
+        contents['km'] = dict(unique_parents=u_folderpaths,
+                              meta={}, file_contents={})
+
+        for elem_name, abs_path in km_files['abs'].items():
+            contents['km']['file_contents'][abs_path] = Path(
+                abs_path).read_bytes().decode('latin-1')
+            contents['km']['meta'][elem_name] = dict(
+                abs_path=abs_path,
+                folder_index=u_folderpaths.index(str(Path(abs_path).parent)),
+            )
+
+        with gzip.GzipFile(output_ltezip_filepath, 'wb') as f:
+            f.write(json.dumps(contents).encode('utf-8'))
+
+    def unzip_lte(
+        self, ltezip_filepath, output_lte_filepath_str='',
+        suppl_files_folderpath_str='./lte_suppl', use_abs_paths_for_suppl_files=True,
+        overwrite_lte=False, overwrite_suppl=False):
+        """
+        "output_lte_filepath_str" is not specified, a new LTE file will be created
+        in the current directory with the same file name as the original LTE
+        file.
+
+        If "use_abs_paths_for_suppl_files" is True (default & recommended), the
+        absolute, instead of relative, paths to supplementary files in the newly
+        created LTE file. Since ELEGANT assumes relative file paths specified in
+        an LTE file with respect to the current directory, NOT the directory
+        where the LTE file (specified in an ELE file) is located, using absolute
+        paths in LTE avoids any problem of finding necessary supplementary files.
+
+        If a file already exists where the new LTE file will be written,
+        it will throw an error if "overwrite_lte" is False (default).
+
+        If a file already exists where a file supplementary to the LTE file file
+        will be written, it will throw an error if "overwrite_suppl" is False
+        (default).
+        """
+
+        suppl_files_folderpath_d = dict(km=None)
+
+        with gzip.GzipFile(ltezip_filepath, 'rb') as f:
+            contents = json.loads(f.read().decode('utf-8'))
+
+        if output_lte_filepath_str == '':
+            output_lte_filepath = Path(contents['orig_LTE_filepath'])
+        else:
+            output_lte_filepath = Path(output_lte_filepath_str)
+
+        if output_lte_filepath.exists() and (not overwrite_lte):
+            raise FileExistsError(
+                f'Cannot write a new LTE file to "{output_lte_filepath}"')
+
+        # Make sure the parent folder exists.
+        output_lte_filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        temp_LTE = Lattice()
+        temp_LTE.LTE_text = contents['raw_LTE_text']
+        temp_LTE.LTE_filepath = contents['orig_LTE_filepath']
+        #
+        temp_LTE._clean_up_LTE_text()
+        #
+        d = temp_LTE.get_used_beamline_element_defs()
+
+        # Start building new LTE contents
+        lines = ['!' + line for line in contents['header_comment'].split('\n')
+                 if line.strip()]
+        #
+        # Add element definition sections
+        lines.append('\n')
+        _newly_created_suppl_filepaths = collections.defaultdict(list)
+        for elem_name, elem_type, prop_str in d['elem_defs']:
+            if elem_type == 'UKICKMAP':
+                temp_prop_str_list = []
+                for token in prop_str.split(','):
+                    if token.split('=')[0].strip() == 'INPUT_FILE':
+                        orig_abs_path = contents['km']['meta'][elem_name]['abs_path']
+                        orig_filename = str(Path(orig_abs_path).name)
+
+                        if suppl_files_folderpath_d['km'] is None:
+                            suppl_files_folderpath_d['km'] = Path(
+                                suppl_files_folderpath_str).joinpath('km')
+                            suppl_files_folderpath_d['km'].mkdir(
+                                parents=True, exist_ok=True)
+
+                        new_rel_path = suppl_files_folderpath_d['km'].joinpath(
+                            orig_filename)
+                        new_abs_path = new_rel_path.resolve()
+                        if new_abs_path not in _newly_created_suppl_filepaths['km']:
+                            if new_abs_path.exists() and (not overwrite_suppl):
+                                raise FileExistsError(
+                                    (f'Cannot write a new LTE supplementary file '
+                                     f'to "{new_abs_path}"'))
+
+                            new_abs_path.write_bytes(
+                                contents['km']['file_contents'][orig_abs_path].encode('latin-1'))
+                            print(f'* Created LTE supplementary file: {new_abs_path}')
+                            _newly_created_suppl_filepaths['km'].append(new_abs_path)
+
+                        if use_abs_paths_for_suppl_files:
+                            token = f'INPUT_FILE="{new_abs_path}"'
+                        else:
+                            token = f'INPUT_FILE="{new_rel_path}"'
+
+                    temp_prop_str_list.append(token.strip())
+
+                prop_str = ', '.join(temp_prop_str_list)
+            else:
+                prop_str = ', '.join([token.strip() for token in prop_str.split(',')])
+
+            prop_str = prop_str.strip()
+            if prop_str == '':
+                temp_line = f'{elem_name}: {elem_type}'
+            else:
+                temp_line = f'{elem_name}: {elem_type}, {prop_str}'
+            temp_line = self.get_wrapped_line(temp_line)
+            lines.extend(temp_line.split('\n'))
+        #
+        # Add beamline definition sections
+        lines.append('\n')
+        if d['beamline_defs'] != []:
+            for beamline_name, sub_name_multiplier_tups in d['beamline_defs']:
+
+                sub_lines = []
+                for sub_name, multiplier in sub_name_multiplier_tups:
+                    if multiplier == 1:
+                        sub_lines.append(sub_name)
+                    elif multiplier == -1:
+                        sub_lines.append('-' + sub_name)
+                    else:
+                        sub_lines.append(f'{multiplier:d}*{sub_name}')
+
+                temp_line = self.get_wrapped_line(
+                    f'{beamline_name}: LINE=({",".join(sub_lines)})')
+                lines.extend(temp_line.split('\n'))
+        else:
+            all_elem_names_wo_begin = d['flat_used_elem_names'][1:]
+            full_beamline_line = self.get_wrapped_line(
+                f'{d["used_beamline_name"]}: LINE=({",".join(all_elem_names_wo_begin)})')
+            lines.extend(full_beamline_line.split('\n'))
+        #
+        # Finally add "USE" line
+        lines.append('\n')
+        lines.append(f'USE, {d["used_beamline_name"]}')
+
+        # Write the LTE file
+        output_lte_filepath.write_text('\n'.join(lines))
+
+        return str(output_lte_filepath.resolve())
+
+    @staticmethod
+    def get_wrapped_line(line, max_len=80, sep=',', indent=2):
+        """"""
+
+        if len(line) <= max_len:
+            return line
+        else:
+            new_line_list = []
+            split_line_list = line.split(sep)
+            ntokens = len(split_line_list)
+            new_line = split_line_list[0]
+            offset = 1
+            while ntokens > offset:
+                for iSeg, sub_line in enumerate(split_line_list[offset:]):
+                    if len(' '.join([new_line, sub_line])) > max_len:
+                        new_line_list.append(new_line)
+                        if offset + iSeg + 1 < ntokens:
+                            new_line = sub_line
+                        else:
+                            new_line_list.append(sub_line)
+                        offset += iSeg + 1
+                        break
+                    else:
+                        new_line = sep.join([new_line, sub_line])
+                else:
+                    new_line_list.append(new_line)
+                    break
+
+            return f'{sep} &\n{" " * indent}'.join(new_line_list)
+
 
 ########################################################################
 class KQUAD():
