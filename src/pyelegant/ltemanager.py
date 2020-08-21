@@ -368,8 +368,9 @@ class Lattice():
         with gzip.GzipFile(output_ltezip_filepath, 'wb') as f:
             f.write(json.dumps(contents).encode('utf-8'))
 
+    @staticmethod
     def unzip_lte(
-        self, ltezip_filepath, output_lte_filepath_str='',
+        ltezip_filepath, output_lte_filepath_str='',
         suppl_files_folderpath_str='./lte_suppl', use_abs_paths_for_suppl_files=True,
         overwrite_lte=False, overwrite_suppl=False):
         """
@@ -468,7 +469,7 @@ class Lattice():
                 temp_line = f'{elem_name}: {elem_type}'
             else:
                 temp_line = f'{elem_name}: {elem_type}, {prop_str}'
-            temp_line = self.get_wrapped_line(temp_line)
+            temp_line = temp_LTE.get_wrapped_line(temp_line)
             lines.extend(temp_line.split('\n'))
         #
         # Add beamline definition sections
@@ -485,12 +486,12 @@ class Lattice():
                     else:
                         sub_lines.append(f'{multiplier:d}*{sub_name}')
 
-                temp_line = self.get_wrapped_line(
+                temp_line = temp_LTE.get_wrapped_line(
                     f'{beamline_name}: LINE=({",".join(sub_lines)})')
                 lines.extend(temp_line.split('\n'))
         else:
             all_elem_names_wo_begin = d['flat_used_elem_names'][1:]
-            full_beamline_line = self.get_wrapped_line(
+            full_beamline_line = temp_LTE.get_wrapped_line(
                 f'{d["used_beamline_name"]}: LINE=({",".join(all_elem_names_wo_begin)})')
             lines.extend(full_beamline_line.split('\n'))
         #
