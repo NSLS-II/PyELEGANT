@@ -93,22 +93,27 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
     if facility_name == 'nsls2apcluster':
         req_pakcages += ['mpi4py>=3', 'dill']
 
-    entry_points = {}
+    entry_points = dict(
+        console_scripts=[
+            'pyele_zip_lte = pyelegant.scripts.ziplte:zip_lte',
+            'pyele_unzip_lte = pyelegant.scripts.ziplte:unzip_lte',
+        ],
+        gui_scripts=[],
+    )
+
     if facility_name == 'nsls2apcluster':
         gui_folderpath = 'pyelegant.guis.nsls2apcluster'
-        entry_points = dict(
-            console_scripts = [
-                'pyele_report = pyelegant.scripts.genreport:main',
-                'pyele_slurm_print_queue = pyelegant.scripts.nsls2apcluster.slurmutil:print_queue',
-                'pyele_slurm_print_load = pyelegant.scripts.nsls2apcluster.slurmutil:print_load',
-                'pyele_slurm_scancel_regex_jobname = pyelegant.scripts.nsls2apcluster.slurmutil:scancel_by_regex_jobname',
-            ],
-            gui_scripts = [
-                # GUI
-                f'pyele_gui_slurm = {gui_folderpath}.cluster_status.main:main',
-                f'pyele_gui_report_wiz = {gui_folderpath}.genreport_wizard.main:main',
-            ],
-        )
+        entry_points['console_scripts'].extend([
+            'pyele_report = pyelegant.scripts.genreport:main',
+            'pyele_slurm_print_queue = pyelegant.scripts.nsls2apcluster.slurmutil:print_queue',
+            'pyele_slurm_print_load = pyelegant.scripts.nsls2apcluster.slurmutil:print_load',
+            'pyele_slurm_scancel_regex_jobname = pyelegant.scripts.nsls2apcluster.slurmutil:scancel_by_regex_jobname',
+        ])
+        entry_points['gui_scripts'].extend([
+            # GUI
+            f'pyele_gui_slurm = {gui_folderpath}.cluster_status.main:main',
+            f'pyele_gui_report_wiz = {gui_folderpath}.genreport_wizard.main:main',
+        ])
 
     if facility_name == 'nsls2apcluster':
         package_data[f'{gui_folderpath}.cluster_status'] = ['*.ui']
