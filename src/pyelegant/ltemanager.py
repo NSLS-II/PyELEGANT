@@ -399,7 +399,8 @@ class Lattice():
             contents = json.loads(f.read().decode('utf-8'))
 
         if output_lte_filepath_str == '':
-            output_lte_filepath = Path(contents['orig_LTE_filepath'])
+            output_lte_filepath = Path.cwd().joinpath(
+                Path(contents['orig_LTE_filepath']).name)
         else:
             output_lte_filepath = Path(output_lte_filepath_str)
 
