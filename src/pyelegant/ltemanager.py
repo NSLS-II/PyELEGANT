@@ -374,9 +374,9 @@ class Lattice():
         suppl_files_folderpath_str='./lte_suppl', use_abs_paths_for_suppl_files=True,
         overwrite_lte=False, overwrite_suppl=False):
         """
-        "output_lte_filepath_str" is not specified, a new LTE file will be created
-        in the current directory with the same file name as the original LTE
-        file.
+        If "output_lte_filepath_str" is not specified, a new LTE file will be
+        created in the current directory with the same file name as the original
+        LTE file.
 
         If "use_abs_paths_for_suppl_files" is True (default & recommended), the
         absolute, instead of relative, paths to supplementary files in the newly
@@ -419,7 +419,7 @@ class Lattice():
         d = temp_LTE.get_used_beamline_element_defs()
 
         # Start building new LTE contents
-        lines = ['!' + line for line in contents['header_comment'].split('\n')
+        lines = ['! ' + line for line in contents['header_comment'].split('\n')
                  if line.strip()]
         #
         # Add element definition sections
