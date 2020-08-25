@@ -273,13 +273,13 @@ class ClosedOrbitCalculator:
         self, LTE_filepath: str, E_MeV: float, fixed_length: bool = True,
         output_monitors_only: bool = True, closed_orbit_accuracy: float = 1e-12,
         closed_orbit_iterations: int = 40, iteration_fraction: float = 0.9,
-        n_turns: int = 1, use_beamline: Optional[str] = None,
+        n_turns: int = 0, use_beamline: Optional[str] = None,
         N_KICKS: Optional[dict] = None, transmute_elements: Optional[dict] = None,
         ele_filepath: Optional[str] = None, tempdir_path: Optional[str] = None,
         ) -> None:
         """Constructor"""
 
-        assert n_turns >= 1
+        assert n_turns >= 0
         assert iteration_fraction <= 1.0
 
         self.columns = None
@@ -327,7 +327,7 @@ class ClosedOrbitCalculator:
 
         ed.add_newline()
 
-        ed.add_block('run_control', n_passes=n_turns)
+        ed.add_block('run_control', n_passes=1)
 
         ed.add_newline()
 
@@ -337,7 +337,7 @@ class ClosedOrbitCalculator:
             ed.add_newline()
 
         _block_opts = dict(
-            output='%s.clo', tracking_turns=(False if n_turns == 1 else True),
+            output='%s.clo', tracking_turns=n_turns,
             fixed_length=fixed_length, output_monitors_only=output_monitors_only,
             closed_orbit_accuracy=closed_orbit_accuracy,
             closed_orbit_iterations=closed_orbit_iterations,
