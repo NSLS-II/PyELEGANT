@@ -35,6 +35,7 @@ from . import ltemanager
 from . import nonlin
 from . import notation
 from . import orbit
+from . import respmat
 from . import sdds
 from . import sigproc
 from . import twiss
