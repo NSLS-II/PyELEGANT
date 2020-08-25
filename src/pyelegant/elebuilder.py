@@ -18,6 +18,15 @@ from . import ltemanager
 
 from . import std_print_enabled
 
+UNAVAILABLE_BLOCK_OPTS = collections.defaultdict(list)
+
+#----------------------------------------------------------------------
+def set_unavailable_block_options(block_name, option_name):
+    """"""
+
+    if option_name not in UNAVAILABLE_BLOCK_OPTS[block_name]:
+        UNAVAILABLE_BLOCK_OPTS[block_name].append(option_name)
+
 ########################################################################
 class EleBlocks():
     """
@@ -2190,8 +2199,6 @@ class EleDesigner():
 
         self.blocks = EleBlocks()
 
-        self._unavailable_block_opts = collections.defaultdict(list)
-
         self.rpnfuncs = RPNFunctionDatabase()
 
         self.rpnvars = {}
@@ -2411,18 +2418,17 @@ class EleDesigner():
         for k, v in kwargs.items():
 
             if k not in keywords:
-
-                if k in self._unavailable_block_opts[block_header]:
-                    print(
-                        f'* Option "{k}" for Block "{block_header}" is set to be '
-                        f'unavailable in the current setup. So, this option will '
-                        f'NOT be added to the block.')
-                    continue
-
                 print(f'* Valid keys for Block "{block_header}" are the following:')
                 print('\n'.join(sorted(keywords)))
 
                 raise ValueError(f'Unexpected key "{k}" for Block "{block_header}"')
+
+            if k in UNAVAILABLE_BLOCK_OPTS[block_header]:
+                print(
+                    f'* Option "{k}" for Block "{block_header}" is set to be '
+                    f'unavailable in the current setup. So, this option will '
+                    f'NOT be added to the block.')
+                continue
 
             i = keywords.index(k)
 
@@ -2936,13 +2942,6 @@ class EleDesigner():
         for v in self.rpnvars.values():
             v.pop_below()
         self._update_accessible_rpnvars()
-
-    #----------------------------------------------------------------------
-    def set_unavailable_block_options(self, block_name, option_name):
-        """"""
-
-        if option_name not in self._unavailable_block_opts[block_name]:
-            self._unavailable_block_opts[block_name].append(option_name)
 
 ########################################################################
 class OptimizationTerm():
