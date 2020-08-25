@@ -9,6 +9,7 @@ import glob
 import ast
 import pickle
 import itertools
+import collections
 
 from . import util
 from . import sdds
@@ -2189,6 +2190,8 @@ class EleDesigner():
 
         self.blocks = EleBlocks()
 
+        self._unavailable_block_opts = collections.defaultdict(list)
+
         self.rpnfuncs = RPNFunctionDatabase()
 
         self.rpnvars = {}
@@ -2408,6 +2411,13 @@ class EleDesigner():
         for k, v in kwargs.items():
 
             if k not in keywords:
+
+                if k in self._unavailable_block_opts[block_header]:
+                    print(
+                        f'* Option "{k}" for Block "{block_header}" is set to be '
+                        f'unavailable in the current setup. So, this option will '
+                        f'NOT be added to the block.')
+                    continue
 
                 print(f'* Valid keys for Block "{block_header}" are the following:')
                 print('\n'.join(sorted(keywords)))
@@ -2926,6 +2936,13 @@ class EleDesigner():
         for v in self.rpnvars.values():
             v.pop_below()
         self._update_accessible_rpnvars()
+
+    #----------------------------------------------------------------------
+    def set_unavailable_block_options(self, block_name, option_name):
+        """"""
+
+        if option_name not in self._unavailable_block_opts[block_name]:
+            self._unavailable_block_opts[block_name].append(option_name)
 
 ########################################################################
 class OptimizationTerm():
