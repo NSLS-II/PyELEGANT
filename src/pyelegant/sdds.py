@@ -74,13 +74,15 @@ def query(sdds_filepath, suppress_err_msg=False):
     if nParams != 0:
         m = re.search(r'(?<='+param_header+r')[\w\W]+', output)
         param_str_list = m.group(0).split('\n')[2:(2+nParams)]
-        symbol_unit_pattern = r'[\w\$\(\)/\']+'
+        unit_pattern = r'[\w\$\(\)<>\*\^\'/,]+'
+        symbol_pattern = r'[\w\$\(\)<>\*\^\'/, ]+'
+        type_pattern = r'short|long|float|double|character|string'
         for index, s in enumerate(param_str_list):
             ss = re.search(
-                r'([\w/]+) +({0:s}) +({0:s}) +(\w+) +(.+)'.format(
-                    symbol_unit_pattern), s).groups()
-            param_dict[ss[0]] = {'UNITS': ss[1], 'SYMBOL': ss[2], 'TYPE': ss[3],
-                                 'DESCRIPTION': ss[4],
+                r'([\w\./]+) +({0:s}) +({1:s}) +({2:s}) +(.+)'.format(
+                    unit_pattern, symbol_pattern, type_pattern), s).groups()
+            param_dict[ss[0]] = {'UNITS': ss[1], 'SYMBOL': ss[2].strip(),
+                                 'TYPE': ss[3], 'DESCRIPTION': ss[4],
                                  '_index': index}
 
         assert len(param_dict) == nParams
@@ -198,7 +200,7 @@ def printout(sdds_filepath, param_name_list=None,
             param_dict = collections.defaultdict(list)
             for k, v_str in re.findall(
                 #'([\w /\(\)\$]+)[ ]+=[ ]+([nae\d\.\+\-]+)[ \n]?',
-                '([\w /\(\)\$]+)[ ]*=[ ]*([naife\d\.\+\-]+)[ \n]?',
+                '([\w /\(\)\$\^\*\.]+)[ ]*=[ ]*([naife\d\.\+\-]+)[ \n]?',
                 output):
                 # ^ [n] & [a] is added for digit matching in cases for "nan"
                 #   [i] & [f] is added for digit matching in cases for "inf"
