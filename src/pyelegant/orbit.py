@@ -1,4 +1,4 @@
-from typing import Union, Optional, Tuple, Iterable
+from typing import Union, Optional, Tuple, Iterable, Dict
 import os
 from pathlib import Path
 import numpy as np
@@ -462,6 +462,12 @@ class ClosedOrbitCalculator:
         sdds.dicts2sdds(
             self.corrector_params_filepath, params=None, columns=col,
             outputMode='binary', suppress_err_msg=True)
+
+    def get_kick_angles(self) -> Dict:
+        """"""
+
+        return dict(h=self.hcors['rads'], v=self.vcors['rads'])
+
 
     def set_elem_properties(self, elem_names, elem_prop_names, elem_prop_vals):
         """"""
