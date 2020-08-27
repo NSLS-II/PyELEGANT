@@ -2698,6 +2698,14 @@ class EleDesigner():
         self._update_accessible_rpnvars()
 
     #----------------------------------------------------------------------
+    def getLattice(self):
+        """
+        Return pyelegant Lattice object
+        """
+
+        return self._LTE
+
+    #----------------------------------------------------------------------
     def get_LTE_elem_info(self, elem_name: str):
         """"""
 
