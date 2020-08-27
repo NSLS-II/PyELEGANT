@@ -89,12 +89,10 @@ def query(sdds_filepath, suppress_err_msg=False):
 
     # deal with the special cases
     if 'enx0' in param_dict:
-        param_dict['enx0']['UNITS'] = '{} {}'.format(param_dict['enx0']['UNITS'],
-                                                     param_dict['enx0']['SYMBOL'])
-        param_dict['enx0']['SYMBOL'] = param_dict['enx0']['TYPE']
-        param_dict['enx0']['TYPE'] = param_dict['enx0']['DESCRIPTION'].split()[0]
-        param_dict['enx0']['DESCRIPTION'] = ' '.join(
-            param_dict['enx0']['DESCRIPTION'].split()[1:])
+        if (param_dict['enx0']['UNITS'] == 'm$be$nc') and \
+           (param_dict['enx0']['SYMBOL'].split() == ['$gp$rm','NULL']):
+            param_dict['enx0']['UNITS'] = 'm$be$nc $gp$rm'
+            param_dict['enx0']['SYMBOL'] = 'NULL'
 
     return param_dict, column_dict
 
