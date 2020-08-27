@@ -7671,6 +7671,18 @@ class Report_NSLS2U_Default:
         mmap_sdds_filepath_ring, max_mom_aper_percent, use_beamline_ring):
         """"""
 
+        nEnergy = len(E_MeV_list)
+        if not (len(eps_0_list) == len(total_beam_current_mA_list) ==
+                len(U0_ev_list) == len(sigma_delta_list) == nEnergy):
+            print('\nThe following list must have the same number of elements:')
+            print('  E_MeV_list:                 ', E_MeV_list)
+            print('  eps_0_list:                 ', eps_0_list)
+            print('  total_beam_current_mA_list: ', total_beam_current_mA_list)
+            print('  U0_ev_list:                 ', U0_ev_list)
+            print('  sigma_delta_list:           ', sigma_delta_list)
+            print(' ')
+            raise ValueError('Inconsitent number of input arguments')
+
         c = scipy.constants.c
 
         if ntasks == 0: # Run locally

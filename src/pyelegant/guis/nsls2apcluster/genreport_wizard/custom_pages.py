@@ -4074,6 +4074,13 @@ class PageRfTau(PageGenReport):
         total_beam_current_mA = calc_opts['total_beam_current_mA']
         if isinstance(total_beam_current_mA, list):
             total_beam_current_mA_list = total_beam_current_mA
+            if len(total_beam_current_mA_list) != len(E_MeV_list):
+                total_beam_current_mA_list = self.tau_special_data['total_beam_current']
+                if len(total_beam_current_mA_list) != len(E_MeV_list):
+                    print(('Error: Number of total beam current values must be '
+                           'the same as that of energy values.'))
+                    QtWidgets.QApplication.restoreOverrideCursor()
+                    return
         else:
             total_beam_current_mA_list = [total_beam_current_mA] * len(E_MeV_list)
         #
@@ -4084,9 +4091,10 @@ class PageRfTau(PageGenReport):
         if raw_max_mom_aper_percent in (None, 'None', 'none'):
             max_mom_aper_percent = None
         elif raw_max_mom_aper_percent in ('Auto', 'auto'):
-            raise NotImplementedError((
-                'Automatically determine deltaLimit from nonlin_chrom '
-                'integer-crossing & nan'))
+            print(('NotImplementedError: Automatically determine deltaLimit from '
+                   'nonlin_chrom integer-crossing & nan'))
+            QtWidgets.QApplication.restoreOverrideCursor()
+            return
         else:
             max_mom_aper_percent = float(raw_max_mom_aper_percent)
 
@@ -4118,8 +4126,13 @@ class PageRfTau(PageGenReport):
             d = pe.util.load_pgz_file(mmap_pgz_filepath)
             mmap_d = d['data']['mmap']
         except:
-            raise RuntimeError(('To compute beam lifetime, you must first '
-                                'compute momentum aperture.'))
+            print(traceback.format_exc())
+
+            print(('To compute beam lifetime, you must first '
+                   'compute momentum aperture.'))
+
+            QtWidgets.QApplication.restoreOverrideCursor()
+            return
 
         # Since the momentum aperture data only extend to one super period,
         # the data must be duplicated to cover the whole ring. Also, create
@@ -4153,11 +4166,16 @@ class PageRfTau(PageGenReport):
         LTE_filepath = report_obj.input_LTE_filepath
         use_beamline_ring = report_obj.conf['use_beamline_ring']
 
-        LoLs = report_obj.scan_V_tau(
-            rf_volt_ranges, v_scan_npts, ntasks, E_MeV_list, eps_0_list,
-            total_beam_current_mA_list, U0_ev_list, sigma_delta_list, T_rev_s,
-            num_filled_bunches, raw_coupling_specs, alphac, circumf, LTE_filepath,
-            h, mmap_sdds_filepath_ring, max_mom_aper_percent, use_beamline_ring)
+        try:
+            LoLs = report_obj.scan_V_tau(
+                rf_volt_ranges, v_scan_npts, ntasks, E_MeV_list, eps_0_list,
+                total_beam_current_mA_list, U0_ev_list, sigma_delta_list, T_rev_s,
+                num_filled_bunches, raw_coupling_specs, alphac, circumf, LTE_filepath,
+                h, mmap_sdds_filepath_ring, max_mom_aper_percent, use_beamline_ring)
+        except:
+            print(traceback.format_exc())
+            QtWidgets.QApplication.restoreOverrideCursor()
+            return
         rf_Vs_LoL = LoLs['rf_V']
         bucket_heights_percent_LoL = LoLs['bucket_height_percent']
         taus_LoL = LoLs['tau']
