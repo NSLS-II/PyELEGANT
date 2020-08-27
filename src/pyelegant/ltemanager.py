@@ -275,6 +275,8 @@ class Lattice():
                            for name in used_elem_names]
         u_used_elem_names = np.unique(used_elem_names)
 
+        self._unique_used_elem_names = u_used_elem_names.tolist()
+
         # Re-order in the order of appearance in the LTE file
         used_elem_defs = [all_elem_defs[all_elem_names.index(elem_name)]
                           for elem_name in all_elem_names
@@ -535,6 +537,81 @@ class Lattice():
 
             return f'{sep} &\n{" " * indent}'.join(new_line_list)
 
+    def get_elem_inds_from_name(self, elem_name):
+        """"""
+
+        elem_inds = np.where(np.array(self.flat_used_elem_names) == elem_name)[0]
+
+        if elem_inds.size != 0:
+            elem_inds += 1
+            # Increase indexes by 1 to account for ELEGANT's insertion of the
+            # special element "_BEG_" at the beginning of the beamline defined
+            # in "self.flat_used_elem_names".
+
+        return elem_inds
+
+    def get_elem_inds_from_names(self, elem_names):
+        """"""
+
+        _flat_used_elem_names = np.array(self.flat_used_elem_names)
+
+        match = (_flat_used_elem_names == elem_names[0])
+        for name in elem_names[1:]:
+            match = match | (_flat_used_elem_names == name)
+
+        elem_inds = np.where(match)[0]
+
+        if elem_inds.size != 0:
+            elem_inds += 1
+            # Increase indexes by 1 to account for ELEGANT's insertion of the
+            # special element "_BEG_" at the beginning of the beamline defined
+            # in "self.flat_used_elem_names".
+
+        return elem_inds
+
+    def get_names_from_elem_inds(self, elem_inds):
+        """"""
+
+        # Must decrease indexes by 1 to account for ELEGANT's insertion of the
+        # special element "_BEG_" at the beginning of the beamline defined
+        # in "self.flat_used_elem_names".
+        return np.array(self.flat_used_elem_names)[np.array(elem_inds)-1]
+
+    def get_elem_inds_from_regex(self, pattern):
+        """"""
+
+        matched_elem_names = [
+            elem_name for elem_name in self._unique_used_elem_names
+            if re.match(pattern, elem_name) is not None]
+
+        return self.get_elem_inds_from_names(matched_elem_names)
+
+    def get_elem_inds_from_name_occur_tuples(self, name_occur_tuples):
+        """"""
+
+        u_elem_names = np.unique([name for name, _ in name_occur_tuples])
+        elem_inds_d = {name: self.get_elem_inds_from_name(name)
+                       for name in u_elem_names}
+
+        return np.array([
+            elem_inds_d[elem_name][occur-1]
+            # ^ Index here must be decreased by 1 as "ElementOccurence" is 1-based index
+            for elem_name, occur in name_occur_tuples])
+
+    def get_name_occur_tuples_from_elem_inds(self, elem_inds):
+        """"""
+
+        elem_names = self.get_names_from_elem_inds(elem_inds)
+        assert len(elem_names) == len(elem_inds)
+
+        u_elem_names = np.unique(elem_names)
+        elem_inds_d = {name: self.get_elem_inds_from_name(name).tolist()
+                       for name in u_elem_names}
+
+        return [
+            (name, elem_inds_d[name].index(i) + 1)
+            # ^ Index here must be increased by 1 as "ElementOccurence" is 1-based index
+            for name, i in zip(elem_names, elem_inds)]
 
 ########################################################################
 class KQUAD():
