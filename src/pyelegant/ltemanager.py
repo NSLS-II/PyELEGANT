@@ -491,9 +491,9 @@ class Lattice():
                     f'{beamline_name}: LINE=({",".join(sub_lines)})')
                 lines.extend(temp_line.split('\n'))
         else:
-            all_elem_names_wo_begin = d['flat_used_elem_names'][1:]
+            # Note that d["flat_used_elem_names"] does NOT start with "_BEG_"
             full_beamline_line = temp_LTE.get_wrapped_line(
-                f'{d["used_beamline_name"]}: LINE=({",".join(all_elem_names_wo_begin)})')
+                f'{d["used_beamline_name"]}: LINE=({",".join(d["flat_used_elem_names"])})')
             lines.extend(full_beamline_line.split('\n'))
         #
         # Finally add "USE" line

@@ -2746,7 +2746,10 @@ class EleDesigner():
     #----------------------------------------------------------------------
     def get_LTE_all_elem_names(self):
         """
-        Returns all the element names for the used beamline in s-pos order
+        Returns all the element names for the used beamline in s-pos order.
+
+        Note that this list of names does NOT start with the "_BEG_" element
+        ELEGANT always inserts.
         """
 
         return self._LTE.flat_used_elem_names
