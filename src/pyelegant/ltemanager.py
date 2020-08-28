@@ -65,6 +65,8 @@ class Lattice():
         self.elem_defs = d['elem_defs']
         self.flat_used_elem_names = d['flat_used_elem_names']
 
+        self._all_used_elem_names = [name for name, *_ in self.elem_defs]
+
         abs_kickmap_filepaths = self.get_kickmap_filepaths()['abs']
         for name, _fp in abs_kickmap_filepaths.items():
             abs_kickmap_f = Path(_fp)
@@ -612,6 +614,17 @@ class Lattice():
             (name, elem_inds_d[name].index(i) + 1)
             # ^ Index here must be increased by 1 as "ElementOccurence" is 1-based index
             for name, i in zip(elem_names, elem_inds)]
+
+    def get_elem_type_from_name(self, elem_name):
+        """"""
+
+        if elem_name in self._all_used_elem_names:
+            matched_index = self._all_used_elem_names.index(elem_name)
+            _, elem_type, _ = self.elem_defs[matched_index]
+        else:
+            elem_type = None
+
+        return elem_type
 
 ########################################################################
 class KQUAD():
