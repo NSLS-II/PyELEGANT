@@ -74,6 +74,7 @@ class EleBlocks():
         self._parse_transmute_elements()
         self._parse_twiss_output()
         self._parse_track()
+        self._parse_vary_element()
 
         # "&parallel_optimization_setup" also contains all the options for
         # "&optimization_setup" as well. So, add those options here.
@@ -893,6 +894,27 @@ class EleBlocks():
             long stop_tracking_particle_limit = -1;
             long check_beam_structure = 0;
             STRING interrupt_file = "%s.interrupt";
+        &end
+        ''')
+
+    #----------------------------------------------------------------------
+    def _parse_vary_element(self):
+        """"""
+
+        # Elegant Manual Section 7.69
+        self._parse_block_def('''
+        &vary_element
+            long index_number = 0;
+            long index_limit = 0;
+            STRING name = NULL;
+            STRING item = NULL;
+            double initial = 0;
+            double final = 0;
+            long differential = 0;
+            long multiplicative = 0;
+            long geometric = 0;
+            STRING enumeration_file = NULL;
+            STRING enumeration_column = NULL;
         &end
         ''')
 
