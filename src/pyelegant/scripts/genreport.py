@@ -8519,8 +8519,10 @@ class Report_NSLS2U_Default:
                     m_e_eV = const.m_e * (const.c**2) / const.electron_volt
                     gamma = E_MeV * 1e6 / m_e_eV
                     N_e = charge_C / const.elementary_charge
-                    assert const.mu_0 == 4*np.pi*1e-7
-                    assert const.epsilon_0 == 1.0/((const.c**2)*const.mu_0)
+                    np.testing.assert_almost_equal(
+                        const.mu_0, 4 * np.pi * 1e-7, decimal=15)
+                    np.testing.assert_almost_equal(
+                        const.epsilon_0, 1.0/((const.c**2)*const.mu_0), decimal=15)
                     r_e = const.elementary_charge / (4*np.pi*const.epsilon_0*m_e_eV)
                     F_interp = pe.nonlin.get_Touschek_F_interpolator()
                     #
