@@ -403,13 +403,7 @@ def printout(sdds_filepath, param_name_list=None,
 def sdds2dicts(sdds_filepath, str_format=''):
     """"""
 
-    output, meta = {}, {}
-
     meta_params, meta_columns = query(sdds_filepath, suppress_err_msg=True)
-    params, columns = printout(
-        sdds_filepath, param_name_list=None, column_name_list=None,
-        str_format=str_format, show_output=False, show_cmd=False,
-        suppress_err_msg=True)
 
     meta = {}
     if meta_params:
@@ -418,6 +412,15 @@ def sdds2dicts(sdds_filepath, str_format=''):
         meta['columns'] = meta_columns
 
     output = {}
+
+    if (meta_params == {} and meta_columns == {}):
+        return output, meta
+
+    params, columns = printout(
+        sdds_filepath, param_name_list=None, column_name_list=None,
+        str_format=str_format, show_output=False, show_cmd=False,
+        suppress_err_msg=True)
+
     if params:
         for _k, _v in params.items():
             if meta['params'][_k]['TYPE'] in ('long', 'short'):
