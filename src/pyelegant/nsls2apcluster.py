@@ -1677,3 +1677,35 @@ def tmp_rm(node_name, pattern):
 
     # Remove temp Python file
     temp_py.unlink()
+
+def bash_copy(src, dst):
+    """
+    The purpose of this module is to replace the standard Python module "shutil"
+    in the event that shutil.copy() results in an empty copied file, which was found
+    to occur on cpu-* machines on 09/14/2020.
+    """
+
+    cmd = f'cp {src} {dst}'
+
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+    print(out)
+    if err:
+        print('# stderr:')
+        print(err)
+
+def bash_move(src, dst):
+    """
+    The purpose of this module is to replace the standard Python module "shutil"
+    in the event that shutil.copy() results in an empty copied file, which was found
+    to occur on cpu-* machines on 09/14/2020.
+    """
+
+    cmd = f'mv {src} {dst}'
+
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+    print(out)
+    if err:
+        print('# stderr:')
+        print(err)
