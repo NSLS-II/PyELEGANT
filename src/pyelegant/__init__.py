@@ -2,6 +2,7 @@ import os
 import json
 from subprocess import Popen, PIPE
 import shlex
+from pathlib import Path
 
 import matplotlib.pylab as plt
 plt.rcParams['mathtext.fontset'] = 'cm'
@@ -15,7 +16,19 @@ with open(os.path.join(this_folder, 'version.json'), 'r') as f:
 with open(os.path.join(this_folder, 'facility.json'), 'r') as f:
     facility_name = json.load(f)['name']
 
+_default_rpn_defns_path = str(Path(this_folder).joinpath('.defns.rpn').resolve())
+if 'RPN_DEFNS' in os.environ:
+    if not Path(os.environ['RPN_DEFNS']).exists():
+        print(f'Environment variable $RPN_DEFNS="{Path(os.environ["RPN_DEFNS"])}" does NOT exist.')
+        print(f'So, "{_default_rpn_defns_path}" will be used instead.')
+        os.environ['RPN_DEFNS'] = _default_rpn_defns_path
+else:
+    print('Environment variable "RPN_DEFNS" is NOT defined.')
+    print(f'So, "$RPN_DEFNS" is defined to be "{_default_rpn_defns_path}".')
+    os.environ['RPN_DEFNS'] = _default_rpn_defns_path
+
 del this_folder
+
 
 std_print_enabled = dict(out=True, err=True)
 
