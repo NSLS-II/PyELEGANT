@@ -3442,6 +3442,14 @@ class Report_NSLS2U_Default:
                 ws.write_rich_string(
                     row, col, bold_italic, GREEK['phi'], bold_italic_sub, 'y',
                     bold, ' (2', bold_italic, GREEK['pi'], bold, ')')
+            elif h == 'Delta_theta (rad)':
+                ws.write_rich_string(
+                    row, col, bold_italic, GREEK['Delta'],
+                    bold_italic, GREEK['theta'], bold, ' (rad)')
+            elif h == 'Delta_theta (deg)':
+                ws.write_rich_string(
+                    row, col, bold_italic, GREEK['Delta'],
+                    bold_italic, GREEK['theta'], bold, ' (deg)')
             else:
                 ws.write(row, col, h, bold)
         row += 1
@@ -3449,9 +3457,12 @@ class Report_NSLS2U_Default:
         beta_fmt = wb_num_fmts['0.000']
         etax_fmt = wb_num_fmts['0.000']
         psi_fmt = wb_num_fmts['0.0000']
+        rad_fmt = wb_num_fmts['0.000000']
+        deg_fmt = wb_num_fmts['0.000000']
 
         fmt_list = [None, None, None, None, None,
-                    beta_fmt, beta_fmt, etax_fmt, psi_fmt, psi_fmt]
+                    beta_fmt, beta_fmt, etax_fmt, psi_fmt, psi_fmt,
+                    rad_fmt, deg_fmt]
         assert len(fmt_list) == len(excel_elem_list[1])
 
         # Adjust the column widths for "Element Name" and "Element Type" columns
@@ -5476,7 +5487,8 @@ class Report_NSLS2U_Default:
         flat_elem_s_name_type_list = [header, '-' * len(header)]
         excel_headers = [
             's (m)', 'L (m)', 'Element Name', 'Element Type', 'Element Occurrence',
-            'betax (m)', 'betay (m)', 'etax (m)', 'psix (2\pi)', 'psiy (2\pi)']
+            'betax (m)', 'betay (m)', 'etax (m)', 'psix (2\pi)', 'psiy (2\pi)',
+            'Delta_theta (rad)', 'Delta_theta (deg)']
         excel_elem_list = [excel_headers]
         sel_data['tot_bend_angle_rad_per_period'] = 0.0
         assert np.all(res['twi']['columns']['s'] == res['flr']['columns']['s'])
@@ -5492,13 +5504,18 @@ class Report_NSLS2U_Default:
 
             flat_elem_s_name_type_list.append(
                 value_template.format(s, elem_name, elem_type))
-            excel_elem_list.append([
-                s, L, elem_name, elem_type, elem_occur, betax, betay, etax,
-                psix / (2 * np.pi), psiy / (2 * np.pi)])
 
             if elem_name in elem_defs['bends']:
-                sel_data['tot_bend_angle_rad_per_period'] += \
-                    elem_defs['bends'][elem_name]['ANGLE']
+                dtheta_rad = elem_defs['bends'][elem_name]['ANGLE']
+
+                sel_data['tot_bend_angle_rad_per_period'] += dtheta_rad
+            else:
+                dtheta_rad = 0.0
+            dtheta_deg = np.rad2deg(dtheta_rad)
+
+            excel_elem_list.append([
+                s, L, elem_name, elem_type, elem_occur, betax, betay, etax,
+                psix / (2 * np.pi), psiy / (2 * np.pi), dtheta_rad, dtheta_deg])
         #
         assert len(excel_elem_list[0]) == len(excel_elem_list[1]) # Confirm that the
         # length of headers is equal to the length of each list.
