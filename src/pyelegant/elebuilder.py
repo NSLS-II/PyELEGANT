@@ -1184,7 +1184,8 @@ class InfixEquation():
 
         return copy
 
-AST_COMPATIBLE_REPL = [('/', '__SLASH__'), ('.', '__DOT__'), ('#', '__POUND__')]
+AST_COMPATIBLE_REPL = [('/', '__SLASH__'), ('.', '__DOT__'), ('#', '__POUND__'),
+                       ('$', '__DOLLAR__')]
 RPN_CONV_POST_REPL = [(_temp, _orig) for _orig, _temp in AST_COMPATIBLE_REPL]
 
 ########################################################################

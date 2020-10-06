@@ -136,7 +136,7 @@ class Lattice():
         "LTE_text" must not contain comments and ampersands.
         """
 
-        matches = re.findall('\s+"?(\w+)"?[ \t]*:[ \t]*(\w+)[ \t]*,?(.*)',
+        matches = re.findall('\s+"?([\w\$]+)"?[ \t]*:[ \t]*(\w+)[ \t]*,?(.*)',
                              ' '+LTE_text)
         # ^ Need to add the initial whitespace to pick up the first occurrence
 
@@ -152,7 +152,7 @@ class Lattice():
         """
 
         matches = re.findall(
-            '\s+("?\w+"?)[ \t]*:[ \t]*("?\w+"?)[ \t]*,?(.*)', LTE_text)
+            '\s+("?[\w\$]+"?)[ \t]*:[ \t]*("?\w+"?)[ \t]*,?(.*)', LTE_text)
 
         beamline_def = []
         for (name, type_name, rest) in matches:
@@ -171,7 +171,7 @@ class Lattice():
         "LTE_text" must not contain comments and ampersands.
         """
 
-        matches = re.findall('\s+USE[ \t]*,[ \t"]*(\w+)[ \t\r\n"]*', LTE_text,
+        matches = re.findall('\s+USE[ \t]*,[ \t"]*([\w\$]+)[ \t\r\n"]*', LTE_text,
                              re.IGNORECASE)
 
         if len(matches) > 1:
