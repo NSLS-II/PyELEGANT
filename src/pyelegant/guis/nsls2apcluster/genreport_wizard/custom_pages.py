@@ -871,7 +871,10 @@ class GlobalOptionsDialog(QtWidgets.QDialog):
         for suffix in ['nodelist', 'exclude']:
             if suffix in common_remote_opts:
                 w = self.findChild(edit, f'lineEdit_{suffix}')
-                w.setText(','.join(common_remote_opts[suffix]))
+                try:
+                    w.setText(','.join(common_remote_opts[suffix]))
+                except:
+                    w.setText('')
 
     def download_options(self):
         """"""
