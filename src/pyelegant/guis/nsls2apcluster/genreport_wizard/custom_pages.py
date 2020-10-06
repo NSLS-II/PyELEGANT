@@ -423,9 +423,13 @@ def getFileDialogInitDir(lineEdit_text):
 
     cur_filepath = lineEdit_text.strip()
     cur_file = Path(cur_filepath)
-    if cur_file.exists():
-        directory = str(cur_file.parent)
-    else:
+    try:
+        if cur_file.exists():
+            directory = str(cur_file.parent)
+        else:
+            directory = ''
+    except PermissionError:
+        print(f'You do not have permission to the folder "{cur_file.parent}".')
         directory = ''
 
     return directory
@@ -1525,11 +1529,20 @@ class PageLoadSeedConfig(QtWidgets.QWizardPage):
 
             seed_config_filepath = self.wizardObj.config_filepath
 
-        if not Path(seed_config_filepath).exists():
-            text = 'Invalid file path'
+        try:
+            if not Path(seed_config_filepath).exists():
+                text = 'Invalid file path'
+                info_text = (
+                    f'Specified config file "{seed_config_filepath}" '
+                    f'does not exist!')
+                showInvalidPageInputDialog(text, info_text)
+
+                return False
+        except PermissionError:
+            text = 'Permission error'
             info_text = (
                 f'Specified config file "{seed_config_filepath}" '
-                f'does not exist!')
+                f'is not accessible!')
             showInvalidPageInputDialog(text, info_text)
 
             return False
@@ -1669,7 +1682,11 @@ class PageNewSetup(QtWidgets.QWizardPage):
         if config_folderpath == '':
             return False
 
-        if not Path(config_folderpath).exists():
+        try:
+            if not Path(config_folderpath).exists():
+                return False
+        except PermissionError:
+            print(f'You do not have permission to "{Path(config_folderpath)}"')
             return False
 
         return True
@@ -1678,7 +1695,11 @@ class PageNewSetup(QtWidgets.QWizardPage):
         """"""
 
         new_config_folder = Path(new_config_folderpath)
-        if not new_config_folder.exists():
+        try:
+            if not new_config_folder.exists():
+                return
+        except PermissionError:
+            print(f'You do not have permission to "{new_config_folder}"')
             return
 
         rootname = self.field('edit_rootname').strip()
@@ -1695,7 +1716,11 @@ class PageNewSetup(QtWidgets.QWizardPage):
 
         new_config_folderpath = self.field('edit_new_config_folder')
         new_config_folder = Path(new_config_folderpath)
-        if not new_config_folder.exists():
+        try:
+            if not new_config_folder.exists():
+                return
+        except PermissionError:
+            print(f'You do not have permission to "{new_config_folder}"')
             return
 
         self.update_paths(new_config_folder, new_rootname)
@@ -1742,10 +1767,14 @@ class PageNewSetup(QtWidgets.QWizardPage):
 
         new_config_folderpath = self.edit_obj.text()
         new_config_folder = Path(new_config_folderpath)
-        if not new_config_folder.exists():
+        try:
+            if not new_config_folder.exists():
+                return False
+            else:
+                self.wizardObj._settings['config_folderpath'] = new_config_folderpath
+        except PermissionError:
+            print(f'You do not have permission to "{new_config_folder}"')
             return False
-        else:
-            self.wizardObj._settings['config_folderpath'] = new_config_folderpath
 
         rootname = self.field('edit_rootname')
 
@@ -1920,9 +1949,15 @@ class PageLTE(PageStandard):
             return False
 
         orig_LTE_Path = Path(orig_LTE_filepath)
-        if not orig_LTE_Path.exists():
-            text = 'Invalid file path'
-            info_text = f'Specified LTE file "{orig_LTE_Path}" does not exist!'
+        try:
+            if not orig_LTE_Path.exists():
+                text = 'Invalid file path'
+                info_text = f'Specified LTE file "{orig_LTE_Path}" does not exist!'
+                showInvalidPageInputDialog(text, info_text)
+                return False
+        except PermissionError:
+            text = 'Permission error'
+            info_text = f'Specified LTE file "{orig_LTE_Path}" is not accessible!'
             showInvalidPageInputDialog(text, info_text)
             return False
 
@@ -2038,9 +2073,16 @@ class PageLTE(PageStandard):
         alter_elements = []
         for name, _fp in kickmap_filepaths['abs'].items():
             abs_kickmap_f = Path(_fp)
-            if not abs_kickmap_f.exists():
-                text = f'Non-existing kickmap file for Element "{name}"'
-                info_text = f'Specified file "{_fp}" does not exist!'
+            try:
+                if not abs_kickmap_f.exists():
+                    text = f'Non-existing kickmap file for Element "{name}"'
+                    info_text = f'Specified file "{_fp}" does not exist!'
+                    showInvalidPageInputDialog(text, info_text)
+                    #traceback.print_exc()
+                    return False
+            except PermissionError:
+                text = 'Permission error'
+                info_text = f'Specified file "{_fp}" is not accessible!'
                 showInvalidPageInputDialog(text, info_text)
                 #traceback.print_exc()
                 return False
@@ -2050,11 +2092,30 @@ class PageLTE(PageStandard):
             alter_elements.append(
                 dict(name=name, item='INPUT_FILE', string_value=str(dst)))
 
-            if not dst.exists():
-                print((f'Kickmap elment "{name}": Copying file "{abs_kickmap_f}" '
-                       f'into {dst}.'))
-                shutil.copy(str(abs_kickmap_f), str(dst))
+            try:
+                if not dst.exists():
+                    print((f'Kickmap element "{name}": Copying file "{abs_kickmap_f}" '
+                           f'into {dst}.'))
+                    shutil.copy(str(abs_kickmap_f), str(dst))
+            except PermissionError:
+                text = 'Permission error'
+                info_text = (
+                    f'Kickmap element "{name}": Kickmap file copy destination '
+                    f'"{dst}" is not accessible!')
+                showInvalidPageInputDialog(text, info_text)
+                #traceback.print_exc()
+                return False
         # (SEGMENT#1 End)
+        #
+        try:
+            input_LTE_Path.exists()
+        except PermissionError:
+            text = 'Permission error'
+            info_text = (
+                f'Specified input LTE file "{input_LTE_Path}" is not accessible!')
+            showInvalidPageInputDialog(text, info_text)
+            #traceback.print_exc()
+            return False
         #
         if not input_LTE_Path.exists():
             if alter_elements:
@@ -4125,6 +4186,8 @@ class PageRfTau(PageGenReport):
             assert os.path.exists(mmap_pgz_filepath)
             d = pe.util.load_pgz_file(mmap_pgz_filepath)
             mmap_d = d['data']['mmap']
+        except PermissionError:
+            print(f'** Permission Error: File "{mmap_pgz_filepath}" is not accessible')
         except:
             print(traceback.format_exc())
 
