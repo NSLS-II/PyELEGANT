@@ -22,7 +22,10 @@ _IMPORT_TIMESTAMP = time.time()
 _SLURM_CONFIG_FILEPATH = Path.home().joinpath('.pyelegant', 'slurm_config.yaml')
 _SLURM_CONFIG_FILEPATH.parent.mkdir(parents=True, exist_ok=True)
 if not _SLURM_CONFIG_FILEPATH.exists():
-    _SLURM_CONFIG_FILEPATH.write_text('')
+    _SLURM_CONFIG_FILEPATH.write_text('''\
+exclude: []
+abs_time_limit: {}
+''')
 #
 SLURM_PARTITIONS = {}
 SLURM_EXCL_NODES = None
@@ -167,7 +170,12 @@ def _make_sure_slurm_excl_nodes_initialized():
 def clear_slurm_excl_nodes():
     """"""
 
-    SLURM_EXCL_NODES.clear()
+    global SLURM_EXCL_NODES
+
+    if SLURM_EXCL_NODES is None:
+        SLURM_EXCL_NODES = []
+    else:
+        SLURM_EXCL_NODES.clear()
 
 def set_slurm_excl_nodes(node_name_list):
     """
