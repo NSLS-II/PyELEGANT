@@ -4233,11 +4233,15 @@ class PageRfTau(PageGenReport):
         use_beamline_ring = report_obj.conf['use_beamline_ring']
 
         try:
+            common_remote_opts = {}
+            common_remote_opts.update(self.conf['nonlin']['common_remote_opts'])
+
             LoLs = report_obj.scan_V_tau(
                 rf_volt_ranges, v_scan_npts, ntasks, E_MeV_list, eps_0_list,
                 total_beam_current_mA_list, U0_ev_list, sigma_delta_list, T_rev_s,
                 num_filled_bunches, raw_coupling_specs, alphac, circumf, LTE_filepath,
-                h, mmap_sdds_filepath_ring, max_mom_aper_percent, use_beamline_ring)
+                h, mmap_sdds_filepath_ring, max_mom_aper_percent, use_beamline_ring,
+                remote_opts=common_remote_opts)
         except:
             print(traceback.format_exc())
             QtWidgets.QApplication.restoreOverrideCursor()

@@ -7685,7 +7685,8 @@ class Report_NSLS2U_Default:
         self, rf_volt_ranges, v_scan_npts, ntasks, E_MeV_list, eps_0_list,
         total_beam_current_mA_list, U0_ev_list, sigma_delta_list, T_rev_s,
         num_filled_bunches, raw_coupling_specs, alphac, circumf, LTE_filepath, h,
-        mmap_sdds_filepath_ring, max_mom_aper_percent, use_beamline_ring):
+        mmap_sdds_filepath_ring, max_mom_aper_percent, use_beamline_ring,
+        remote_opts=None):
         """"""
 
         nEnergy = len(E_MeV_list)
@@ -7860,13 +7861,16 @@ class Report_NSLS2U_Default:
             timelimit_str += '{:02d}:{:02d}:{:02d}'.format(
                 dobj.hour, dobj.minute, dobj.second)
 
-            remote_opts = dict(ntasks=ntasks, partition='short',
-                               time=timelimit_str, job_name='lifetime')
+            _remote_opts = dict(ntasks=ntasks, partition='normal',
+                                time=timelimit_str, job_name='lifetime')
+            if remote_opts is not None:
+                for k, v in remote_opts.items():
+                    _remote_opts[k] = v
 
             module_name = 'pyelegant.scripts.genreport'
             func_name = 'get_ELE_Touschek_lifetime'
             flat_results = pe.remote.run_mpi_python(
-                remote_opts, module_name, func_name, rfV_EMeV_C_kappa_list,
+                _remote_opts, module_name, func_name, rfV_EMeV_C_kappa_list,
                 (LTE_filepath, mmap_sdds_filepath_ring, h, max_mom_aper_percent,
                  use_beamline_ring),
             )

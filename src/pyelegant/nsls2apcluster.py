@@ -1302,7 +1302,10 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
         partition=remote_opts.get('partition', 'normal'),
         ntasks=remote_opts.get('ntasks', 50), x11=remote_opts.get('x11', False),
         spread_job=remote_opts.get('spread_job', False),
-        timelimit_str=remote_opts.get('time', None))
+        timelimit_str=remote_opts.get('time', None),
+        exclude=remote_opts.get('exclude', None),
+        nodelist=remote_opts.get('nodelist', None),
+    )
 
     d['output_filepath'] = output_filepath
 
@@ -1478,7 +1481,7 @@ def get_constrained_timelimit_str(abs_timelimit, partition):
 #----------------------------------------------------------------------
 def gen_mpi_submit_script(
     job_name='job', partition='normal', ntasks=10, x11=False, spread_job=False,
-    timelimit_str=None):
+    timelimit_str=None, exclude=None, nodelist=None):
     """"""
 
     tmp = tempfile.NamedTemporaryFile(dir=os.getcwd(), delete=False,
@@ -1505,6 +1508,7 @@ def gen_mpi_submit_script(
 # #SBATCH --nodelist=apcpu-001,apcpu-002
 # SBATCH --nodelist=apcpu-003,apcpu-004
 
+{nodelist}
 {exclude}
 {spread_job}
 
@@ -1532,14 +1536,23 @@ srun {mpi_compiler_opt} python -m mpi4py.futures {main_script_path} _mpi_starmap
 
     _make_sure_slurm_excl_nodes_initialized()
 
+    if exclude is None:
+        exclude = SLURM_EXCL_NODES
+    _exclude = ('' if exclude == [] else '#SBATCH --exclude={}'.format(
+        ','.join(exclude)))
+
+    if nodelist is None:
+        _nodelist = ''
+    else:
+        _nodelist = '#SBATCH --nodelist={}'.format(','.join(nodelist))
+
     contents = contents_template.format(
         mpi_compiler_opt=MPI_COMPILER_OPT_STR,
         main_script_path=__file__[:-3]+'_mpi_script.py', input_filepath=input_filepath,
         job_name=job_name, partition=partition, ntasks=ntasks,
         slurm_timelimit_str=slurm_timelimit_str,
         x11=('' if not x11 else 'export MPLBACKEND="agg"'),
-        exclude=('' if SLURM_EXCL_NODES == [] else '#SBATCH --exclude={}'.format(
-            ','.join(SLURM_EXCL_NODES))),
+        exclude=_exclude, nodelist=_nodelist,
         spread_job=('' if not spread_job else '#SBATCH --spread-job')
     )
 
