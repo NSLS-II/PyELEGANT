@@ -60,7 +60,7 @@ if __name__ == '__main__':
 
             paths_to_prepend = dill.load(f)
             for _path in paths_to_prepend:
-                sys.path.insert(0, _path)
+                sys.path.insert(0, str(_path))
 
             d = dill.load(f)
 
