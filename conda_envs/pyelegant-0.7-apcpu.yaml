@@ -1,0 +1,239 @@
+# --- Notes on the manual installation sequence ---
+# $ module load elegant-latest
+# $ conda create -n pyelegant-0.7 python=3.8 tensorflow jupyter numpy scipy
+#   matplotlib h5py scikit-learn cython numba jupytext
+#   jupyter_contrib_nbextensions dill deap plotly pandas ruamel.yaml qtpy
+#   pillow xlsxwriter
+#   -c https://repo.anaconda.com/pkgs/main
+#   -c https://conda.anaconda.org/conda-forge --no-default-packages
+# ^ The following were pulled from defaults on 10/07/2020:
+#     python = 3.8.5
+#     ruamel.yaml = 0.16.12
+#     dill = 0.3.2
+#     tensorflow = 2.2.0
+#     scikit-learn = 0.23.2 [You may occasionally encounter "import sklearn" fails with "ImportError: dlopen: cannot load any more object with static TLS". This can be avoided as long as you import sklearn before importing tensorflow]
+#     scipy = 1.5.2
+#     numpy = 1.19.1
+#     qtpy = 1.9.0
+#     pillow = 7.2.0
+#     xlsxwriter = 1.3.6 [required for report generator]
+#   The following were pulled from conda-forge:
+#     deap = 1.3.1
+#     jupyter_contrib_nbextensions related packages
+#     jupytext = 1.6.0
+#     markdown-it-py=0.5.5
+#     python_abi = 3.8.1
+# $ conda activate pyelegant-0.7
+# (env) $ pip cache purge
+# (env) $ pip install mpi4py [installed 3.0.3 on 10/07/2020]
+# (env) $ pip install pylatex [installed 1.4.0 on 10/07/2020]
+# (env) $ pip install pylatex[quantities] [installed 0.12.4 on 10/07/2020]
+# # ^ To be able to use "pylatex", I needed TeX Live and "texlive-latex-extra" (without the latter, I was getting the error message saying "! LaTeX Error: File `lastpage.sty' not found.")  installed on the cluster by D. Hidas.
+# (env) $ cd git_repos/pyelegant
+# (env) $ python setup.py install --facility-name=nsls2apcluster
+# --- Notes on how this environment was exported into this YAML file.
+# $ conda env export --no-builds -n pyelegant-0.7 > pyelegant-0.7-apcpu.yaml
+# --- Notes on how this environment can be reproduced from this YAML file.
+# $ rm -r ~/.cache/pip
+# $ conda env create -f pyelegant-0.7-apcpu.yaml -n test_env
+name: pyelegant
+channels:
+  - https://repo.anaconda.com/pkgs/main
+  - https://conda.anaconda.org/conda-forge
+dependencies:
+  - _libgcc_mutex=0.1
+  - _tflow_select=2.3.0
+  - absl-py=0.10.0
+  - aiohttp=3.6.2
+  - argon2-cffi=20.1.0
+  - astunparse=1.6.3
+  - async-timeout=3.0.1
+  - async_generator=1.10
+  - attrs=20.2.0
+  - backcall=0.2.0
+  - blas=1.0
+  - bleach=3.2.1
+  - blinker=1.4
+  - brotlipy=0.7.0
+  - c-ares=1.16.1
+  - ca-certificates=2020.7.22
+  - cachetools=4.1.1
+  - certifi=2020.6.20
+  - cffi=1.14.3
+  - chardet=3.0.4
+  - click=7.1.2
+  - cryptography=3.1.1
+  - cycler=0.10.0
+  - cython=0.29.21
+  - dbus=1.13.16
+  - deap=1.3.1
+  - decorator=4.4.2
+  - defusedxml=0.6.0
+  - dill=0.3.2
+  - entrypoints=0.3
+  - expat=2.2.9
+  - fontconfig=2.13.0
+  - freetype=2.10.2
+  - gast=0.3.3
+  - glib=2.65.0
+  - google-auth=1.22.1
+  - google-auth-oauthlib=0.4.1
+  - google-pasta=0.2.0
+  - grpcio=1.31.0
+  - gst-plugins-base=1.14.0
+  - gstreamer=1.14.0
+  - h5py=2.10.0
+  - hdf5=1.10.6
+  - icu=58.2
+  - idna=2.10
+  - importlib-metadata=1.7.0
+  - importlib_metadata=1.7.0
+  - intel-openmp=2020.2
+  - ipykernel=5.3.4
+  - ipython=7.18.1
+  - ipython_genutils=0.2.0
+  - ipywidgets=7.5.1
+  - jedi=0.17.2
+  - jinja2=2.11.2
+  - joblib=0.17.0
+  - jpeg=9b
+  - jsonschema=3.2.0
+  - jupyter=1.0.0
+  - jupyter_client=6.1.7
+  - jupyter_console=6.2.0
+  - jupyter_contrib_core=0.3.3
+  - jupyter_contrib_nbextensions=0.5.1
+  - jupyter_core=4.6.3
+  - jupyter_highlight_selected_word=0.2.0
+  - jupyter_latex_envs=1.4.6
+  - jupyter_nbextensions_configurator=0.4.1
+  - jupyterlab_pygments=0.1.2
+  - jupytext=1.6.0
+  - keras-preprocessing=1.1.0
+  - kiwisolver=1.2.0
+  - lcms2=2.11
+  - ld_impl_linux-64=2.33.1
+  - libedit=3.1.20191231
+  - libffi=3.3
+  - libgcc-ng=9.1.0
+  - libgfortran-ng=7.3.0
+  - libllvm10=10.0.1
+  - libpng=1.6.37
+  - libprotobuf=3.13.0
+  - libsodium=1.0.18
+  - libstdcxx-ng=9.1.0
+  - libtiff=4.1.0
+  - libuuid=1.0.3
+  - libxcb=1.14
+  - libxml2=2.9.10
+  - libxslt=1.1.34
+  - llvmlite=0.34.0
+  - lxml=4.5.2
+  - lz4-c=1.9.2
+  - markdown=3.2.2
+  - markdown-it-py=0.5.5
+  - markupsafe=1.1.1
+  - matplotlib=3.3.1
+  - matplotlib-base=3.3.1
+  - mistune=0.8.4
+  - mkl=2020.2
+  - mkl-service=2.3.0
+  - mkl_fft=1.2.0
+  - mkl_random=1.1.1
+  - multidict=4.7.6
+  - nbclient=0.5.0
+  - nbconvert=6.0.7
+  - nbformat=5.0.7
+  - ncurses=6.2
+  - nest-asyncio=1.4.1
+  - notebook=6.1.4
+  - numba=0.51.2
+  - numpy=1.19.1
+  - numpy-base=1.19.1
+  - oauthlib=3.1.0
+  - olefile=0.46
+  - openssl=1.1.1h
+  - opt_einsum=3.1.0
+  - packaging=20.4
+  - pandas=1.1.2
+  - pandoc=2.10.1
+  - pandocfilters=1.4.2
+  - parso=0.7.0
+  - pcre=8.44
+  - pexpect=4.8.0
+  - pickleshare=0.7.5
+  - pillow=7.2.0
+  - pip=20.2.3
+  - plotly=4.11.0
+  - prometheus_client=0.8.0
+  - prompt-toolkit=3.0.7
+  - prompt_toolkit=3.0.7
+  - protobuf=3.13.0
+  - ptyprocess=0.6.0
+  - pyasn1=0.4.8
+  - pyasn1-modules=0.2.8
+  - pycparser=2.20
+  - pygments=2.7.1
+  - pyjwt=1.7.1
+  - pyopenssl=19.1.0
+  - pyparsing=2.4.7
+  - pyqt=5.9.2
+  - pyrsistent=0.17.3
+  - pysocks=1.7.1
+  - python=3.8.5
+  - python-dateutil=2.8.1
+  - python_abi=3.8
+  - pytz=2020.1
+  - pyyaml=5.3.1
+  - pyzmq=19.0.2
+  - qt=5.9.7
+  - qtconsole=4.7.7
+  - qtpy=1.9.0
+  - readline=8.0
+  - requests=2.24.0
+  - requests-oauthlib=1.3.0
+  - retrying=1.3.3
+  - rsa=4.6
+  - ruamel.yaml=0.16.12
+  - ruamel.yaml.clib=0.2.2
+  - scikit-learn=0.23.2
+  - scipy=1.5.2
+  - send2trash=1.5.0
+  - setuptools=50.3.0
+  - sip=4.19.13
+  - six=1.15.0
+  - sqlite=3.33.0
+  - tensorboard=2.2.1
+  - tensorboard-plugin-wit=1.6.0
+  - tensorflow=2.2.0
+  - tensorflow-base=2.2.0
+  - tensorflow-estimator=2.2.0
+  - termcolor=1.1.0
+  - terminado=0.8.3
+  - testpath=0.4.4
+  - threadpoolctl=2.1.0
+  - tk=8.6.10
+  - toml=0.10.1
+  - tornado=6.0.4
+  - traitlets=5.0.4
+  - urllib3=1.25.10
+  - wcwidth=0.2.5
+  - webencodings=0.5.1
+  - werkzeug=1.0.1
+  - wheel=0.35.1
+  - widgetsnbextension=3.5.1
+  - wrapt=1.12.1
+  - xlsxwriter=1.3.6
+  - xz=5.2.5
+  - yaml=0.2.5
+  - yarl=1.6.0
+  - zeromq=4.3.2
+  - zipp=3.3.0
+  - zlib=1.2.11
+  - zstd=1.4.5
+  - pip:
+    - mpi4py==3.0.3
+    - ordered-set==4.0.2
+    - pylatex==1.4.0
+    - quantities==0.12.4
+    - git+http://git@gitlab.cs.nsls2.local/yhidaka/pyelegant.git@v0.7.0 --install-option="--facility-name=nsls2apcluster"
