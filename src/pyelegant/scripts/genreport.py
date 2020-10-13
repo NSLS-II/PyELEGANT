@@ -1,9 +1,6 @@
 import sys
 import os
 import warnings
-import numpy as np
-import scipy.constants
-from scipy.constants import physical_constants
 import time
 import datetime
 import hashlib
@@ -12,6 +9,13 @@ import pickle
 import fnmatch
 from types import SimpleNamespace
 import shutil
+from pathlib import Path
+import argparse
+from packaging import version
+
+import numpy as np
+import scipy.constants
+from scipy.constants import physical_constants
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.legend_handler import HandlerPatch
@@ -23,8 +27,6 @@ from ruamel import yaml
 # ^ ruamel's "yaml" does NOT suffer from the PyYAML(v5.3, YAML v1.1) problem
 #   that a float value in scientific notation without "." and the sign after e/E
 #   is treated as a string.
-from pathlib import Path
-import argparse
 import xlsxwriter
 
 import pyelegant as pe
@@ -171,8 +173,8 @@ class Report_NSLS2U_Default:
             self.user_conf = user_conf
 
             report_version = self.user_conf.get('report_version', None)
-            if report_version != '1.2':
-                warnings.warn('report_version=1.2 is the latest.',
+            if report_version != '1.3':
+                warnings.warn('report_version=1.3 is the latest.',
                               DeprecationWarning)
             self.conf = self.get_default_config(report_version)
 
@@ -481,7 +483,7 @@ class Report_NSLS2U_Default:
                  f'\seqsplit{{"{mod_LTE_filename}"}}. This report was generated using '
                  f'PyELEGANT version {ver_str} and '
                  f'the report format "{latex_safe_report_class_name}" '
-                 f'version {self._version}.'))
+                 f'version {self._version.base_version}.'))
             doc.append(default_paragraph)
 
             custom_paragraphs = conf['report_paragraphs'].get('lattice_description', [])
@@ -747,7 +749,7 @@ class Report_NSLS2U_Default:
 
         with doc.create(plx.Section('Lattice Properties')):
 
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 nEnergies = 1 + len(self.lin_data['extra_energy_data_list'])
                 table_spec = ' '.join(['l'] + ['l'] * nEnergies)
             else:
@@ -848,7 +850,7 @@ class Report_NSLS2U_Default:
         except:
             opt_props = None
 
-        if self._version != '1.0':
+        if self._version != version.parse('1.0'):
             extra_Es = self.lin_data['extra_energy_data_list']
 
         k = row_spec
@@ -935,7 +937,7 @@ class Report_NSLS2U_Default:
 
         elif k == 'E_GeV':
             label, symbol, unit = 'Beam Energy ', '$E$', ' [GeV]'
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 val_str = [f'${lin_data[k]:.2g}$']
                 val_str += [f'${_d[k]:.2g}$' for _d in extra_Es]
             else:
@@ -944,7 +946,7 @@ class Report_NSLS2U_Default:
             label = 'Natural Horizontal Emittance '
             symbol = r'$\epsilon_x$'
             unit = ' [pm-rad]'
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 val_str = ['${:.1f}$'.format(lin_data[k] * 1e12)]
                 val_str += ['${:.1f}$'.format(_d[k] * 1e12) for _d in extra_Es]
             else:
@@ -959,7 +961,7 @@ class Report_NSLS2U_Default:
             label = 'Damping Times '
             symbol = r'$(\tau_x,\, \tau_y,\, \tau_{\delta})$'
             unit = ' [ms]'
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 val_str = [r'$({:.2f},\, {:.2f},\, {:.2f})$'.format(
                     lin_data['taux'] * 1e3, lin_data['tauy'] * 1e3,
                     lin_data['taudelta'] * 1e3)]
@@ -998,7 +1000,7 @@ class Report_NSLS2U_Default:
             label = 'Energy Loss per Turn '
             symbol = r'$U_0$'
             unit = ' [keV]'
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 val_str = ['${:.0f}$'.format(lin_data['U0_MeV'] * 1e3)]
                 val_str += [
                     '${:.0f}$'.format(_d['U0_MeV'] * 1e3) for _d in extra_Es]
@@ -1008,7 +1010,7 @@ class Report_NSLS2U_Default:
             label = 'Energy Spread '
             symbol = r'$\sigma_{\delta}$'
             unit = r' [\%]'
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 val_str = ['${:.3f}$'.format(lin_data['dE_E'] * 1e2)]
                 val_str += [
                     '${:.3f}$'.format(_d['dE_E'] * 1e2) for _d in extra_Es]
@@ -1081,11 +1083,11 @@ class Report_NSLS2U_Default:
                 fig.add_image(os.path.basename(flr_pdf_filepath), page=1,
                               width=plx.utils.NoEscape(r'\linewidth'))
                 doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
-                if self._version == '1.1':
+                if self._version == version.parse('1.1'):
                     caption = (
                         'Floor layout comparison for one super-period with rays '
                         'from bending magnet entry points.')
-                elif self._version == '1.2':
+                elif self._version >= version.parse('1.2'):
                     caption = (
                         'Floor layout comparison for one super-period with photon '
                         'beam rays from IDs and bending magnets.')
@@ -1093,7 +1095,7 @@ class Report_NSLS2U_Default:
                     raise NotImplementedError
                 fig.add_caption(caption)
 
-            if self._version == '1.2':
+            if self._version >= version.parse('1.2'):
                 doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
                 with doc.create(plx.FigureForMultiPagePDF(position='h!t')) as fig:
                     page_caption_list = [
@@ -1118,14 +1120,17 @@ class Report_NSLS2U_Default:
 
             doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
             with doc.create(plx.FigureForMultiPagePDF(position='h!t')) as fig:
-                if self._version == '1.1':
+                if self._version == version.parse('1.1'):
                     page_caption_list = [
                         (2, 'Zoomed in around Short Straight (SS).'),
                         (3, 'Zoomed in around Long Straight (LS).')]
-                elif self._version == '1.2':
+                elif self._version >= version.parse('1.2'):
                     page_caption_list = [
                         (7, 'Electron beam tranjectory around Short Straight (SS).'),
                         (8, 'Electron beam tranjectory around Long Straight (LS).')]
+                else:
+                    raise NotImplementedError
+
                 for page, caption in page_caption_list:
                     with doc.create(plx.SubFigureForMultiPagePDF(
                         position='b', width=plx.utils.NoEscape(r'0.5\linewidth'))
@@ -1798,7 +1803,7 @@ class Report_NSLS2U_Default:
             'sigma_delta', # Energy spread
         ]
 
-        if self._version == '1.2':
+        if self._version >= version.parse('1.2'):
             if 'rf' not in self.conf:
                 return
             if not self.conf['rf'].get('include', False):
@@ -2243,7 +2248,7 @@ class Report_NSLS2U_Default:
                                     (f'Local Particle Loss Rate for '
                                      f'Case Group {iFigPage+1:d}'))
 
-        elif self._version == '1.1':
+        elif self._version == version.parse('1.1'):
 
             if 'rf' not in self.conf:
                 return
@@ -2614,7 +2619,7 @@ class Report_NSLS2U_Default:
                                      f'Case Group {iFigPage+1:d}'))
 
 
-        elif self._version == '1.0':
+        elif self._version == version.parse('1.0'):
 
             with doc.create(plx.Section('RF-related Properties & Beam Lifetime')):
 
@@ -2849,7 +2854,7 @@ class Report_NSLS2U_Default:
 
         courier = wb_txt_fmts.courier
 
-        if self._version != '1.0':
+        if self._version != version.parse('1.0'):
             nEnergies = 1 + len(self.lin_data['extra_energy_data_list'])
         else:
             nEnergies = 1
@@ -2893,7 +2898,7 @@ class Report_NSLS2U_Default:
                     ws.write(row, col+1, keywords)
 
             elif k == 'lat_author':
-                if self._version != '1.0':
+                if self._version != version.parse('1.0'):
                     authors = conf.get('lattice_authors', '')
                     if isinstance(authors, str):
                         pass
@@ -3498,7 +3503,7 @@ class Report_NSLS2U_Default:
 
         row = 2 # Leave top 2 rows for lattice description & notes for property table
 
-        if self._version != '1.0':
+        if self._version != version.parse('1.0'):
             nEnergies = 1 + len(self.lin_data['extra_energy_data_list'])
         else:
             nEnergies = 1
@@ -3553,7 +3558,7 @@ class Report_NSLS2U_Default:
         energy_dep_row_specs = ['E_GeV', 'eps_x', 'taux', 'tauy', 'taudelta',
                                 'sigma_delta', 'U0']
 
-        if self._version != '1.0':
+        if self._version != version.parse('1.0'):
             name_list_gen = lambda base_str: \
                 [f'{base_str}_{iEnergy}' for iEnergy in range(nEnergies)]
             self.defined_names = {
@@ -3623,7 +3628,7 @@ class Report_NSLS2U_Default:
 
             ws.write_rich_string(row, 0, *label_fragments)
 
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 col_offset = 1
 
                 if not isinstance(value, list):
@@ -3726,7 +3731,7 @@ class Report_NSLS2U_Default:
         except:
             opt_props = None
 
-        if self._version != '1.0':
+        if self._version != version.parse('1.0'):
             extra_Es = self.lin_data['extra_energy_data_list']
 
         k = row_spec
@@ -3823,7 +3828,7 @@ class Report_NSLS2U_Default:
             label = [normal, 'Beam Energy ']
             symbol = [italic, 'E']
             unit = [normal, ' (GeV)']
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 value = [lin_data[k]] + [_d[k] for _d in extra_Es]
                 num_fmt = None
             else:
@@ -3837,7 +3842,7 @@ class Report_NSLS2U_Default:
             label = [normal, 'Natural Horizontal Emittance ']
             symbol = [italic, GREEK['epsilon'], italic_sub, 'x']
             unit = [normal, ' (pm-rad)']
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 value  = [lin_data[k] * 1e12] + [_d[k] * 1e12 for _d in extra_Es]
                 num_fmt = nf['0.00']
             else:
@@ -3882,7 +3887,7 @@ class Report_NSLS2U_Default:
             else:
                 symbol = [italic, GREEK['tau'], italic_sub, plane]
             unit = [normal, ' (ms)']
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 value = [lin_data[k] * 1e3] + [_d[k] * 1e3 for _d in extra_Es]
                 num_fmt = nf['0.00']
             else:
@@ -3891,7 +3896,7 @@ class Report_NSLS2U_Default:
             label = [normal, 'Energy Spread ']
             symbol = [italic, GREEK['sigma'], italic_sub, GREEK['delta']]
             unit = [normal, ' (%)']
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 value = [lin_data['dE_E'] * 1e2] + [
                     _d['dE_E'] * 1e2 for _d in extra_Es]
                 num_fmt = nf['0.000']
@@ -3901,7 +3906,7 @@ class Report_NSLS2U_Default:
             label = [normal, 'Energy Loss per Turn ']
             symbol = [italic, 'U', sub, '0']
             unit = [normal, ' (keV)']
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 value = [lin_data['U0_MeV'] * 1e3] + [
                     _d['U0_MeV'] * 1e3 for _d in extra_Es]
                 num_fmt = nf['###']
@@ -3943,7 +3948,7 @@ class Report_NSLS2U_Default:
             label = [normal, 'Fraction of Straight Sections ']
             symbol = []
             unit = [normal, ' (%)']
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
                 value = [
                     f'=(L_LS_{i} + L_SS_{i}) * n_periods_in_ring_{i} / circumf_{i} * 1e2'
                     for i in range(len(extra_Es)+1)]
@@ -4020,7 +4025,7 @@ class Report_NSLS2U_Default:
             ws.write(row, col+2, np.rad2deg(theta) * (-1), fmt)
             row += 1
 
-        if self._version == '1.2':
+        if self._version >= version.parse('1.2'):
             title_list = [
                 None,
                 'C30 Long Straight Extraction Port',
@@ -4047,7 +4052,7 @@ class Report_NSLS2U_Default:
                 ws.insert_image(row, len(header_list) * 2 + 2, fp)
                 row += img_height
 
-        elif self._version == '1.1':
+        elif self._version == version.parse('1.1'):
             row = 0
             for iFig, fp in enumerate(
                 sorted(Path(self.report_folderpath).glob('floor_*.png'))):
@@ -4057,6 +4062,8 @@ class Report_NSLS2U_Default:
                     img_height = 25
                 ws.insert_image(row, len(header_list) * 2 + 2, fp)
                 row += img_height
+        elif self._version == version.parse('1.0'):
+            pass
         else:
             raise NotImplementedError
 
@@ -4103,7 +4110,7 @@ class Report_NSLS2U_Default:
 
         row = 0
 
-        if self._version != '1.0':
+        if self._version != version.parse('1.0'):
             nEnergies = 1 + len(self.lin_data['extra_energy_data_list'])
         else:
             nEnergies = 1
@@ -4115,7 +4122,7 @@ class Report_NSLS2U_Default:
             ws.write(row, 1, 'Values', bold)
         row += 1
 
-        if self._version != '1.0':
+        if self._version != version.parse('1.0'):
             for row_spec_str in (
                 'E_GeV', 'circumf', 'n_periods_in_ring',
                 '\n'.join(['req_props', 'length', 'LS']),
@@ -4143,7 +4150,7 @@ class Report_NSLS2U_Default:
 
         if self.rf_dep_props is not None:
 
-            if self._version == '1.2':
+            if self._version >= version.parse('1.2'):
 
                 if 'rf' not in self.conf:
                     return
@@ -4240,7 +4247,7 @@ class Report_NSLS2U_Default:
                         col += 1
                 row += 1
 
-            elif self._version == '1.1':
+            elif self._version == version.parse('1.1'):
 
                 if 'rf' not in self.conf:
                     return
@@ -4385,7 +4392,7 @@ class Report_NSLS2U_Default:
 
         if self.lifetime_props is not None:
 
-            if self._version != '1.0':
+            if self._version != version.parse('1.0'):
 
                 if 'lifetime' not in self.conf:
                     return
@@ -4482,7 +4489,7 @@ class Report_NSLS2U_Default:
 
             row += 1
 
-            if self._version == '1.2':
+            if self._version >= version.parse('1.2'):
 
                 col_elegant_bunchlengths_mm = 1
 
@@ -4654,7 +4661,7 @@ class Report_NSLS2U_Default:
                     ws.insert_image(row, 0, fp)
                     row += img_height
 
-            elif self._version == '1.1':
+            elif self._version == version.parse('1.1'):
 
                 for iEnergy, E_GeV in enumerate(self.rf_dep_props['E_GeV_list']):
 
@@ -5821,18 +5828,20 @@ class Report_NSLS2U_Default:
         ]
         assert len(nsls2_extraction_pts) == len(nsls2_extraction_pt_names)
 
-        if self._version == '1.1':
-            _use_plot_method = 0
-            nsls2_extraction_pts = []
-            nsls2_extraction_pt_names = []
-            cur_BM_fan_plot = False
-            precise_BM_src_pts = False
-        elif self._version == '1.2':
+        if self._version >= version.parse('1.2'):
             _use_plot_method = 1
             #_use_plot_method = 2
             #cur_BM_fan_plot = True
             cur_BM_fan_plot = False
             precise_BM_src_pts = True
+        elif self._version == version.parse('1.1'):
+            _use_plot_method = 0
+            nsls2_extraction_pts = []
+            nsls2_extraction_pt_names = []
+            cur_BM_fan_plot = False
+            precise_BM_src_pts = False
+        elif self._version == version.parse('1.0'):
+            pass
         else:
             raise NotImplementedError()
 
@@ -6047,9 +6056,7 @@ class Report_NSLS2U_Default:
             plt.plot([z_ini, z_fin], [x_ini, x_fin], 'r:', lw=id_ray_lw,
                      label='Current ID Rays')
             #
-            if self._version == '1.1':
-                plt.legend(loc='best')
-            else:
+            if self._version >= version.parse('1.2'):
                 # Based on the answer by Javier on
                 #   https://stackoverflow.com/questions/22348229/matplotlib-legend-for-an-arrow
                 handles, labels = plt.gca().get_legend_handles_labels()
@@ -6063,13 +6070,19 @@ class Report_NSLS2U_Default:
                     handler_map={mpatches.FancyArrow :
                                  HandlerPatch(patch_func=make_legend_arrow)},
                 )
+            elif self._version == version.parse('1.1'):
+                plt.legend(loc='best')
+            elif self._version == version.parse('1.0'):
+                pass
+            else:
+                raise NotImplementedError
             #plt.axis('image')
             plt.axis('equal')
             plt.xlabel(r'$z\, [\mathrm{m}]$', size=20)
             plt.ylabel(r'$x\, [\mathrm{m}]$', size=20)
             plt.tight_layout()
 
-            if self._version != '1.1':
+            if self._version >= version.parse('1.2'):
                 base_fig_pkl = pickle.dumps(plt.gcf())
 
                 # Now generate zoomed-in plots
@@ -7417,12 +7430,13 @@ class Report_NSLS2U_Default:
 
             calc_opts = rf['calc_opts']
 
-            if self._version in ('1.0', '1.1'):
-                rf_volts = np.array(calc_opts['rf_V']) # [V]
-            else:
+            if self._version >= version.parse('1.2'):
                 rf_volts = calc_opts['rf_V'] # [V]
                 # ^ At this point, "rf_volts" could be either a list of floats or
                 #   a list of lists of floats with irregular sizes.
+            else:
+                rf_volts = np.array(calc_opts['rf_V']) # [V]
+
 
             h = calc_opts['harmonic_number']
 
@@ -7441,7 +7455,7 @@ class Report_NSLS2U_Default:
                 U0_ev_list.append(_d['U0_eV'])
                 sigma_delta_list.append(_d['sigma_delta_percent'] * 1e-2)
 
-            if self._version not in ('1.0', '1.1'):
+            if self._version >= version.parse('1.2'):
                 if isinstance(rf_volts[0], list):
                     try:
                         assert len(rf_volts) == len(E_GeV_list)
@@ -7462,62 +7476,7 @@ class Report_NSLS2U_Default:
 
             f_rf = h * c / circumf # RF frequency [Hz]
 
-            if self._version in ('1.0', '1.1'):
-
-                synch_phases_deg_list, nu_s_list = [], []
-                sigma_z_m_list, sigma_z_ps_list = [], []
-                rf_bucket_heights_percent_list = []
-
-                for E_GeV, U0_eV, sigma_delta in zip(
-                    E_GeV_list, U0_ev_list, sigma_delta_list):
-
-                    # Synchronous Phase
-                    synch_phases_deg = np.rad2deg(np.pi - np.arcsin(U0_eV / rf_volts))
-                    if self._version == '1.1':
-                        synch_phases_deg_list.append(synch_phases_deg)
-
-                    # Synchrotron Tune
-                    nu_s = np.sqrt(
-                        -rf_volts / (E_GeV * 1e9) * np.cos(np.deg2rad(synch_phases_deg))
-                        * alphac * h / (2 * np.pi))
-                    if self._version == '1.1':
-                        nu_s_list.append(nu_s)
-
-                    # Bunch Length
-                    sigma_z_m = alphac * sigma_delta * circumf / (2 * np.pi * nu_s) # [m]
-                    sigma_z_ps = sigma_z_m / c * 1e12 # [ps]
-                    if self._version == '1.1':
-                        sigma_z_m_list.append(sigma_z_m)
-                        sigma_z_ps_list.append(sigma_z_ps)
-
-                    # RF Bucket Height (RF Acceptance)
-                    rf_bucket_heights_percent = self.calc_rf_bucket_heights(
-                        E_GeV, alphac, U0_eV, h, rf_volts)
-                    if self._version == '1.1':
-                        rf_bucket_heights_percent_list.append(rf_bucket_heights_percent)
-
-                if self._version == '1.1':
-                    self.rf_dep_props = dict(
-                        # Inputs
-                        E_GeV_list=E_GeV_list, rf_volts=rf_volts, h=h,
-                        # Outputs
-                        f_rf=f_rf, synch_phases_deg_list=synch_phases_deg_list,
-                        nu_s_list=nu_s_list, sigma_z_m_list=sigma_z_m_list,
-                        sigma_z_ps_list=sigma_z_ps_list,
-                        rf_bucket_heights_percent_list=rf_bucket_heights_percent_list,
-                    )
-                elif self._version == '1.0':
-                    self.rf_dep_props = dict(
-                        # Inputs
-                        rf_volts=rf_volts, h=h,
-                        # Outputs
-                        f_rf=f_rf, synch_phases_deg=synch_phases_deg,
-                        nu_s=nu_s, sigma_z_m=sigma_z_m, sigma_z_ps=sigma_z_ps,
-                        rf_bucket_heights_percent=rf_bucket_heights_percent,
-                    )
-                else:
-                    raise ValueError
-            else:
+            if self._version >= version.parse('1.2'):
                 synch_phases_deg_list, nu_s_list = [], []
                 sigma_z_m_list, sigma_z_ps_list = [], []
                 rf_bucket_heights_percent_list = []
@@ -7555,6 +7514,63 @@ class Report_NSLS2U_Default:
                     sigma_z_ps_list=sigma_z_ps_list,
                     rf_bucket_heights_percent_list=rf_bucket_heights_percent_list,
                 )
+
+            else:
+
+                synch_phases_deg_list, nu_s_list = [], []
+                sigma_z_m_list, sigma_z_ps_list = [], []
+                rf_bucket_heights_percent_list = []
+
+                for E_GeV, U0_eV, sigma_delta in zip(
+                    E_GeV_list, U0_ev_list, sigma_delta_list):
+
+                    # Synchronous Phase
+                    synch_phases_deg = np.rad2deg(np.pi - np.arcsin(U0_eV / rf_volts))
+                    if self._version == version.parse('1.1'):
+                        synch_phases_deg_list.append(synch_phases_deg)
+
+                    # Synchrotron Tune
+                    nu_s = np.sqrt(
+                        -rf_volts / (E_GeV * 1e9) * np.cos(np.deg2rad(synch_phases_deg))
+                        * alphac * h / (2 * np.pi))
+                    if self._version == version.parse('1.1'):
+                        nu_s_list.append(nu_s)
+
+                    # Bunch Length
+                    sigma_z_m = alphac * sigma_delta * circumf / (2 * np.pi * nu_s) # [m]
+                    sigma_z_ps = sigma_z_m / c * 1e12 # [ps]
+                    if self._version == version.parse('1.1'):
+                        sigma_z_m_list.append(sigma_z_m)
+                        sigma_z_ps_list.append(sigma_z_ps)
+
+                    # RF Bucket Height (RF Acceptance)
+                    rf_bucket_heights_percent = self.calc_rf_bucket_heights(
+                        E_GeV, alphac, U0_eV, h, rf_volts)
+                    if self._version == version.parse('1.1'):
+                        rf_bucket_heights_percent_list.append(rf_bucket_heights_percent)
+
+                if self._version == version.parse('1.1'):
+                    self.rf_dep_props = dict(
+                        # Inputs
+                        E_GeV_list=E_GeV_list, rf_volts=rf_volts, h=h,
+                        # Outputs
+                        f_rf=f_rf, synch_phases_deg_list=synch_phases_deg_list,
+                        nu_s_list=nu_s_list, sigma_z_m_list=sigma_z_m_list,
+                        sigma_z_ps_list=sigma_z_ps_list,
+                        rf_bucket_heights_percent_list=rf_bucket_heights_percent_list,
+                    )
+                elif self._version == version.parse('1.0'):
+                    self.rf_dep_props = dict(
+                        # Inputs
+                        rf_volts=rf_volts, h=h,
+                        # Outputs
+                        f_rf=f_rf, synch_phases_deg=synch_phases_deg,
+                        nu_s=nu_s, sigma_z_m=sigma_z_m, sigma_z_ps=sigma_z_ps,
+                        rf_bucket_heights_percent=rf_bucket_heights_percent,
+                    )
+                else:
+                    raise NotImplementedError
+
 
             with open(output_filepath, 'wb') as f:
                 pickle.dump(self.rf_dep_props, f)
@@ -7988,485 +8004,8 @@ class Report_NSLS2U_Default:
             else:
                 max_mom_aper_percent = float(raw_max_mom_aper_percent)
 
-            if self._version == '1.0':
-                eps_0 = eps_0_list[0]
-                total_beam_current_mA = total_beam_current_mA_list[0]
+            if self._version >= version.parse('1.2'):
 
-                beam_current_per_bunch_mA = total_beam_current_mA / num_filled_bunches
-
-                total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
-                total_charge_uC = total_charge_C * 1e6
-                charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
-
-                eps_ys = []
-                for s in raw_coupling_specs:
-                    if s.endswith('pm'):
-                        ey_pm = float(s[:-2].strip())
-                        eps_ys.append(ey_pm * 1e-12)
-                    elif s.endswith('%'):
-                        kappa = float(s[:-1].strip()) * 1e-2
-                        eps_ys.append(kappa / (1+kappa) * eps_0)
-                    else:
-                        raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
-                                          'must end with either "pm" or "%"'))
-                eps_ys = np.array(eps_ys) # [m-rad]
-                coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
-                # used in ELEGANT's "touschekLifetime" function.
-                coupling_percent = coupling * 1e2
-
-                eps_xs = eps_0 / (1 + coupling) # [m-rad]
-
-                LTE_filepath = self.input_LTE_filepath
-                E_MeV = self.conf['E_MeV']
-                use_beamline_ring = self.conf['use_beamline_ring']
-
-                charge_C = charge_per_bunch_nC * 1e-9
-
-                mmap_ring = pe.sdds.sdds2dicts(mmap_sdds_filepath_ring)
-                spos = mmap_ring[0]['columns']['s']
-                deltaLostNegative = mmap_ring[0]['columns']['deltaLostNegative']
-                deltaLostPositive = mmap_ring[0]['columns']['deltaLostPositive']
-                if False:
-                    plt.figure()
-                    plt.plot(spos, deltaLostNegative, '.-')
-                    plt.plot(spos, deltaLostPositive, '.-')
-                delta_accep = np.min(
-                    np.vstack((np.abs(deltaLostNegative), deltaLostPositive)), axis=0)
-                if False:
-                    plt.figure()
-                    plt.plot(spos, delta_accep, '.-')
-
-                const = scipy.constants
-                m_e_eV = const.m_e * (const.c**2) / const.electron_volt
-                gamma = E_MeV * 1e6 / m_e_eV
-                N_e = charge_C / const.elementary_charge
-                assert const.mu_0 == 4*np.pi*1e-7
-                assert const.epsilon_0 == 1.0/((const.c**2)*const.mu_0)
-                r_e = const.elementary_charge / (4*np.pi*const.epsilon_0*m_e_eV)
-                F_interp = pe.nonlin.get_Touschek_F_interpolator()
-                #
-                touscheck_Fvals_plus, touscheck_Fvals_minus = [], []
-                touscheck_Fargs_plus, touscheck_Fargs_minus = [], []
-                touscheck_Fvals_1c_plus, touscheck_Fvals_1c_minus = [], []
-                touscheck_Fargs_1c_plus, touscheck_Fargs_1c_minus = [], []
-                tau_hrs_SLS = np.full((len(coupling), len(rf_volts)), np.nan)
-                tau_hrs_SLS_1c = np.full((len(coupling), len(rf_volts)), np.nan)
-                #
-                tau_hrs = np.full((len(coupling), len(rf_volts)), np.nan)
-                sdds_lifetime_data = [
-                    [None for _ in range(len(rf_volts))] for _ in range(len(coupling))]
-                print('\n* Start computing beam lifetimes...\n')
-                for i, emit_ratio in enumerate(coupling):
-                    for j, RFvolt in enumerate(rf_volts):
-                        pe.nonlin.calc_Touschek_lifetime(
-                            output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
-                            charge_C, emit_ratio, RFvolt, h,
-                            max_mom_aper_percent=max_mom_aper_percent,
-                            ignoreMismatch=True, use_beamline=use_beamline_ring,
-                            del_tmp_files=True)
-
-                        d = pe.util.load_pgz_file(output_filepath)
-                        sdds_lifetime_data[i][j] = d
-                        tau_hrs[i][j] = d['data']['life']['scalars']['tLifetime']
-
-                        twi_a = d['data']['twi']['arrays']
-                        betax = twi_a['betax']
-                        alphax = twi_a['alphax']
-                        etax = twi_a['etax']
-                        etaxp = twi_a['etaxp']
-                        betay = twi_a['betay']
-                        etay = twi_a['etay']
-                        gammax = (1 + alphax**2) / betax
-                        curly_Hx = betax * (etaxp**2) + 2 * alphax * etax * etaxp \
-                            + gammax * (etax**2)
-                        eps_x = d['data']['life']['scalars']['emitx']
-                        eps_y = d['data']['life']['scalars']['emity']
-                        sigma_delta = d['data']['life']['scalars']['Sdelta']
-                        sigma_x = np.sqrt(eps_x * betax + (sigma_delta * etax)**2)
-                        sigma_xp = np.sqrt(eps_x * gammax + (sigma_delta * etaxp)**2)
-                        sigma_xp_1c = eps_x / sigma_x * np.sqrt(
-                            1 + curly_Hx * (sigma_delta**2) / eps_x) # Eq.(1c) of A. Streun, SLS Note 18/97
-                        sigma_y = np.sqrt(eps_y * betay + (sigma_delta * etay)**2)
-                        sigma_s = self.rf_dep_props['sigma_z_m'][j]
-
-                        rf_bucket = self.rf_dep_props['rf_bucket_heights_percent'][j] * 1e-2
-                        if False: # Just assume RF bucket height determines lifetime,
-                            # by completely ignoring local momentum apertures.
-                            delta = rf_bucket
-
-                            F_args = (delta / (gamma * sigma_xp))**2
-                            F_args_1c = (delta / (gamma * sigma_xp_1c))**2
-                            if False:
-                                plt.figure()
-                                plt.plot(twi_a['s'], F_args, '.-')
-
-                            touscheck_Fargs_minus.append(F_args)
-                            touscheck_Fargs_plus.append(F_args)
-                            touscheck_Fargs_1c_minus.append(F_args_1c)
-                            touscheck_Fargs_1c_plus.append(F_args_1c)
-                            F_vals = F_interp(F_args)
-                            touscheck_Fvals_plus.append(F_vals)
-                            touscheck_Fvals_minus.append(F_vals)
-                            F_vals_1c = F_interp(F_args_1c)
-                            touscheck_Fvals_1c_plus.append(F_vals_1c)
-                            touscheck_Fvals_1c_minus.append(F_vals_1c)
-                            touscheck_spos = twi_a['s']
-                            if False:
-                                plt.figure()
-                                plt.plot(twi_a['s'], F_vals, '.-')
-                            dtau_inv = F_vals / (sigma_x * sigma_y * sigma_xp)
-                            dtau_inv_1c = F_vals_1c / (sigma_x * sigma_y * sigma_xp_1c)
-                            if False:
-                                dtau_inv_before_delta_div = dtau_inv.copy()
-                            dtau_inv /= delta**2
-                            dtau_inv_1c /= delta**2
-                            if False:
-                                plt.figure()
-                                plt.plot(twi_a['s'], dtau_inv_before_delta_div
-                                         / np.max(dtau_inv_before_delta_div), 'b.-')
-                                plt.plot(twi_a['s'], dtau_inv / np.max(dtau_inv), 'r.-')
-                            tau_inv = np.trapz(dtau_inv, twi_a['s'])
-                            tau_inv *= N_e * (r_e**2) * const.c / circumf / (
-                                8*np.pi*(gamma**3)* sigma_s)
-                            tau_hrs_SLS[i][j] = (1/tau_inv) / 60 / 60 # Eq.(1) of A. Streun, SLS Note 18/97
-                            tau_inv_1c = np.trapz(dtau_inv_1c, twi_a['s'])
-                            tau_inv_1c *= N_e * (r_e**2) * const.c / circumf / (
-                                8*np.pi*(gamma**3)* sigma_s)
-                            tau_hrs_SLS_1c[i][j] = (1/tau_inv_1c) / 60 / 60 # Eq.(1) of A. Streun, SLS Note 18/97
-                        else:
-                            F_args_d = {'+': None, '-': None}
-                            F_vals_d = {'+': None, '-': None}
-                            tau_SLS_d = {'+': None, '-': None}
-                            F_args_1c_d = {'+': None, '-': None}
-                            F_vals_1c_d = {'+': None, '-': None}
-                            tau_SLS_1c_d = {'+': None, '-': None}
-                            for local_mom_aper, sign in [
-                                (np.abs(deltaLostNegative), '-'),
-                                (deltaLostPositive, '+')]:
-
-                                delta = np.interp(
-                                    twi_a['s'], spos, local_mom_aper,
-                                    left=local_mom_aper[0], right=local_mom_aper[-1])
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], delta, '.-')
-                                delta[delta > rf_bucket] = rf_bucket
-
-                                F_args = (delta / (gamma * sigma_xp))**2
-                                F_args_1c = (delta / (gamma * sigma_xp_1c))**2
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], F_args, '.-')
-
-                                F_vals = F_interp(F_args)
-                                F_vals_1c = F_interp(F_args_1c)
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], F_vals, '.-')
-
-                                F_args_d[sign] = F_args
-                                F_vals_d[sign] = F_vals
-                                F_args_1c_d[sign] = F_args_1c
-                                F_vals_1c_d[sign] = F_vals_1c
-
-                                dtau_inv = F_vals / (sigma_x * sigma_y * sigma_xp)
-                                dtau_inv_1c = F_vals_1c / (sigma_x * sigma_y * sigma_xp_1c)
-                                if False:
-                                    dtau_inv_before_delta_div = dtau_inv.copy()
-                                dtau_inv /= delta**2
-                                dtau_inv_1c /= delta**2
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], dtau_inv_before_delta_div
-                                             / np.max(dtau_inv_before_delta_div), 'b.-')
-                                    plt.plot(twi_a['s'], dtau_inv / np.max(dtau_inv), 'r.-')
-                                tau_inv = np.trapz(dtau_inv, twi_a['s'])
-                                tau_inv *= N_e * (r_e**2) * const.c / circumf / (
-                                    8*np.pi*(gamma**3)* sigma_s)
-                                tau_SLS_d[sign] = 1 / tau_inv # [s] # Eq.(1) of A. Streun, SLS Note 18/97
-                                tau_inv_1c = np.trapz(dtau_inv_1c, twi_a['s'])
-                                tau_inv_1c *= N_e * (r_e**2) * const.c / circumf / (
-                                    8*np.pi*(gamma**3)* sigma_s)
-                                tau_SLS_1c_d[sign] = 1 / tau_inv_1c # [s] # Eq.(1) of A. Streun, SLS Note 18/97
-
-                            touscheck_Fargs_plus.append(F_args_d['+'])
-                            touscheck_Fargs_minus.append(F_args_d['-'])
-                            touscheck_Fvals_plus.append(F_vals_d['+'])
-                            touscheck_Fvals_minus.append(F_vals_d['-'])
-                            touscheck_Fargs_1c_plus.append(F_args_1c_d['+'])
-                            touscheck_Fargs_1c_minus.append(F_args_1c_d['-'])
-                            touscheck_Fvals_1c_plus.append(F_vals_1c_d['+'])
-                            touscheck_Fvals_1c_minus.append(F_vals_1c_d['-'])
-                            touscheck_spos = twi_a['s']
-
-                            tau_hrs_SLS[i][j] = np.sqrt(
-                                (tau_SLS_d['+']**2 + tau_SLS_d['-']**2) / 2) / 60 / 60
-                            tau_hrs_SLS_1c[i][j] = np.sqrt(
-                                (tau_SLS_1c_d['+']**2 + tau_SLS_1c_d['-']**2) / 2) / 60 / 60
-
-                self.lifetime_props = dict(
-                    # Inputs
-                    total_beam_current_mA=total_beam_current_mA,
-                    num_filled_bunches=num_filled_bunches,
-                    raw_coupling_specs=raw_coupling_specs,
-                    raw_max_mom_aper_percent=raw_max_mom_aper_percent,
-                    # Outputs
-                    beam_current_per_bunch_mA=beam_current_per_bunch_mA,
-                    total_charge_uC=total_charge_uC,
-                    charge_per_bunch_nC=charge_per_bunch_nC,
-                    eps_ys=eps_ys, eps_xs=eps_xs, eps_0=eps_0,
-                    coupling_percent=coupling_percent, tau_hrs=tau_hrs,
-                    sdds_lifetime_data=sdds_lifetime_data,
-                    tau_hrs_SLS=tau_hrs_SLS, tau_hrs_SLS_1c=tau_hrs_SLS_1c,
-                    touscheck_spos=touscheck_spos,
-                    touscheck_Fargs_minus=np.array(touscheck_Fargs_minus).T,
-                    touscheck_Fargs_plus=np.array(touscheck_Fargs_plus).T,
-                    touscheck_Fvals_minus=np.array(touscheck_Fvals_minus).T,
-                    touscheck_Fvals_plus=np.array(touscheck_Fvals_plus).T,
-                    touscheck_Fargs_1c_minus=np.array(touscheck_Fargs_1c_minus).T,
-                    touscheck_Fargs_1c_plus=np.array(touscheck_Fargs_1c_plus).T,
-                    touscheck_Fvals_1c_minus=np.array(touscheck_Fvals_1c_minus).T,
-                    touscheck_Fvals_1c_plus=np.array(touscheck_Fvals_1c_plus).T,
-                )
-
-            elif self._version == '1.1':
-
-                E_MeV_list = self._get_E_MeV_list()
-
-                assert len(eps_0_list) == len(total_beam_current_mA_list) \
-                       == len(E_MeV_list)
-                beam_current_per_bunch_mA_list = []
-                total_charge_uC_list, charge_per_bunch_nC_list = [], []
-                eps_ys_list, eps_xs_list, coupling_percent_list = [], [], []
-                tau_hrs_list = []
-                sdds_lifetime_data_list = []
-                tau_hrs_SLS_list, tau_hrs_SLS_1c_list = [], []
-                touscheck_spos_list = []
-                touscheck_Fargs_minus_list = []
-                touscheck_Fargs_plus_list = []
-                touscheck_Fvals_minus_list = []
-                touscheck_Fvals_plus_list = []
-                touscheck_Fargs_1c_minus_list = []
-                touscheck_Fargs_1c_plus_list = []
-                touscheck_Fvals_1c_minus_list = []
-                touscheck_Fvals_1c_plus_list = []
-                for iEnergy, (E_MeV, eps_0, total_beam_current_mA) in enumerate(
-                    zip(E_MeV_list, eps_0_list, total_beam_current_mA_list)):
-
-                    beam_current_per_bunch_mA = total_beam_current_mA / num_filled_bunches
-                    #
-                    beam_current_per_bunch_mA_list.append(beam_current_per_bunch_mA)
-
-                    total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
-                    total_charge_uC = total_charge_C * 1e6
-                    charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
-                    #
-                    total_charge_uC_list.append(total_charge_uC)
-                    charge_per_bunch_nC_list.append(charge_per_bunch_nC)
-
-                    eps_ys = []
-                    for s in raw_coupling_specs:
-                        if s.endswith('pm'):
-                            ey_pm = float(s[:-2].strip())
-                            eps_ys.append(ey_pm * 1e-12)
-                        elif s.endswith('%'):
-                            kappa = float(s[:-1].strip()) * 1e-2
-                            eps_ys.append(kappa / (1+kappa) * eps_0)
-                        else:
-                            raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
-                                              'must end with either "pm" or "%"'))
-                    eps_ys = np.array(eps_ys) # [m-rad]
-                    coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
-                    # used in ELEGANT's "touschekLifetime" function.
-                    coupling_percent = coupling * 1e2
-
-                    eps_xs = eps_0 / (1 + coupling) # [m-rad]
-
-                    eps_ys_list.append(eps_ys)
-                    eps_xs_list.append(eps_xs)
-                    coupling_percent_list.append(coupling_percent)
-
-                    LTE_filepath = self.input_LTE_filepath
-                    use_beamline_ring = self.conf['use_beamline_ring']
-
-                    charge_C = charge_per_bunch_nC * 1e-9
-
-                    mmap_ring = pe.sdds.sdds2dicts(mmap_sdds_filepath_ring)
-                    spos = mmap_ring[0]['columns']['s']
-                    deltaLostNegative = mmap_ring[0]['columns']['deltaLostNegative']
-                    deltaLostPositive = mmap_ring[0]['columns']['deltaLostPositive']
-                    delta_accep = np.min(
-                        np.vstack((np.abs(deltaLostNegative), deltaLostPositive)), axis=0)
-
-                    const = scipy.constants
-                    m_e_eV = const.m_e * (const.c**2) / const.electron_volt
-                    gamma = E_MeV * 1e6 / m_e_eV
-                    N_e = charge_C / const.elementary_charge
-                    assert const.mu_0 == 4*np.pi*1e-7
-                    assert const.epsilon_0 == 1.0/((const.c**2)*const.mu_0)
-                    r_e = const.elementary_charge / (4*np.pi*const.epsilon_0*m_e_eV)
-                    F_interp = pe.nonlin.get_Touschek_F_interpolator()
-                    #
-                    touscheck_Fvals_plus, touscheck_Fvals_minus = [], []
-                    touscheck_Fargs_plus, touscheck_Fargs_minus = [], []
-                    touscheck_Fvals_1c_plus, touscheck_Fvals_1c_minus = [], []
-                    touscheck_Fargs_1c_plus, touscheck_Fargs_1c_minus = [], []
-                    tau_hrs_SLS = np.full((len(coupling), len(rf_volts)), np.nan)
-                    tau_hrs_SLS_1c = np.full((len(coupling), len(rf_volts)), np.nan)
-                    #
-                    tau_hrs = np.full((len(coupling), len(rf_volts)), np.nan)
-                    sdds_lifetime_data = [
-                        [None for _ in range(len(rf_volts))] for _ in range(len(coupling))]
-                    print('\n* Start computing beam lifetimes...\n')
-                    for i, emit_ratio in enumerate(coupling):
-                        for j, RFvolt in enumerate(rf_volts):
-                            pe.nonlin.calc_Touschek_lifetime(
-                                output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
-                                charge_C, emit_ratio, RFvolt, h,
-                                max_mom_aper_percent=max_mom_aper_percent,
-                                ignoreMismatch=True, use_beamline=use_beamline_ring,
-                                del_tmp_files=True)
-
-                            d = pe.util.load_pgz_file(output_filepath)
-                            sdds_lifetime_data[i][j] = d
-                            tau_hrs[i][j] = d['data']['life']['scalars']['tLifetime']
-
-                            twi_a = d['data']['twi']['arrays']
-                            betax = twi_a['betax']
-                            alphax = twi_a['alphax']
-                            etax = twi_a['etax']
-                            etaxp = twi_a['etaxp']
-                            betay = twi_a['betay']
-                            etay = twi_a['etay']
-                            gammax = (1 + alphax**2) / betax
-                            curly_Hx = betax * (etaxp**2) + 2 * alphax * etax * etaxp \
-                                + gammax * (etax**2)
-                            eps_x = d['data']['life']['scalars']['emitx']
-                            eps_y = d['data']['life']['scalars']['emity']
-                            sigma_delta = d['data']['life']['scalars']['Sdelta']
-                            sigma_x = np.sqrt(eps_x * betax + (sigma_delta * etax)**2)
-                            sigma_xp = np.sqrt(eps_x * gammax + (sigma_delta * etaxp)**2)
-                            sigma_xp_1c = eps_x / sigma_x * np.sqrt(
-                                1 + curly_Hx * (sigma_delta**2) / eps_x) # Eq.(1c) of A. Streun, SLS Note 18/97
-                            sigma_y = np.sqrt(eps_y * betay + (sigma_delta * etay)**2)
-                            sigma_s = self.rf_dep_props['sigma_z_m_list'][iEnergy][j]
-
-                            rf_bucket = self.rf_dep_props[
-                                'rf_bucket_heights_percent_list'][iEnergy][j] * 1e-2
-                            F_args_d = {'+': None, '-': None}
-                            F_vals_d = {'+': None, '-': None}
-                            tau_SLS_d = {'+': None, '-': None}
-                            F_args_1c_d = {'+': None, '-': None}
-                            F_vals_1c_d = {'+': None, '-': None}
-                            tau_SLS_1c_d = {'+': None, '-': None}
-                            for local_mom_aper, sign in [
-                                (np.abs(deltaLostNegative), '-'),
-                                (deltaLostPositive, '+')]:
-
-                                delta = np.interp(
-                                    twi_a['s'], spos, local_mom_aper,
-                                    left=local_mom_aper[0], right=local_mom_aper[-1])
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], delta, '.-')
-                                delta[delta > rf_bucket] = rf_bucket
-
-                                F_args = (delta / (gamma * sigma_xp))**2
-                                F_args_1c = (delta / (gamma * sigma_xp_1c))**2
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], F_args, '.-')
-
-                                F_vals = F_interp(F_args)
-                                F_vals_1c = F_interp(F_args_1c)
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], F_vals, '.-')
-
-                                F_args_d[sign] = F_args
-                                F_vals_d[sign] = F_vals
-                                F_args_1c_d[sign] = F_args_1c
-                                F_vals_1c_d[sign] = F_vals_1c
-
-                                dtau_inv = F_vals / (sigma_x * sigma_y * sigma_xp)
-                                dtau_inv_1c = F_vals_1c / (sigma_x * sigma_y * sigma_xp_1c)
-                                if False:
-                                    dtau_inv_before_delta_div = dtau_inv.copy()
-                                dtau_inv /= delta**2
-                                dtau_inv_1c /= delta**2
-                                if False:
-                                    plt.figure()
-                                    plt.plot(twi_a['s'], dtau_inv_before_delta_div
-                                             / np.max(dtau_inv_before_delta_div), 'b.-')
-                                    plt.plot(twi_a['s'], dtau_inv / np.max(dtau_inv), 'r.-')
-                                tau_inv = np.trapz(dtau_inv, twi_a['s'])
-                                tau_inv *= N_e * (r_e**2) * const.c / circumf / (
-                                    8*np.pi*(gamma**3)* sigma_s)
-                                tau_SLS_d[sign] = 1 / tau_inv # [s] # Eq.(1) of A. Streun, SLS Note 18/97
-                                tau_inv_1c = np.trapz(dtau_inv_1c, twi_a['s'])
-                                tau_inv_1c *= N_e * (r_e**2) * const.c / circumf / (
-                                    8*np.pi*(gamma**3)* sigma_s)
-                                tau_SLS_1c_d[sign] = 1 / tau_inv_1c # [s] # Eq.(1) of A. Streun, SLS Note 18/97
-
-                            touscheck_Fargs_plus.append(F_args_d['+'])
-                            touscheck_Fargs_minus.append(F_args_d['-'])
-                            touscheck_Fvals_plus.append(F_vals_d['+'])
-                            touscheck_Fvals_minus.append(F_vals_d['-'])
-                            touscheck_Fargs_1c_plus.append(F_args_1c_d['+'])
-                            touscheck_Fargs_1c_minus.append(F_args_1c_d['-'])
-                            touscheck_Fvals_1c_plus.append(F_vals_1c_d['+'])
-                            touscheck_Fvals_1c_minus.append(F_vals_1c_d['-'])
-                            touscheck_spos = twi_a['s']
-
-                            tau_hrs_SLS[i][j] = np.sqrt(
-                                (tau_SLS_d['+']**2 + tau_SLS_d['-']**2) / 2) / 60 / 60
-                            tau_hrs_SLS_1c[i][j] = np.sqrt(
-                                (tau_SLS_1c_d['+']**2 + tau_SLS_1c_d['-']**2) / 2) / 60 / 60
-
-                    tau_hrs_list.append(tau_hrs)
-                    sdds_lifetime_data_list.append(sdds_lifetime_data)
-                    tau_hrs_SLS_list.append(tau_hrs_SLS)
-                    tau_hrs_SLS_1c_list.append(tau_hrs_SLS_1c)
-                    touscheck_spos_list.append(touscheck_spos)
-                    touscheck_Fargs_minus_list.append(np.array(touscheck_Fargs_minus).T)
-                    touscheck_Fargs_plus_list.append(np.array(touscheck_Fargs_plus).T)
-                    touscheck_Fvals_minus_list.append(np.array(touscheck_Fvals_minus).T)
-                    touscheck_Fvals_plus_list.append(np.array(touscheck_Fvals_plus).T)
-                    touscheck_Fargs_1c_minus_list.append(np.array(touscheck_Fargs_1c_minus).T)
-                    touscheck_Fargs_1c_plus_list.append(np.array(touscheck_Fargs_1c_plus).T)
-                    touscheck_Fvals_1c_minus_list.append(np.array(touscheck_Fvals_1c_minus).T)
-                    touscheck_Fvals_1c_plus_list.append(np.array(touscheck_Fvals_1c_plus).T)
-
-                self.lifetime_props = dict(
-                    # Inputs
-                    E_MeV_list=E_MeV_list,
-                    total_beam_current_mA_list=total_beam_current_mA_list,
-                    num_filled_bunches=num_filled_bunches,
-                    raw_coupling_specs=raw_coupling_specs,
-                    raw_max_mom_aper_percent=raw_max_mom_aper_percent,
-                    # Outputs
-                    beam_current_per_bunch_mA_list=beam_current_per_bunch_mA_list,
-                    total_charge_uC_list=total_charge_uC_list,
-                    charge_per_bunch_nC_list=charge_per_bunch_nC_list,
-                    eps_ys_list=eps_ys_list, eps_xs_list=eps_xs_list,
-                    eps_0_list=eps_0_list,
-                    coupling_percent_list=coupling_percent_list,
-                    tau_hrs_list=tau_hrs_list,
-                    sdds_lifetime_data_list=sdds_lifetime_data_list,
-                    tau_hrs_SLS_list=tau_hrs_SLS_list,
-                    tau_hrs_SLS_1c_list=tau_hrs_SLS_1c_list,
-                    touscheck_spos_list=touscheck_spos_list,
-                    touscheck_Fargs_minus_list=touscheck_Fargs_minus_list,
-                    touscheck_Fargs_plus_list=touscheck_Fargs_plus_list,
-                    touscheck_Fvals_minus_list=touscheck_Fvals_minus_list,
-                    touscheck_Fvals_plus_list=touscheck_Fvals_plus_list,
-                    touscheck_Fargs_1c_minus_list=touscheck_Fargs_1c_minus_list,
-                    touscheck_Fargs_1c_plus_list=touscheck_Fargs_1c_plus_list,
-                    touscheck_Fvals_1c_minus_list=touscheck_Fvals_1c_minus_list,
-                    touscheck_Fvals_1c_plus_list=touscheck_Fvals_1c_plus_list,
-                )
-
-            else: # v1.2 and up
                 E_MeV_list = self._get_E_MeV_list()
 
                 assert len(eps_0_list) == len(total_beam_current_mA_list) \
@@ -8753,6 +8292,487 @@ class Report_NSLS2U_Default:
 
                     self.lifetime_props['V_scan_LoLs'] = V_scan_LoLs
 
+            elif self._version == version.parse('1.1'):
+
+                E_MeV_list = self._get_E_MeV_list()
+
+                assert len(eps_0_list) == len(total_beam_current_mA_list) \
+                       == len(E_MeV_list)
+                beam_current_per_bunch_mA_list = []
+                total_charge_uC_list, charge_per_bunch_nC_list = [], []
+                eps_ys_list, eps_xs_list, coupling_percent_list = [], [], []
+                tau_hrs_list = []
+                sdds_lifetime_data_list = []
+                tau_hrs_SLS_list, tau_hrs_SLS_1c_list = [], []
+                touscheck_spos_list = []
+                touscheck_Fargs_minus_list = []
+                touscheck_Fargs_plus_list = []
+                touscheck_Fvals_minus_list = []
+                touscheck_Fvals_plus_list = []
+                touscheck_Fargs_1c_minus_list = []
+                touscheck_Fargs_1c_plus_list = []
+                touscheck_Fvals_1c_minus_list = []
+                touscheck_Fvals_1c_plus_list = []
+                for iEnergy, (E_MeV, eps_0, total_beam_current_mA) in enumerate(
+                    zip(E_MeV_list, eps_0_list, total_beam_current_mA_list)):
+
+                    beam_current_per_bunch_mA = total_beam_current_mA / num_filled_bunches
+                    #
+                    beam_current_per_bunch_mA_list.append(beam_current_per_bunch_mA)
+
+                    total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
+                    total_charge_uC = total_charge_C * 1e6
+                    charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
+                    #
+                    total_charge_uC_list.append(total_charge_uC)
+                    charge_per_bunch_nC_list.append(charge_per_bunch_nC)
+
+                    eps_ys = []
+                    for s in raw_coupling_specs:
+                        if s.endswith('pm'):
+                            ey_pm = float(s[:-2].strip())
+                            eps_ys.append(ey_pm * 1e-12)
+                        elif s.endswith('%'):
+                            kappa = float(s[:-1].strip()) * 1e-2
+                            eps_ys.append(kappa / (1+kappa) * eps_0)
+                        else:
+                            raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
+                                              'must end with either "pm" or "%"'))
+                    eps_ys = np.array(eps_ys) # [m-rad]
+                    coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
+                    # used in ELEGANT's "touschekLifetime" function.
+                    coupling_percent = coupling * 1e2
+
+                    eps_xs = eps_0 / (1 + coupling) # [m-rad]
+
+                    eps_ys_list.append(eps_ys)
+                    eps_xs_list.append(eps_xs)
+                    coupling_percent_list.append(coupling_percent)
+
+                    LTE_filepath = self.input_LTE_filepath
+                    use_beamline_ring = self.conf['use_beamline_ring']
+
+                    charge_C = charge_per_bunch_nC * 1e-9
+
+                    mmap_ring = pe.sdds.sdds2dicts(mmap_sdds_filepath_ring)
+                    spos = mmap_ring[0]['columns']['s']
+                    deltaLostNegative = mmap_ring[0]['columns']['deltaLostNegative']
+                    deltaLostPositive = mmap_ring[0]['columns']['deltaLostPositive']
+                    delta_accep = np.min(
+                        np.vstack((np.abs(deltaLostNegative), deltaLostPositive)), axis=0)
+
+                    const = scipy.constants
+                    m_e_eV = const.m_e * (const.c**2) / const.electron_volt
+                    gamma = E_MeV * 1e6 / m_e_eV
+                    N_e = charge_C / const.elementary_charge
+                    assert const.mu_0 == 4*np.pi*1e-7
+                    assert const.epsilon_0 == 1.0/((const.c**2)*const.mu_0)
+                    r_e = const.elementary_charge / (4*np.pi*const.epsilon_0*m_e_eV)
+                    F_interp = pe.nonlin.get_Touschek_F_interpolator()
+                    #
+                    touscheck_Fvals_plus, touscheck_Fvals_minus = [], []
+                    touscheck_Fargs_plus, touscheck_Fargs_minus = [], []
+                    touscheck_Fvals_1c_plus, touscheck_Fvals_1c_minus = [], []
+                    touscheck_Fargs_1c_plus, touscheck_Fargs_1c_minus = [], []
+                    tau_hrs_SLS = np.full((len(coupling), len(rf_volts)), np.nan)
+                    tau_hrs_SLS_1c = np.full((len(coupling), len(rf_volts)), np.nan)
+                    #
+                    tau_hrs = np.full((len(coupling), len(rf_volts)), np.nan)
+                    sdds_lifetime_data = [
+                        [None for _ in range(len(rf_volts))] for _ in range(len(coupling))]
+                    print('\n* Start computing beam lifetimes...\n')
+                    for i, emit_ratio in enumerate(coupling):
+                        for j, RFvolt in enumerate(rf_volts):
+                            pe.nonlin.calc_Touschek_lifetime(
+                                output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
+                                charge_C, emit_ratio, RFvolt, h,
+                                max_mom_aper_percent=max_mom_aper_percent,
+                                ignoreMismatch=True, use_beamline=use_beamline_ring,
+                                del_tmp_files=True)
+
+                            d = pe.util.load_pgz_file(output_filepath)
+                            sdds_lifetime_data[i][j] = d
+                            tau_hrs[i][j] = d['data']['life']['scalars']['tLifetime']
+
+                            twi_a = d['data']['twi']['arrays']
+                            betax = twi_a['betax']
+                            alphax = twi_a['alphax']
+                            etax = twi_a['etax']
+                            etaxp = twi_a['etaxp']
+                            betay = twi_a['betay']
+                            etay = twi_a['etay']
+                            gammax = (1 + alphax**2) / betax
+                            curly_Hx = betax * (etaxp**2) + 2 * alphax * etax * etaxp \
+                                + gammax * (etax**2)
+                            eps_x = d['data']['life']['scalars']['emitx']
+                            eps_y = d['data']['life']['scalars']['emity']
+                            sigma_delta = d['data']['life']['scalars']['Sdelta']
+                            sigma_x = np.sqrt(eps_x * betax + (sigma_delta * etax)**2)
+                            sigma_xp = np.sqrt(eps_x * gammax + (sigma_delta * etaxp)**2)
+                            sigma_xp_1c = eps_x / sigma_x * np.sqrt(
+                                1 + curly_Hx * (sigma_delta**2) / eps_x) # Eq.(1c) of A. Streun, SLS Note 18/97
+                            sigma_y = np.sqrt(eps_y * betay + (sigma_delta * etay)**2)
+                            sigma_s = self.rf_dep_props['sigma_z_m_list'][iEnergy][j]
+
+                            rf_bucket = self.rf_dep_props[
+                                'rf_bucket_heights_percent_list'][iEnergy][j] * 1e-2
+                            F_args_d = {'+': None, '-': None}
+                            F_vals_d = {'+': None, '-': None}
+                            tau_SLS_d = {'+': None, '-': None}
+                            F_args_1c_d = {'+': None, '-': None}
+                            F_vals_1c_d = {'+': None, '-': None}
+                            tau_SLS_1c_d = {'+': None, '-': None}
+                            for local_mom_aper, sign in [
+                                (np.abs(deltaLostNegative), '-'),
+                                (deltaLostPositive, '+')]:
+
+                                delta = np.interp(
+                                    twi_a['s'], spos, local_mom_aper,
+                                    left=local_mom_aper[0], right=local_mom_aper[-1])
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], delta, '.-')
+                                delta[delta > rf_bucket] = rf_bucket
+
+                                F_args = (delta / (gamma * sigma_xp))**2
+                                F_args_1c = (delta / (gamma * sigma_xp_1c))**2
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], F_args, '.-')
+
+                                F_vals = F_interp(F_args)
+                                F_vals_1c = F_interp(F_args_1c)
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], F_vals, '.-')
+
+                                F_args_d[sign] = F_args
+                                F_vals_d[sign] = F_vals
+                                F_args_1c_d[sign] = F_args_1c
+                                F_vals_1c_d[sign] = F_vals_1c
+
+                                dtau_inv = F_vals / (sigma_x * sigma_y * sigma_xp)
+                                dtau_inv_1c = F_vals_1c / (sigma_x * sigma_y * sigma_xp_1c)
+                                if False:
+                                    dtau_inv_before_delta_div = dtau_inv.copy()
+                                dtau_inv /= delta**2
+                                dtau_inv_1c /= delta**2
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], dtau_inv_before_delta_div
+                                             / np.max(dtau_inv_before_delta_div), 'b.-')
+                                    plt.plot(twi_a['s'], dtau_inv / np.max(dtau_inv), 'r.-')
+                                tau_inv = np.trapz(dtau_inv, twi_a['s'])
+                                tau_inv *= N_e * (r_e**2) * const.c / circumf / (
+                                    8*np.pi*(gamma**3)* sigma_s)
+                                tau_SLS_d[sign] = 1 / tau_inv # [s] # Eq.(1) of A. Streun, SLS Note 18/97
+                                tau_inv_1c = np.trapz(dtau_inv_1c, twi_a['s'])
+                                tau_inv_1c *= N_e * (r_e**2) * const.c / circumf / (
+                                    8*np.pi*(gamma**3)* sigma_s)
+                                tau_SLS_1c_d[sign] = 1 / tau_inv_1c # [s] # Eq.(1) of A. Streun, SLS Note 18/97
+
+                            touscheck_Fargs_plus.append(F_args_d['+'])
+                            touscheck_Fargs_minus.append(F_args_d['-'])
+                            touscheck_Fvals_plus.append(F_vals_d['+'])
+                            touscheck_Fvals_minus.append(F_vals_d['-'])
+                            touscheck_Fargs_1c_plus.append(F_args_1c_d['+'])
+                            touscheck_Fargs_1c_minus.append(F_args_1c_d['-'])
+                            touscheck_Fvals_1c_plus.append(F_vals_1c_d['+'])
+                            touscheck_Fvals_1c_minus.append(F_vals_1c_d['-'])
+                            touscheck_spos = twi_a['s']
+
+                            tau_hrs_SLS[i][j] = np.sqrt(
+                                (tau_SLS_d['+']**2 + tau_SLS_d['-']**2) / 2) / 60 / 60
+                            tau_hrs_SLS_1c[i][j] = np.sqrt(
+                                (tau_SLS_1c_d['+']**2 + tau_SLS_1c_d['-']**2) / 2) / 60 / 60
+
+                    tau_hrs_list.append(tau_hrs)
+                    sdds_lifetime_data_list.append(sdds_lifetime_data)
+                    tau_hrs_SLS_list.append(tau_hrs_SLS)
+                    tau_hrs_SLS_1c_list.append(tau_hrs_SLS_1c)
+                    touscheck_spos_list.append(touscheck_spos)
+                    touscheck_Fargs_minus_list.append(np.array(touscheck_Fargs_minus).T)
+                    touscheck_Fargs_plus_list.append(np.array(touscheck_Fargs_plus).T)
+                    touscheck_Fvals_minus_list.append(np.array(touscheck_Fvals_minus).T)
+                    touscheck_Fvals_plus_list.append(np.array(touscheck_Fvals_plus).T)
+                    touscheck_Fargs_1c_minus_list.append(np.array(touscheck_Fargs_1c_minus).T)
+                    touscheck_Fargs_1c_plus_list.append(np.array(touscheck_Fargs_1c_plus).T)
+                    touscheck_Fvals_1c_minus_list.append(np.array(touscheck_Fvals_1c_minus).T)
+                    touscheck_Fvals_1c_plus_list.append(np.array(touscheck_Fvals_1c_plus).T)
+
+                self.lifetime_props = dict(
+                    # Inputs
+                    E_MeV_list=E_MeV_list,
+                    total_beam_current_mA_list=total_beam_current_mA_list,
+                    num_filled_bunches=num_filled_bunches,
+                    raw_coupling_specs=raw_coupling_specs,
+                    raw_max_mom_aper_percent=raw_max_mom_aper_percent,
+                    # Outputs
+                    beam_current_per_bunch_mA_list=beam_current_per_bunch_mA_list,
+                    total_charge_uC_list=total_charge_uC_list,
+                    charge_per_bunch_nC_list=charge_per_bunch_nC_list,
+                    eps_ys_list=eps_ys_list, eps_xs_list=eps_xs_list,
+                    eps_0_list=eps_0_list,
+                    coupling_percent_list=coupling_percent_list,
+                    tau_hrs_list=tau_hrs_list,
+                    sdds_lifetime_data_list=sdds_lifetime_data_list,
+                    tau_hrs_SLS_list=tau_hrs_SLS_list,
+                    tau_hrs_SLS_1c_list=tau_hrs_SLS_1c_list,
+                    touscheck_spos_list=touscheck_spos_list,
+                    touscheck_Fargs_minus_list=touscheck_Fargs_minus_list,
+                    touscheck_Fargs_plus_list=touscheck_Fargs_plus_list,
+                    touscheck_Fvals_minus_list=touscheck_Fvals_minus_list,
+                    touscheck_Fvals_plus_list=touscheck_Fvals_plus_list,
+                    touscheck_Fargs_1c_minus_list=touscheck_Fargs_1c_minus_list,
+                    touscheck_Fargs_1c_plus_list=touscheck_Fargs_1c_plus_list,
+                    touscheck_Fvals_1c_minus_list=touscheck_Fvals_1c_minus_list,
+                    touscheck_Fvals_1c_plus_list=touscheck_Fvals_1c_plus_list,
+                )
+            elif self._version == version.parse('1.0'):
+
+                eps_0 = eps_0_list[0]
+                total_beam_current_mA = total_beam_current_mA_list[0]
+
+                beam_current_per_bunch_mA = total_beam_current_mA / num_filled_bunches
+
+                total_charge_C = total_beam_current_mA * 1e-3 * T_rev_s
+                total_charge_uC = total_charge_C * 1e6
+                charge_per_bunch_nC = total_charge_C / num_filled_bunches * 1e9
+
+                eps_ys = []
+                for s in raw_coupling_specs:
+                    if s.endswith('pm'):
+                        ey_pm = float(s[:-2].strip())
+                        eps_ys.append(ey_pm * 1e-12)
+                    elif s.endswith('%'):
+                        kappa = float(s[:-1].strip()) * 1e-2
+                        eps_ys.append(kappa / (1+kappa) * eps_0)
+                    else:
+                        raise ValueError(('Strings in "lifetime.calc_opts.coupling" '
+                                          'must end with either "pm" or "%"'))
+                eps_ys = np.array(eps_ys) # [m-rad]
+                coupling = eps_ys / (eps_0 - eps_ys) # := "coupling" or "k" (or "kappa")
+                # used in ELEGANT's "touschekLifetime" function.
+                coupling_percent = coupling * 1e2
+
+                eps_xs = eps_0 / (1 + coupling) # [m-rad]
+
+                LTE_filepath = self.input_LTE_filepath
+                E_MeV = self.conf['E_MeV']
+                use_beamline_ring = self.conf['use_beamline_ring']
+
+                charge_C = charge_per_bunch_nC * 1e-9
+
+                mmap_ring = pe.sdds.sdds2dicts(mmap_sdds_filepath_ring)
+                spos = mmap_ring[0]['columns']['s']
+                deltaLostNegative = mmap_ring[0]['columns']['deltaLostNegative']
+                deltaLostPositive = mmap_ring[0]['columns']['deltaLostPositive']
+                if False:
+                    plt.figure()
+                    plt.plot(spos, deltaLostNegative, '.-')
+                    plt.plot(spos, deltaLostPositive, '.-')
+                delta_accep = np.min(
+                    np.vstack((np.abs(deltaLostNegative), deltaLostPositive)), axis=0)
+                if False:
+                    plt.figure()
+                    plt.plot(spos, delta_accep, '.-')
+
+                const = scipy.constants
+                m_e_eV = const.m_e * (const.c**2) / const.electron_volt
+                gamma = E_MeV * 1e6 / m_e_eV
+                N_e = charge_C / const.elementary_charge
+                assert const.mu_0 == 4*np.pi*1e-7
+                assert const.epsilon_0 == 1.0/((const.c**2)*const.mu_0)
+                r_e = const.elementary_charge / (4*np.pi*const.epsilon_0*m_e_eV)
+                F_interp = pe.nonlin.get_Touschek_F_interpolator()
+                #
+                touscheck_Fvals_plus, touscheck_Fvals_minus = [], []
+                touscheck_Fargs_plus, touscheck_Fargs_minus = [], []
+                touscheck_Fvals_1c_plus, touscheck_Fvals_1c_minus = [], []
+                touscheck_Fargs_1c_plus, touscheck_Fargs_1c_minus = [], []
+                tau_hrs_SLS = np.full((len(coupling), len(rf_volts)), np.nan)
+                tau_hrs_SLS_1c = np.full((len(coupling), len(rf_volts)), np.nan)
+                #
+                tau_hrs = np.full((len(coupling), len(rf_volts)), np.nan)
+                sdds_lifetime_data = [
+                    [None for _ in range(len(rf_volts))] for _ in range(len(coupling))]
+                print('\n* Start computing beam lifetimes...\n')
+                for i, emit_ratio in enumerate(coupling):
+                    for j, RFvolt in enumerate(rf_volts):
+                        pe.nonlin.calc_Touschek_lifetime(
+                            output_filepath, LTE_filepath, E_MeV, mmap_sdds_filepath_ring,
+                            charge_C, emit_ratio, RFvolt, h,
+                            max_mom_aper_percent=max_mom_aper_percent,
+                            ignoreMismatch=True, use_beamline=use_beamline_ring,
+                            del_tmp_files=True)
+
+                        d = pe.util.load_pgz_file(output_filepath)
+                        sdds_lifetime_data[i][j] = d
+                        tau_hrs[i][j] = d['data']['life']['scalars']['tLifetime']
+
+                        twi_a = d['data']['twi']['arrays']
+                        betax = twi_a['betax']
+                        alphax = twi_a['alphax']
+                        etax = twi_a['etax']
+                        etaxp = twi_a['etaxp']
+                        betay = twi_a['betay']
+                        etay = twi_a['etay']
+                        gammax = (1 + alphax**2) / betax
+                        curly_Hx = betax * (etaxp**2) + 2 * alphax * etax * etaxp \
+                            + gammax * (etax**2)
+                        eps_x = d['data']['life']['scalars']['emitx']
+                        eps_y = d['data']['life']['scalars']['emity']
+                        sigma_delta = d['data']['life']['scalars']['Sdelta']
+                        sigma_x = np.sqrt(eps_x * betax + (sigma_delta * etax)**2)
+                        sigma_xp = np.sqrt(eps_x * gammax + (sigma_delta * etaxp)**2)
+                        sigma_xp_1c = eps_x / sigma_x * np.sqrt(
+                            1 + curly_Hx * (sigma_delta**2) / eps_x) # Eq.(1c) of A. Streun, SLS Note 18/97
+                        sigma_y = np.sqrt(eps_y * betay + (sigma_delta * etay)**2)
+                        sigma_s = self.rf_dep_props['sigma_z_m'][j]
+
+                        rf_bucket = self.rf_dep_props['rf_bucket_heights_percent'][j] * 1e-2
+                        if False: # Just assume RF bucket height determines lifetime,
+                            # by completely ignoring local momentum apertures.
+                            delta = rf_bucket
+
+                            F_args = (delta / (gamma * sigma_xp))**2
+                            F_args_1c = (delta / (gamma * sigma_xp_1c))**2
+                            if False:
+                                plt.figure()
+                                plt.plot(twi_a['s'], F_args, '.-')
+
+                            touscheck_Fargs_minus.append(F_args)
+                            touscheck_Fargs_plus.append(F_args)
+                            touscheck_Fargs_1c_minus.append(F_args_1c)
+                            touscheck_Fargs_1c_plus.append(F_args_1c)
+                            F_vals = F_interp(F_args)
+                            touscheck_Fvals_plus.append(F_vals)
+                            touscheck_Fvals_minus.append(F_vals)
+                            F_vals_1c = F_interp(F_args_1c)
+                            touscheck_Fvals_1c_plus.append(F_vals_1c)
+                            touscheck_Fvals_1c_minus.append(F_vals_1c)
+                            touscheck_spos = twi_a['s']
+                            if False:
+                                plt.figure()
+                                plt.plot(twi_a['s'], F_vals, '.-')
+                            dtau_inv = F_vals / (sigma_x * sigma_y * sigma_xp)
+                            dtau_inv_1c = F_vals_1c / (sigma_x * sigma_y * sigma_xp_1c)
+                            if False:
+                                dtau_inv_before_delta_div = dtau_inv.copy()
+                            dtau_inv /= delta**2
+                            dtau_inv_1c /= delta**2
+                            if False:
+                                plt.figure()
+                                plt.plot(twi_a['s'], dtau_inv_before_delta_div
+                                         / np.max(dtau_inv_before_delta_div), 'b.-')
+                                plt.plot(twi_a['s'], dtau_inv / np.max(dtau_inv), 'r.-')
+                            tau_inv = np.trapz(dtau_inv, twi_a['s'])
+                            tau_inv *= N_e * (r_e**2) * const.c / circumf / (
+                                8*np.pi*(gamma**3)* sigma_s)
+                            tau_hrs_SLS[i][j] = (1/tau_inv) / 60 / 60 # Eq.(1) of A. Streun, SLS Note 18/97
+                            tau_inv_1c = np.trapz(dtau_inv_1c, twi_a['s'])
+                            tau_inv_1c *= N_e * (r_e**2) * const.c / circumf / (
+                                8*np.pi*(gamma**3)* sigma_s)
+                            tau_hrs_SLS_1c[i][j] = (1/tau_inv_1c) / 60 / 60 # Eq.(1) of A. Streun, SLS Note 18/97
+                        else:
+                            F_args_d = {'+': None, '-': None}
+                            F_vals_d = {'+': None, '-': None}
+                            tau_SLS_d = {'+': None, '-': None}
+                            F_args_1c_d = {'+': None, '-': None}
+                            F_vals_1c_d = {'+': None, '-': None}
+                            tau_SLS_1c_d = {'+': None, '-': None}
+                            for local_mom_aper, sign in [
+                                (np.abs(deltaLostNegative), '-'),
+                                (deltaLostPositive, '+')]:
+
+                                delta = np.interp(
+                                    twi_a['s'], spos, local_mom_aper,
+                                    left=local_mom_aper[0], right=local_mom_aper[-1])
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], delta, '.-')
+                                delta[delta > rf_bucket] = rf_bucket
+
+                                F_args = (delta / (gamma * sigma_xp))**2
+                                F_args_1c = (delta / (gamma * sigma_xp_1c))**2
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], F_args, '.-')
+
+                                F_vals = F_interp(F_args)
+                                F_vals_1c = F_interp(F_args_1c)
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], F_vals, '.-')
+
+                                F_args_d[sign] = F_args
+                                F_vals_d[sign] = F_vals
+                                F_args_1c_d[sign] = F_args_1c
+                                F_vals_1c_d[sign] = F_vals_1c
+
+                                dtau_inv = F_vals / (sigma_x * sigma_y * sigma_xp)
+                                dtau_inv_1c = F_vals_1c / (sigma_x * sigma_y * sigma_xp_1c)
+                                if False:
+                                    dtau_inv_before_delta_div = dtau_inv.copy()
+                                dtau_inv /= delta**2
+                                dtau_inv_1c /= delta**2
+                                if False:
+                                    plt.figure()
+                                    plt.plot(twi_a['s'], dtau_inv_before_delta_div
+                                             / np.max(dtau_inv_before_delta_div), 'b.-')
+                                    plt.plot(twi_a['s'], dtau_inv / np.max(dtau_inv), 'r.-')
+                                tau_inv = np.trapz(dtau_inv, twi_a['s'])
+                                tau_inv *= N_e * (r_e**2) * const.c / circumf / (
+                                    8*np.pi*(gamma**3)* sigma_s)
+                                tau_SLS_d[sign] = 1 / tau_inv # [s] # Eq.(1) of A. Streun, SLS Note 18/97
+                                tau_inv_1c = np.trapz(dtau_inv_1c, twi_a['s'])
+                                tau_inv_1c *= N_e * (r_e**2) * const.c / circumf / (
+                                    8*np.pi*(gamma**3)* sigma_s)
+                                tau_SLS_1c_d[sign] = 1 / tau_inv_1c # [s] # Eq.(1) of A. Streun, SLS Note 18/97
+
+                            touscheck_Fargs_plus.append(F_args_d['+'])
+                            touscheck_Fargs_minus.append(F_args_d['-'])
+                            touscheck_Fvals_plus.append(F_vals_d['+'])
+                            touscheck_Fvals_minus.append(F_vals_d['-'])
+                            touscheck_Fargs_1c_plus.append(F_args_1c_d['+'])
+                            touscheck_Fargs_1c_minus.append(F_args_1c_d['-'])
+                            touscheck_Fvals_1c_plus.append(F_vals_1c_d['+'])
+                            touscheck_Fvals_1c_minus.append(F_vals_1c_d['-'])
+                            touscheck_spos = twi_a['s']
+
+                            tau_hrs_SLS[i][j] = np.sqrt(
+                                (tau_SLS_d['+']**2 + tau_SLS_d['-']**2) / 2) / 60 / 60
+                            tau_hrs_SLS_1c[i][j] = np.sqrt(
+                                (tau_SLS_1c_d['+']**2 + tau_SLS_1c_d['-']**2) / 2) / 60 / 60
+
+                self.lifetime_props = dict(
+                    # Inputs
+                    total_beam_current_mA=total_beam_current_mA,
+                    num_filled_bunches=num_filled_bunches,
+                    raw_coupling_specs=raw_coupling_specs,
+                    raw_max_mom_aper_percent=raw_max_mom_aper_percent,
+                    # Outputs
+                    beam_current_per_bunch_mA=beam_current_per_bunch_mA,
+                    total_charge_uC=total_charge_uC,
+                    charge_per_bunch_nC=charge_per_bunch_nC,
+                    eps_ys=eps_ys, eps_xs=eps_xs, eps_0=eps_0,
+                    coupling_percent=coupling_percent, tau_hrs=tau_hrs,
+                    sdds_lifetime_data=sdds_lifetime_data,
+                    tau_hrs_SLS=tau_hrs_SLS, tau_hrs_SLS_1c=tau_hrs_SLS_1c,
+                    touscheck_spos=touscheck_spos,
+                    touscheck_Fargs_minus=np.array(touscheck_Fargs_minus).T,
+                    touscheck_Fargs_plus=np.array(touscheck_Fargs_plus).T,
+                    touscheck_Fvals_minus=np.array(touscheck_Fvals_minus).T,
+                    touscheck_Fvals_plus=np.array(touscheck_Fvals_plus).T,
+                    touscheck_Fargs_1c_minus=np.array(touscheck_Fargs_1c_minus).T,
+                    touscheck_Fargs_1c_plus=np.array(touscheck_Fargs_1c_plus).T,
+                    touscheck_Fvals_1c_minus=np.array(touscheck_Fvals_1c_minus).T,
+                    touscheck_Fvals_1c_plus=np.array(touscheck_Fvals_1c_plus).T,
+                )
+            else:
+                raise NotImplementedError
+
+
             pe.util.robust_pgz_file_write(
                 output_filepath, self.lifetime_props, nMaxTry=10, sleep=10.0)
 
@@ -8774,7 +8794,7 @@ class Report_NSLS2U_Default:
 
         report_folderpath = self.report_folderpath
         lifetime_pdf_filepath = os.path.join(report_folderpath, 'lifetime.pdf')
-        if self._version not in ('1.0', '1.1'):
+        if self._version >= version.parse('1.2'):
             V_scan_pdf_filepath = os.path.join(
                 report_folderpath, 'lifetime_V_scan.pdf')
             if Path(lifetime_pdf_filepath).exists() and \
@@ -8967,11 +8987,11 @@ class Report_NSLS2U_Default:
     def _get_default_config_func_dict(self):
         """"""
 
-        # `None` for latest version
-        func_dict = {None: self._get_default_config_v1_1,
-                     '1.0': self._get_default_config_v1_0,
+        func_dict = {'1.0': self._get_default_config_v1_0,
                      '1.1': self._get_default_config_v1_1,
-                     '1.2': self._get_default_config_v1_2}
+                     '1.2': self._get_default_config_v1_2,
+                     '1.3': self._get_default_config_v1_3}
+        func_dict[None] = func_dict[self.get_latest_config_version_str()] # `None` for latest version
 
         return func_dict
 
@@ -8979,7 +8999,7 @@ class Report_NSLS2U_Default:
     def get_latest_config_version_str():
         """"""
 
-        return '1.2'
+        return '1.3'
 
     @staticmethod
     def upgrade_config(conf):
@@ -9071,10 +9091,55 @@ class Report_NSLS2U_Default:
                          'nVolts': 51, 'ntasks': 50})
 
         elif conf['report_version'] == '1.2':
+            # Upgrade to '1.3'
+            conf['report_version'] = '1.3'
+
+            conf['harmonic_number'] = 1320
+            try:
+                del conf['rf']['calc_opts']['harmonic_number']
+            except:
+                pass
+
+            test = conf['nonlin']['calc_opts']['mom_aper']['test']
+            test['rf_cavity_on'] = True
+            test['radiation_on'] = True
+            test['overvoltage_factor'] = 2.0
+
+        elif conf['report_version'] == '1.3':
             pass # Latest version. No need to upgrade.
 
         else:
             raise NotImplementedError()
+
+        return conf
+
+    def _get_default_config_v1_3(self, example=False):
+        """"""
+
+        conf = self._get_default_config_v1_2(example=example)
+
+        sqss = yaml.scalarstring.SingleQuotedScalarString
+
+        conf['report_version'] = sqss('1.3')
+        self._version = version.parse('1.3')
+
+        com_map = yaml.comments.CommentedMap
+        com_seq = yaml.comments.CommentedSeq
+
+        # This variable was originally specified at rf/calc_opts/harmonic_number,
+        # but this value can be now also required for "mom_aper" calculation
+        # if an RF cavity is turned on, so it is moved to the top level.
+        conf['harmonic_number'] = 1320
+        try:
+            del conf['rf']['calc_opts']['harmonic_number']
+        except:
+            pass
+
+        # Add "rf_cavity_on", "radiation_on", & "overvoltage_factor"
+        test = conf['nonlin']['calc_opts']['mom_aper']['test']
+        test['rf_cavity_on'] = True
+        test['radiation_on'] = True
+        test['overvoltage_factor'] = 2.0
 
         return conf
 
@@ -9086,7 +9151,7 @@ class Report_NSLS2U_Default:
         sqss = yaml.scalarstring.SingleQuotedScalarString
 
         conf['report_version'] = sqss('1.2')
-        self._version = '1.2'
+        self._version = version.parse('1.2')
 
         com_map = yaml.comments.CommentedMap
         com_seq = yaml.comments.CommentedSeq
@@ -9119,7 +9184,7 @@ class Report_NSLS2U_Default:
         sqss = yaml.scalarstring.SingleQuotedScalarString
 
         conf['report_version'] = sqss('1.1')
-        self._version = '1.1'
+        self._version = version.parse('1.1')
 
         # Change the key "lattice_author" to "lattice_authors" to accept
         # a list of authors.
@@ -9214,7 +9279,7 @@ class Report_NSLS2U_Default:
         """"""
 
         report_version = '1.0'
-        self._version = report_version
+        self._version = version.parse(report_version)
 
         com_map = yaml.comments.CommentedMap
         com_seq = yaml.comments.CommentedSeq
