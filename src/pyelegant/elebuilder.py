@@ -3094,15 +3094,10 @@ def add_transmute_blocks(ed: EleDesigner, transmute_elements: dict) -> None:
 
     if transmute_elements is None:
 
-        actual_transmute_elems = dict(
+        transmute_elements = dict(
             SBEN='CSBEND', RBEN='CSBEND', QUAD='KQUAD', SEXT='KSEXT',
             OCTU='KOCT', RFCA='MARK', SREFFECTS='MARK')
-    else:
 
-        actual_transmute_elems = {}
-        for old_type, new_type in transmute_elements.items():
-            actual_transmute_elems[old_type] = new_type
-
-    for old_type, new_type in actual_transmute_elems.items():
+    for old_type, new_type in transmute_elements.items():
         ed.add_block('transmute_elements',
                      name='*', type=old_type, new_type=new_type)

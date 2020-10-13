@@ -22,6 +22,7 @@ from . import util
 from . import sdds
 from . import twiss
 from . import sigproc
+from . import ltemanager
 
 def calc_cmap_xy(
     output_filepath, LTE_filepath, E_MeV, xmin, xmax, ymin, ymax, nx, ny,
@@ -1095,6 +1096,41 @@ def plot_find_aper_nlines(output_filepath, title='', xlim=None, ylim=None):
 
     return ret
 
+def calc_ring_rf_params(harmonic_number, circumf, U0_eV, overvoltage_factor):
+    """"""
+
+    try:
+        assert overvoltage_factor >= 1.0
+    except:
+        print('"overvoltage_factor" must be larger than or equal to 1.0')
+        raise
+
+    rf_volt = overvoltage_factor * U0_eV
+
+    #freq_Hz_rpn_expr = notation.convert_infix_to_rpn(
+        #f'c_mks / {circumf:.6g} * {harmonic_number:d}')
+    freq_Hz = PHYSCONST.c / circumf * harmonic_number
+
+    #phase_deg_rpn_expr = notation.convert_infix_to_rpn(
+        #f'180.0 - dasin({U0_eV:.9g} / {rf_volt:.9g})')
+    ## ^ Built-in RPN function "dasin" == np.rad2deg(np.arcsin)
+    phase_deg = 180 - np.rad2deg(np.arcsin(U0_eV / rf_volt))
+
+    return dict(rf_volt=rf_volt, freq_Hz=freq_Hz, phase_deg=phase_deg)
+
+def _get_nonexistent_elem_beamline_name(elem_defs, beamline_defs, base_name):
+    """"""
+
+    all_elem_names = [elem_name for elem_name, _, _ in elem_defs]
+    all_beamline_names = [beamline_name for beamline_name, _ in beamline_defs]
+    all_existing_names = all_elem_names + all_beamline_names
+
+    new_elem_name = base_name
+    while new_elem_name in all_existing_names:
+        new_elem_name += '0'
+
+    return new_elem_name
+
 def calc_mom_aper(
     output_filepath, LTE_filepath, E_MeV, x_initial=1e-5, y_initial=1e-5,
     delta_negative_start=-1e-3, delta_negative_limit=-5e-2,
@@ -1103,17 +1139,27 @@ def calc_mom_aper(
     steps_back=1, splits=2, split_step_divisor=10, verbosity=1,
     forbid_resonance_crossing=False, soft_failure=False,
     process_elements=2147483647,
+    rf_cavity_on=True, radiation_on=True,
+    harmonic_number=None, overvoltage_factor=None,
     n_turns=1024, use_beamline=None, N_KICKS=None, transmute_elements=None,
     ele_filepath=None, output_file_type=None, del_tmp_files=True,
     run_local=False, remote_opts=None):
     """"""
 
-    with open(LTE_filepath, 'r') as f:
-        file_contents = f.read()
+    if rf_cavity_on:
+        if harmonic_number is None:
+            raise ValueError(
+                'When "rf_cavity_on" is True, you must specifiy "harmonic_number".')
+        if overvoltage_factor is None:
+            raise ValueError(
+                'When "rf_cavity_on" is True, you must specifiy "overvoltage_factor" (>= 1.0).')
+
+    file_contents = Path(LTE_filepath).read_text()
 
     input_dict = dict(
-        LTE_filepath=os.path.abspath(LTE_filepath), E_MeV=E_MeV, n_turns=n_turns,
-        use_beamline=use_beamline,
+        LTE_filepath=os.path.abspath(LTE_filepath), E_MeV=E_MeV,
+        rf_cavity_on=rf_cavity_on, radiation_on=radiation_on,
+        n_turns=n_turns, use_beamline=use_beamline,
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath,
         del_tmp_files=del_tmp_files, run_local=run_local,
@@ -1146,20 +1192,122 @@ def calc_mom_aper(
         util.save_input_to_hdf5(output_filepath, input_dict)
 
     tmp = tempfile.NamedTemporaryFile(prefix=f'tmpTwi_', suffix='.pgz')
-    twi_pgz_filepath = os.path.abspath(tmp.name)
+    twi_pgz_filepstr = str(Path(tmp.name).resolve())
     tmp.close()
     #
     twiss.calc_ring_twiss(
-        twi_pgz_filepath, LTE_filepath, E_MeV, use_beamline=use_beamline,
-        parameters='%s.param', run_local=True)
+        twi_pgz_filepstr, LTE_filepath, E_MeV, use_beamline=use_beamline,
+        parameters='%s.param', radiation_integrals=True, run_local=True)
     # ^ "%s.twi" & "%s.param" are needed only for the purpose of showing magnet
     #   profiles in the plotting function.
+
+    tmp_files_to_be_deleted = [twi_pgz_filepstr]
 
     if ele_filepath is None:
         tmp = tempfile.NamedTemporaryFile(
             dir=os.getcwd(), delete=False, prefix=f'tmpMomAper_', suffix='.ele')
         ele_filepath = os.path.abspath(tmp.name)
         tmp.close()
+
+        tmp_files_to_be_deleted.append(ele_filepath)
+
+    if transmute_elements is None:
+        transmute_elements = dict(
+            SBEN='CSBEND', RBEN='CSBEND', QUAD='KQUAD', SEXT='KSEXT',
+            OCTU='KOCT')
+    #
+    for elem_type in ['RFCA', 'SREFFECTS']:
+        if elem_type in transmute_elements:
+            raise ValueError(
+                (f'User-specified transmuation of the element type "{elem_type}" '
+                 f'for calc_mom_aper() is not allowed'))
+
+    twi = util.load_pgz_file(twi_pgz_filepstr)
+
+    if rf_cavity_on or radiation_on:
+        LTE = ltemanager.Lattice(LTE_filepath=LTE_filepath,
+                                  used_beamline_name=use_beamline)
+        d_LTE = LTE.get_used_beamline_element_defs(used_beamline_name=use_beamline)
+
+        new_beamline_name = _get_nonexistent_elem_beamline_name(
+            d_LTE['elem_defs'], d_LTE['beamline_defs'], 'RINGRF')
+
+        new_beamline_def = [(d_LTE['used_beamline_name'], 1)]
+
+        tmp = tempfile.NamedTemporaryFile(prefix=f'tmpRF_', suffix='.lte',
+                                          dir=Path.cwd().resolve())
+        # ^ CRITICAL: must create this temp LTE file in cwd. If you create this
+        #   LTE in /tmp, this file cannot be accessible from other nodes
+        #   when Pelegant is used.
+        temp_RF_LTE_filepstr = str(Path(tmp.name).resolve())
+        tmp.close()
+    else:
+        temp_RF_LTE_filepstr = ''
+
+    if radiation_on:
+        # First find existing SREFFECTS elements and convert to MARK
+        if 'SREFFECTS' in [v[1] for v in d_LTE['elem_defs']]:
+            for i, (elem_name, elem_type, prop_str) in d_LTE['elem_defs']:
+                if elem_type == 'SREFFECTS':
+                    d_LTE['elem_defs'][i] = (elem_name, 'MARK', '')
+
+        # Add SREFFECTS element to the list of element definitions
+        new_sreffects_elem_name = _get_nonexistent_elem_beamline_name(
+            d_LTE['elem_defs'], d_LTE['beamline_defs'], 'SR')
+        d_LTE['elem_defs'].append(
+            (new_sreffects_elem_name, 'SREFFECTS', 'QEXCITATION=0'))
+
+        new_beamline_def.append((new_sreffects_elem_name, 1))
+    else:
+        transmute_elements['SREFFECTS'] = 'MARK'
+
+    if rf_cavity_on:
+        # First find existing RFCA elements and convert to DRIF
+        if 'RFCA' in [v[1] for v in d_LTE['elem_defs']]:
+            for i, (elem_name, elem_type, prop_str) in d_LTE['elem_defs']:
+                if elem_type == 'RFCA':
+                    L = LTE.parse_elem_properties(prop_str).get('L', 0.0)
+                    d_LTE['elem_defs'][i] = (elem_name, 'DRIF',
+                                             '' if L == 0.0 else f'L={L:.9g}')
+
+        circumf = twi['data']['twi']['arrays']['s'][-1]
+        U0_eV = twi['data']['twi']['scalars']['U0'] * 1e6
+        rf_params = calc_ring_rf_params(
+            harmonic_number, circumf, U0_eV, overvoltage_factor)
+
+        # Add RFCA element to the list of element definitions
+        new_rfca_elem_name = _get_nonexistent_elem_beamline_name(
+            d_LTE['elem_defs'], d_LTE['beamline_defs'], 'CAV')
+        _rf_cav_def = (f'VOLT={rf_params["rf_volt"]:.12g}, '
+                       f'PHASE={rf_params["phase_deg"]:.12g}, '
+                       f'FREQ={rf_params["freq_Hz"]:.12g}')
+        print(f'Adding RFCA element: {_rf_cav_def}')
+        d_LTE['elem_defs'].append(
+            (new_rfca_elem_name, 'RFCA', _rf_cav_def))
+
+        new_beamline_def.append((new_rfca_elem_name, 1))
+    else:
+        transmute_elements['RFCA'] = 'MARK'
+
+    if rf_cavity_on or radiation_on:
+        # Create a new beamline with RFCA and/or SREFFECTS elements added
+
+        d_LTE['beamline_defs'].append(
+            (new_beamline_name, new_beamline_def))
+
+        LTE.write_LTE(temp_RF_LTE_filepstr, new_beamline_name,
+                      d_LTE['elem_defs'], d_LTE['beamline_defs'])
+
+        input_dict['modified_lattice_file_contents'] = \
+            Path(temp_RF_LTE_filepstr).read_text()
+
+        tmp_files_to_be_deleted.append(temp_RF_LTE_filepstr)
+
+        mom_aper_LTE_filepstr = temp_RF_LTE_filepstr
+        mom_aper_beamline_name = new_beamline_name
+    else:
+        mom_aper_LTE_filepstr = LTE_filepath
+        mom_aper_beamline_name = use_beamline
 
     ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
 
@@ -1168,16 +1316,22 @@ def calc_mom_aper(
     ed.add_newline()
 
     ed.add_block('run_setup',
-        lattice=LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline,
-        semaphore_file='%s.done')
-
-    ed.add_newline()
-
-    ed.add_block('run_control', n_passes=n_turns)
+        lattice=mom_aper_LTE_filepstr, p_central_mev=E_MeV,
+        use_beamline=mom_aper_beamline_name, semaphore_file='%s.done')
 
     ed.add_newline()
 
     elebuilder.add_N_KICKS_alter_elements_blocks(ed, N_KICKS)
+
+    ed.add_newline()
+
+    ed.add_block('twiss_output',
+                 concat_order=2, radiation_integrals=True,
+                 output_at_each_step=True)
+
+    ed.add_newline()
+
+    ed.add_block('run_control', n_passes=n_turns)
 
     ed.add_newline()
 
@@ -1237,7 +1391,6 @@ def calc_mom_aper(
     timestamp_fin = util.get_current_local_time_str()
 
     if output_file_type in ('hdf5', 'h5'):
-        twi = util.load_pgz_file(twi_pgz_filepath)
         for _k in ['twi', 'param']:
             output[_k] = {}
             meta[_k] = {}
@@ -1273,7 +1426,6 @@ def calc_mom_aper(
             if 'columns' in v:
                 mod_meta[k]['arrays'] = v['columns']
 
-        twi = util.load_pgz_file(twi_pgz_filepath)
         for _k in ['twi', 'param']:
             mod_output[_k] = {}
             mod_meta[_k] = {}
@@ -1300,7 +1452,8 @@ def calc_mom_aper(
         raise ValueError()
 
     if del_tmp_files:
-        for fp in ed.actual_output_filepath_list + [ele_filepath]:
+
+        for fp in ed.actual_output_filepath_list + tmp_files_to_be_deleted:
             if fp.startswith('/dev'):
                 continue
             else:

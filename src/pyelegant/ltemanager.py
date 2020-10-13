@@ -626,22 +626,30 @@ class Lattice():
 
         return elem_type
 
-    def write_LTE(self, new_LTE_filepath, used_beamline_name):
+    @staticmethod
+    def write_LTE(
+        new_LTE_filepath, used_beamline_name, elem_defs, beamline_defs):
         """"""
 
-        d = self.get_used_beamline_element_defs(used_beamline_name=used_beamline_name)
+        #d = self.get_used_beamline_element_defs(used_beamline_name=used_beamline_name)
+
+        used_beamline_name = used_beamline_name.upper()
+        assert used_beamline_name in [beamline_name for (beamline_name, _)
+                                      in beamline_defs]
 
         lines = []
 
-        for elem_name, elem_type, prop_str in d['elem_defs']:
+        #for elem_name, elem_type, prop_str in d['elem_defs']:
+        for elem_name, elem_type, prop_str in elem_defs:
             def_line = f'{elem_name}: {elem_type}'
             if prop_str != '':
                 def_line += f', {prop_str}'
-            lines.append(self.get_wrapped_line(def_line))
+            lines.append(Lattice.get_wrapped_line(def_line))
 
         lines.append(' ')
 
-        for beamline_name, bdef in d['beamline_defs']:
+        #for beamline_name, bdef in d['beamline_defs']:
+        for beamline_name, bdef in beamline_defs:
             def_parts = []
             for name, multiplier in bdef:
                 if multiplier == 1:
@@ -654,11 +662,11 @@ class Lattice():
             def_line = ', '.join(def_parts)
 
             lines.append(
-                self.get_wrapped_line(f'{beamline_name}: LINE=({def_line})'))
+                Lattice.get_wrapped_line(f'{beamline_name}: LINE=({def_line})'))
 
         lines.append(' ')
 
-        lines.append(f'USE, "{d["used_beamline_name"]}"')
+        lines.append(f'USE, "{used_beamline_name}"')
         lines.append('RETURN')
 
         Path(new_LTE_filepath).write_text('\n'.join(lines))
