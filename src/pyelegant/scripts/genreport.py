@@ -2033,7 +2033,7 @@ class Report_NSLS2U_Default:
                                      1, align='c|',
                                      data=plx.NoEscape(r'$\epsilon_y / \epsilon_x$ (\%)'))
                                  ] +
-                                [plx.NoEscape(f'{v/1e6:.1f}') for v in
+                                [plx.NoEscape(f'{v/1e6:.2f}') for v in
                                  rf_v_array])
                             table.end_table_header()
                             table.add_hline()
@@ -4522,7 +4522,7 @@ class Report_NSLS2U_Default:
                     row += 1
                     #
                     for col, v in enumerate(rf_v_array):
-                        ws.write(row, col+table_col_offset, v / 1e6, wb_num_fmts['0.0'])
+                        ws.write(row, col+table_col_offset, v / 1e6, wb_num_fmts['0.00'])
                     row += 1
                     #
                     col = 1
