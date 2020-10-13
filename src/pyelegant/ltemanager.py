@@ -166,7 +166,7 @@ class Lattice():
 
         return beamline_def
 
-    def get_used_beamline_name(self, LTE_text):
+    def _get_used_beamline_name(self, LTE_text):
         """
         "LTE_text" must not contain comments and ampersands.
         """
@@ -248,7 +248,7 @@ class Lattice():
         all_elem_names     = [name for name, _, _ in all_elem_defs]
 
         if used_beamline_name == '':
-            used_beamline_name = self.get_used_beamline_name(self.cleaned_LTE_text)
+            used_beamline_name = self._get_used_beamline_name(self.cleaned_LTE_text)
 
         if used_beamline_name == '':
             print('Using the last defined beamline.')
@@ -626,14 +626,39 @@ class Lattice():
 
         return elem_type
 
-########################################################################
-class KQUAD():
-    """
-    10.46 KQUAD - A canonical kick quadrupole
-    """
+    def write_LTE(self, new_LTE_filepath, used_beamline_name):
+        """"""
 
-    #----------------------------------------------------------------------
-    def __init__(self, **kwargs):
-        """Constructor"""
+        d = self.get_used_beamline_element_defs(used_beamline_name=used_beamline_name)
 
-        self.L = kwargs.get('L', 0.0)
+        lines = []
+
+        for elem_name, elem_type, prop_str in d['elem_defs']:
+            def_line = f'{elem_name}: {elem_type}'
+            if prop_str != '':
+                def_line += f', {prop_str}'
+            lines.append(self.get_wrapped_line(def_line))
+
+        lines.append(' ')
+
+        for beamline_name, bdef in d['beamline_defs']:
+            def_parts = []
+            for name, multiplier in bdef:
+                if multiplier == 1:
+                    def_parts.append(name)
+                elif multiplier == -1:
+                    def_parts.append(f'-{name}')
+                else:
+                    def_parts.append(f'{multiplier:d}*{name}')
+
+            def_line = ', '.join(def_parts)
+
+            lines.append(
+                self.get_wrapped_line(f'{beamline_name}: LINE=({def_line})'))
+
+        lines.append(' ')
+
+        lines.append(f'USE, "{d["used_beamline_name"]}"')
+        lines.append('RETURN')
+
+        Path(new_LTE_filepath).write_text('\n'.join(lines))
