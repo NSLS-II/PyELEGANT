@@ -1,18 +1,20 @@
 import sys
 import os
 from pathlib import Path
-import numpy as np
-import scipy.constants as PHYSCONST
-from scipy.integrate import romberg
-from scipy.interpolate import PchipInterpolator
-import matplotlib.pylab as plt
-import matplotlib.patches as patches
 import tempfile
-import h5py
 import shlex
 from subprocess import Popen, PIPE
 import time
 import pickle
+
+import numpy as np
+import scipy.constants as PHYSCONST
+from scipy.integrate import romberg
+from scipy.interpolate import PchipInterpolator
+from scipy.optimize import fmin
+import matplotlib.pylab as plt
+import matplotlib.patches as patches
+import h5py
 
 from .local import run
 from .remote import remote
@@ -1096,16 +1098,93 @@ def plot_find_aper_nlines(output_filepath, title='', xlim=None, ylim=None):
 
     return ret
 
-def calc_ring_rf_params(harmonic_number, circumf, U0_eV, overvoltage_factor):
+def calc_rf_bucket_heights(E_GeV, alphac, U0_eV, h, rf_volts):
     """"""
 
-    try:
-        assert overvoltage_factor >= 1.0
-    except:
-        print('"overvoltage_factor" must be larger than or equal to 1.0')
-        raise
+    m_e_eV = PHYSCONST.physical_constants[
+        'electron mass energy equivalent in MeV'][0] * 1e6
 
-    rf_volt = overvoltage_factor * U0_eV
+    # See Section 3.1.4.6 on p.212 of Chao & Tigner, "Handbook
+    # of Accelerator Physics and Engineering" for analytical
+    # formula of RF bucket height, which is "A_s" in Eq. (32),
+    # which is equal to (epsilon_max/E_0) [fraction] in Eq. (33).
+    #
+    # Note that the slip factor (eta) is approximately equal
+    # to momentum compaction in the case of NSLS-II.
+    gamma = 1.0 + E_GeV * 1e9 / m_e_eV
+    gamma_t = 1.0 / np.sqrt(alphac)
+    slip_fac = 1.0 / (gamma_t**2) - 1.0 / (gamma**2) # approx. equal to "mom_compac"
+    q = rf_volts / U0_eV # overvoltage factor
+    F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
+    rf_bucket_heights_percents = 1e2 * np.sqrt(
+        U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
+
+    return rf_bucket_heights_percents
+
+def calc_ring_rf_params(
+    harmonic_number, circumf, U0_eV, rf_bucket_percent=None, rf_volt=None,
+    overvoltage_factor=None, E_GeV=None, alphac=None):
+    """"""
+
+    if rf_bucket_percent is not None:
+
+        try:
+            assert rf_bucket_percent > 0.0
+        except:
+            print('"rf_bucket_percent" must be larger than 0.0')
+            raise
+
+        if overvoltage_factor is not None:
+            print(('WARNING: Since "rf_bucket_percent" is specified, '
+                   '"overvoltage_factor" will be ignored.'))
+        if rf_volt is not None:
+            print(('WARNING: Since "rf_bucket_percent" is specified, '
+                   '"rf_volt" will be ignored.'))
+
+        if E_GeV is None:
+            raise ValueError(('You must also specify "E_GeV" '
+                              'when "rf_bucket_percent" is specified.'))
+        if alphac is None:
+            raise ValueError(('You must also specify "alphac" '
+                              'when "rf_bucket_percent" is specified.'))
+
+        def _goal(rf_volt, target_rf_bucket_percent, E_GeV, alphac, U0_eV, h):
+            rf_percent = calc_rf_bucket_heights(E_GeV, alphac, U0_eV, h, rf_volt)
+            return (rf_percent - target_rf_bucket_percent)**2
+
+        ini_rf_volt = U0_eV * 2.0
+
+        opt = fmin(_goal, ini_rf_volt, args=(
+            rf_bucket_percent, E_GeV, alphac, U0_eV, harmonic_number),
+            xtol=1e-6, ftol=1e-6, disp=0, retall=0)
+        rf_volt = opt[0]
+
+    elif overvoltage_factor is not None:
+        if rf_volt is not None:
+            print(('WARNING: Since "overvoltage_factor" is specified, '
+                   '"rf_volt" will be ignored.'))
+
+        try:
+            assert overvoltage_factor > 1.0
+        except:
+            print('"overvoltage_factor" must be larger than 1.0')
+            raise
+
+        rf_volt = overvoltage_factor * U0_eV
+
+    elif rf_volt is not None:
+        try:
+            assert rf_volt > U0_eV
+        except:
+            print(f'"rf_volt" must be larger than U0_eV ({U0_eV:.6g})')
+            raise
+
+    else:
+        raise ValueError(
+            ('You must specifiy one of the following:\n'
+             '"rf_bucket_percent" (> 0.0), "overvoltage_factor" (> 1.0)., '
+             'and "rf_volt" (> energy loss per turn)'))
+
 
     #freq_Hz_rpn_expr = notation.convert_infix_to_rpn(
         #f'c_mks / {circumf:.6g} * {harmonic_number:d}')
@@ -1139,8 +1218,8 @@ def calc_mom_aper(
     steps_back=1, splits=2, split_step_divisor=10, verbosity=1,
     forbid_resonance_crossing=False, soft_failure=False,
     process_elements=2147483647,
-    rf_cavity_on=True, radiation_on=True,
-    harmonic_number=None, overvoltage_factor=None,
+    rf_cavity_on=True, radiation_on=True, harmonic_number=None,
+    rf_bucket_percent=None, overvoltage_factor=None, rf_volt=None,
     n_turns=1024, use_beamline=None, N_KICKS=None, transmute_elements=None,
     ele_filepath=None, output_file_type=None, del_tmp_files=True,
     run_local=False, remote_opts=None):
@@ -1150,15 +1229,33 @@ def calc_mom_aper(
         if harmonic_number is None:
             raise ValueError(
                 'When "rf_cavity_on" is True, you must specifiy "harmonic_number".')
-        if overvoltage_factor is None:
+
+        if rf_bucket_percent is not None:
+            if overvoltage_factor is not None:
+                print(('WARNING: Since "rf_bucket_percent" is specified, '
+                       '"overvoltage_factor" will be ignored.'))
+            if rf_volt is not None:
+                print(('WARNING: Since "rf_bucket_percent" is specified, '
+                       '"rf_volt" will be ignored.'))
+        elif overvoltage_factor is not None:
+            if rf_volt is not None:
+                print(('WARNING: Since "overvoltage_factor" is specified, '
+                       '"rf_volt" will be ignored.'))
+        elif rf_volt is not None:
+            pass
+        else:
             raise ValueError(
-                'When "rf_cavity_on" is True, you must specifiy "overvoltage_factor" (>= 1.0).')
+                ('When "rf_cavity_on" is True, you must also specifiy one of the following:\n'
+                 '"rf_bucket_percent" (> 0.0), "overvoltage_factor" (> 1.0)., '
+                 'and "rf_volt" (> energy loss per turn)'))
 
     file_contents = Path(LTE_filepath).read_text()
 
     input_dict = dict(
         LTE_filepath=os.path.abspath(LTE_filepath), E_MeV=E_MeV,
         rf_cavity_on=rf_cavity_on, radiation_on=radiation_on,
+        harmonic_number=harmonic_number, rf_bucket_percent=rf_bucket_percent,
+        overvoltage_factor=overvoltage_factor, rf_volt=rf_volt,
         n_turns=n_turns, use_beamline=use_beamline,
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath,
@@ -1272,8 +1369,20 @@ def calc_mom_aper(
 
         circumf = twi['data']['twi']['arrays']['s'][-1]
         U0_eV = twi['data']['twi']['scalars']['U0'] * 1e6
-        rf_params = calc_ring_rf_params(
-            harmonic_number, circumf, U0_eV, overvoltage_factor)
+        alphac = twi['data']['twi']['scalars']['alphac']
+        if rf_bucket_percent is not None:
+            rf_params = calc_ring_rf_params(
+                harmonic_number, circumf, U0_eV,
+                rf_bucket_percent=rf_bucket_percent, E_GeV=E_MeV/1e3, alphac=alphac)
+        elif overvoltage_factor is not None:
+            rf_params = calc_ring_rf_params(
+                harmonic_number, circumf, U0_eV,
+                overvoltage_factor=overvoltage_factor)
+        elif rf_volt is not None:
+            rf_params = calc_ring_rf_params(
+                harmonic_number, circumf, U0_eV, rf_volt=rf_volt)
+        else:
+            raise RuntimeError('This line should not be reachable.')
 
         # Add RFCA element to the list of element definitions
         new_rfca_elem_name = _get_nonexistent_elem_beamline_name(
