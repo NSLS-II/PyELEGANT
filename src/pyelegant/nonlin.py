@@ -1195,7 +1195,11 @@ def calc_ring_rf_params(
     ## ^ Built-in RPN function "dasin" == np.rad2deg(np.arcsin)
     phase_deg = 180 - np.rad2deg(np.arcsin(U0_eV / rf_volt))
 
-    return dict(rf_volt=rf_volt, freq_Hz=freq_Hz, phase_deg=phase_deg)
+    rf_params = dict(rf_volt=rf_volt, freq_Hz=freq_Hz, phase_deg=phase_deg)
+
+    rf_params['overvoltage_factor'] = rf_volt / U0_eV
+
+    return rf_params
 
 def _get_nonexistent_elem_beamline_name(elem_defs, beamline_defs, base_name):
     """"""
@@ -1383,6 +1387,11 @@ def calc_mom_aper(
                 harmonic_number, circumf, U0_eV, rf_volt=rf_volt)
         else:
             raise RuntimeError('This line should not be reachable.')
+
+        # Add derived rf parameters into "input_dict"
+        rf_params['bucket_percent'] = calc_rf_bucket_heights(
+            E_MeV/1e3, alphac, U0_eV, harmonic_number, rf_params['rf_volt'])
+        input_dict['derived_rf_params'] = rf_params
 
         # Add RFCA element to the list of element definitions
         new_rfca_elem_name = _get_nonexistent_elem_beamline_name(

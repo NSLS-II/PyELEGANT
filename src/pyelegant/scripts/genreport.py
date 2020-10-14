@@ -1751,6 +1751,44 @@ class Report_NSLS2U_Default:
                 else:
                     soft_fail_sentence = ''
                 #
+                rf_cavity_on = d['input'].get('rf_cavity_on', False)
+                radiation_on = d['input'].get('radiation_on', False)
+                harmonic_number = d['input'].get('harmonic_number', 1320)
+                rf_bucket_percent = d['input'].get('rf_bucket_percent', None)
+                overvoltage_factor = d['input'].get('overvoltage_factor', None)
+                rf_volt = d['input'].get('rf_volt', None)
+                derived_rf_params = d['input']['derived_rf_params']
+                if rf_cavity_on:
+                    if rf_bucket_percent is not None:
+                        rf_input = (
+                            f'RF bucket height of {rf_bucket_percent:.3g}\% '
+                            f'(RF voltage of {derived_rf_params["rf_volt"]/1e6:.3g} MV)')
+                    elif overvoltage_factor is not None:
+                        rf_input = (
+                            f'overvoltage factor of {overvoltage_factor:.3g} '
+                            f'(RF voltage of {derived_rf_params["rf_volt"]/1e6:.3g} MV and '
+                            f'RF bucket height of {derived_rf_params["bucket_percent"]:.3g}\%)')
+                    elif rf_volt is not None:
+                        rf_input = (
+                            f'RF voltage of {rf_volt/1e6:.3g} MV '
+                            f'(RF bucket height of {derived_rf_params["bucket_percent"]:.3g}\%)')
+                    else:
+                        raise RuntimeError('This should not be reachable.')
+
+                    rf_rad_sentence = f'''\
+                An RF cavity was turned on with harmonic number of
+                {harmonic_number:d} and {rf_input}
+                at the beam energy of {d["input"]["E_MeV"]/1e3:.2g} GeV.'''
+
+                    rf_rad_sentence = self._convert_multiline_to_oneline(rf_rad_sentence)
+                else:
+                    rf_rad_sentence = 'No RF cavity was included.'
+                #
+                if radiation_on:
+                    rf_rad_sentence += ' Radiation loss was included.'
+                else:
+                    rf_rad_sentence += ' Radiation loss was not included.'
+                #
                 para = f'''\
                 The momentum aperture was searched by tracking particles for
                 {n_turns:d} turns with initial $(x, y) =
@@ -1766,6 +1804,7 @@ class Report_NSLS2U_Default:
                 The search was {res_xing_flag}terminated when crossing
                 half-integer and integer tunes.
                 {soft_fail_sentence}
+                {rf_rad_sentence}
                 '''
                 para = self._convert_multiline_to_oneline(para)
                 doc.append(plx.NoEscape(para))
@@ -7054,6 +7093,13 @@ class Report_NSLS2U_Default:
 
         n_turns = calc_opts.pop('n_turns')
 
+        h = self.conf.get('harmonic_number', 1320)
+        rf_cavity_on = calc_opts.pop('rf_cavity_on', False) # "False" <= v1.2
+        radiation_on = calc_opts.pop('radiation_on', False) # "False" <= v1.2
+        rf_bucket_percent = calc_opts.pop('rf_bucket_percent', None)
+        overvoltage_factor = calc_opts.pop('overvoltage_factor', None)
+        rf_volt = calc_opts.pop('rf_volt', None)
+
         s_start = 0.0
 
         if self.is_ring_a_multiple_of_superperiods():
@@ -7112,6 +7158,9 @@ class Report_NSLS2U_Default:
         pe.nonlin.calc_mom_aper(
             output_filepath, LTE_filepath, E_MeV_default, n_turns=n_turns,
             s_start=s_start, s_end=s_end,
+            rf_cavity_on=rf_cavity_on, radiation_on=radiation_on,
+            harmonic_number=h, rf_bucket_percent=rf_bucket_percent,
+            overvoltage_factor=overvoltage_factor, rf_volt=rf_volt,
             use_beamline=use_beamline, N_KICKS=N_KICKS, del_tmp_files=True,
             run_local=False, remote_opts=remote_opts, **calc_opts)
 
@@ -7438,7 +7487,10 @@ class Report_NSLS2U_Default:
                 rf_volts = np.array(calc_opts['rf_V']) # [V]
 
 
-            h = calc_opts['harmonic_number']
+            if self._version >= version.parse('1.3'):
+                h = self.conf['harmonic_number']
+            else:
+                h = calc_opts['harmonic_number']
 
             c = scipy.constants.c
 
@@ -7501,7 +7553,7 @@ class Report_NSLS2U_Default:
                     sigma_z_ps_list.append(sigma_z_ps)
 
                     # RF Bucket Height (RF Acceptance)
-                    rf_bucket_heights_percent = self.calc_rf_bucket_heights(
+                    rf_bucket_heights_percent = pe.nonlin.calc_rf_bucket_heights(
                         E_GeV, alphac, U0_eV, h, rf_v_array)
                     rf_bucket_heights_percent_list.append(rf_bucket_heights_percent)
 
@@ -7544,7 +7596,7 @@ class Report_NSLS2U_Default:
                         sigma_z_ps_list.append(sigma_z_ps)
 
                     # RF Bucket Height (RF Acceptance)
-                    rf_bucket_heights_percent = self.calc_rf_bucket_heights(
+                    rf_bucket_heights_percent = pe.nonlin.calc_rf_bucket_heights(
                         E_GeV, alphac, U0_eV, h, rf_volts)
                     if self._version == version.parse('1.1'):
                         rf_bucket_heights_percent_list.append(rf_bucket_heights_percent)
@@ -7582,7 +7634,10 @@ class Report_NSLS2U_Default:
         rf = self.conf['rf']
         calc_opts = rf['calc_opts']
 
-        h = calc_opts['harmonic_number']
+        if self._version >= version.parse('1.3'):
+            h = self.conf['harmonic_number']
+        else:
+            h = calc_opts['harmonic_number']
 
         self.req_data_for_calc = {}
         os.chdir(Path(self.config_filepath).parent) # CRITICAL
@@ -7611,7 +7666,7 @@ class Report_NSLS2U_Default:
             if debug:
                 print('First find a voltage for a non-zero bucket height')
             while True:
-                rf_bucket_heights_percent = self.calc_rf_bucket_heights(
+                rf_bucket_heights_percent = pe.nonlin.calc_rf_bucket_heights(
                     E_GeV, alphac, U0_eV, h, rf_V)
                 if debug:
                     print(f'Height [%] = {rf_bucket_heights_percent:.2f} @ {rf_V/1e6:.2} MV')
@@ -7637,7 +7692,7 @@ class Report_NSLS2U_Default:
                 else:
                     rf_V -= min_rf_volt_step
 
-                rf_bucket_heights_percent = self.calc_rf_bucket_heights(
+                rf_bucket_heights_percent = pe.nonlin.calc_rf_bucket_heights(
                     E_GeV, alphac, U0_eV, h, rf_V)
                 if debug:
                     print(f'Height [%] = {rf_bucket_heights_percent:.2f} @ {rf_V/1e6:.2} MV')
@@ -7658,7 +7713,7 @@ class Report_NSLS2U_Default:
             while True:
                 rf_V -= min_rf_volt_step
 
-                rf_bucket_heights_percent = self.calc_rf_bucket_heights(
+                rf_bucket_heights_percent = pe.nonlin.calc_rf_bucket_heights(
                     E_GeV, alphac, U0_eV, h, rf_V)
                 if debug:
                     print(f'Height [%] = {rf_bucket_heights_percent:.2f} @ {rf_V/1e6:.2} MV')
@@ -7673,29 +7728,6 @@ class Report_NSLS2U_Default:
             r['min'] = rf_V
 
         return results
-
-    def calc_rf_bucket_heights(self, E_GeV, alphac, U0_eV, h, rf_volts):
-        """"""
-
-        m_e_eV = physical_constants[
-            'electron mass energy equivalent in MeV'][0] * 1e6
-
-        # See Section 3.1.4.6 on p.212 of Chao & Tigner, "Handbook
-        # of Accelerator Physics and Engineering" for analytical
-        # formula of RF bucket height, which is "A_s" in Eq. (32),
-        # which is equal to (epsilon_max/E_0) [fraction] in Eq. (33).
-        #
-        # Note that the slip factor (eta) is approximately equal
-        # to momentum compaction in the case of NSLS-II.
-        gamma = 1.0 + E_GeV * 1e9 / m_e_eV
-        gamma_t = 1.0 / np.sqrt(alphac)
-        slip_fac = 1.0 / (gamma_t**2) - 1.0 / (gamma**2) # approx. equal to "mom_compac"
-        q = rf_volts / U0_eV # overvoltage factor
-        F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
-        rf_bucket_heights_percents = 1e2 * np.sqrt(
-            U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
-
-        return rf_bucket_heights_percents
 
     def scan_V_tau(
         self, rf_volt_ranges, v_scan_npts, ntasks, E_MeV_list, eps_0_list,
@@ -7777,7 +7809,7 @@ class Report_NSLS2U_Default:
                     sigma_z_ps = sigma_z_m / c * 1e12 # [ps]
                     sigma_z_ps_list.append(sigma_z_ps)
 
-                    bucket_heights_percent = self.calc_rf_bucket_heights(
+                    bucket_heights_percent = pe.nonlin.calc_rf_bucket_heights(
                         E_MeV / 1e3, alphac, U0_eV, h, rf_v_array)
                     bucket_heights_percent_list.append(bucket_heights_percent)
 
@@ -7852,7 +7884,7 @@ class Report_NSLS2U_Default:
                     sigma_z_ps = sigma_z_m / c * 1e12 # [ps]
                     sigma_z_ps_list.append(sigma_z_ps)
 
-                    bucket_heights_percent = self.calc_rf_bucket_heights(
+                    bucket_heights_percent = pe.nonlin.calc_rf_bucket_heights(
                         E_MeV / 1e3, alphac, U0_eV, h, rf_v_array)
                     bucket_heights_percent_list.append(bucket_heights_percent)
 
@@ -9094,7 +9126,9 @@ class Report_NSLS2U_Default:
             # Upgrade to '1.3'
             conf['report_version'] = '1.3'
 
-            conf['harmonic_number'] = 1320
+            # Add this right under "E_MeV".
+            i = list(conf).index('E_MeV') + 1
+            conf.insert(i, 'harmonic_number', 1320, comment='REQUIRED')
             try:
                 del conf['rf']['calc_opts']['harmonic_number']
             except:
@@ -9103,7 +9137,9 @@ class Report_NSLS2U_Default:
             test = conf['nonlin']['calc_opts']['mom_aper']['test']
             test['rf_cavity_on'] = True
             test['radiation_on'] = True
-            test['overvoltage_factor'] = 2.0
+            test['rf_bucket_percent'] = 3.0
+            test['overvoltage_factor'] = None
+            test['rf_volt'] = None
 
         elif conf['report_version'] == '1.3':
             pass # Latest version. No need to upgrade.
@@ -9129,17 +9165,22 @@ class Report_NSLS2U_Default:
         # This variable was originally specified at rf/calc_opts/harmonic_number,
         # but this value can be now also required for "mom_aper" calculation
         # if an RF cavity is turned on, so it is moved to the top level.
-        conf['harmonic_number'] = 1320
+        # Add this right under "E_MeV".
+        i = list(conf).index('E_MeV') + 1
+        conf.insert(i, 'harmonic_number', 1320, comment='REQUIRED')
         try:
             del conf['rf']['calc_opts']['harmonic_number']
         except:
             pass
 
-        # Add "rf_cavity_on", "radiation_on", & "overvoltage_factor"
+        # Add "rf_cavity_on", "radiation_on",
+        # "rf_bucket_percent", "overvoltage_factor", "rf_volt"
         test = conf['nonlin']['calc_opts']['mom_aper']['test']
         test['rf_cavity_on'] = True
         test['radiation_on'] = True
-        test['overvoltage_factor'] = 2.0
+        test['rf_bucket_percent'] = 3.0
+        test['overvoltage_factor'] = None
+        test['rf_volt'] = None
 
         return conf
 
