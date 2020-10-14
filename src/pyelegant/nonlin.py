@@ -2265,7 +2265,7 @@ def calc_chrom_twiss(
 
 def calc_chrom_track(
     output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, ndelta,
-    courant_snyder=True, return_fft_spec=True, save_tbt=True,
+    use_sddsnaff=True, courant_snyder=True, return_fft_spec=True, save_tbt=True,
     n_turns=256, x0_offset=1e-5, y0_offset=1e-5, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
@@ -2279,7 +2279,8 @@ def calc_chrom_track(
     input_dict = dict(
         LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
         delta_min=delta_min, delta_max=delta_max, ndelta=ndelta,
-        courant_snyder=courant_snyder, return_fft_spec=return_fft_spec,
+        use_sddsnaff=use_sddsnaff, courant_snyder=courant_snyder,
+        return_fft_spec=return_fft_spec,
         save_tbt=save_tbt, n_turns=n_turns, x0_offset=x0_offset, y0_offset=y0_offset,
         use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
@@ -2374,7 +2375,7 @@ def calc_chrom_track(
         tbt = dict(x = np.full((n_turns, ndelta), np.nan),
                    y = np.full((n_turns, ndelta), np.nan),
                    )
-        if courant_snyder:
+        if courant_snyder or use_sddsnaff:
             tbt['xp'] = np.full((n_turns, ndelta), np.nan)
             tbt['yp'] = np.full((n_turns, ndelta), np.nan)
 
@@ -2412,7 +2413,7 @@ def calc_chrom_track(
             delta_array, remote_opts['ntasks'])
 
         coords_list = ['x', 'y']
-        if courant_snyder:
+        if courant_snyder or use_sddsnaff:
             coords_list += ['xp', 'yp']
 
         module_name = 'pyelegant.nonlin'
@@ -2433,7 +2434,7 @@ def calc_chrom_track(
 
         tbt = dict(x = np.full((n_turns, ndelta), np.nan),
                    y = np.full((n_turns, ndelta), np.nan))
-        if courant_snyder:
+        if courant_snyder or use_sddsnaff:
             tbt['xp'] = np.full((n_turns, ndelta), np.nan)
             tbt['yp'] = np.full((n_turns, ndelta), np.nan)
         for plane in coords_list:
@@ -2444,7 +2445,71 @@ def calc_chrom_track(
 
     #t0 = time.time()
     # Estimate tunes from TbT data
-    if courant_snyder:
+    if use_sddsnaff:
+        tmp = tempfile.NamedTemporaryFile(
+            dir=None, delete=False, prefix=f'tmpTbt_', suffix='.sdds')
+        tbt_sdds_path = Path(tmp.name)
+        naff_sdds_path = tbt_sdds_path.parent.joinpath(f'{tbt_sdds_path.stem}.naff')
+        tmp.close()
+
+        pass_array = np.array(range(tbt['x'].shape[0]))
+        nus = dict(x=np.full(tbt['x'].shape[1], np.nan),
+                   y=np.full(tbt['x'].shape[1], np.nan),)
+        for iDelta, (x, xp, y, yp) in enumerate(zip(
+            tbt['x'].T, tbt['xp'].T, tbt['y'].T, tbt['yp'].T)):
+            sdds.dicts2sdds(tbt_sdds_path,
+                            columns=dict(Pass=pass_array, x=x, xp=xp, y=y, yp=yp),
+                            outputMode='binary', tempdir_path=None, suppress_err_msg=True)
+
+            cmd = (f'sddsnaff {tbt_sdds_path} {naff_sdds_path} '
+                   '-column=Pass -pair=x,xp -pair=y,yp -terminate=frequencies=1')
+            p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+            out, err = p.communicate()
+            if out: print(f'stdout: {out}')
+            if err: print(f'stderr: {err}')
+            if False:
+                cmd = f'sddsprintout {naff_sdds_path} -col="(xFrequency,yFrequency)"'
+                p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+                out, err = p.communicate()
+                if out: print(f'stdout: {out}')
+                if err: print(f'stderr: {err}')
+            naff_d, naff_meta = sdds.sdds2dicts(naff_sdds_path)
+
+            nus['x'][iDelta] = naff_d['columns']['xFrequency'][0]
+            nus['y'][iDelta] = naff_d['columns']['yFrequency'][0]
+
+        try: tbt_sdds_path.unlink()
+        except: pass
+        try: naff_sdds_path.unlink()
+        except: pass
+
+        if False:
+            other_nus = calc_chrom_from_tbt_cs(
+                delta_array, tbt['x'], tbt['y'], nux0, nuy0,
+                tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
+                init_guess_from_prev_step=True, return_fft_spec=False)
+
+            plt.figure()
+            plt.plot(delta_array * 1e2, other_nus['x'], 'b.-',
+                     label='calc_chrom_from_tbt_cs')
+            plt.plot(delta_array * 1e2, nus['x'], 'r.-', label='sddsnaff')
+            plt.xlabel(r'$\delta\, [\%]$', size='large')
+            plt.ylabel(r'$nu_x$', size='large')
+            leg = plt.legend(loc='best')
+            plt.tight_layout()
+
+            plt.figure()
+            plt.plot(delta_array * 1e2, other_nus['y'], 'b.-',
+                     label='calc_chrom_from_tbt_cs')
+            plt.plot(delta_array * 1e2, nus['y'], 'r.-', label='sddsnaff')
+            plt.xlabel(r'$\delta\, [\%]$', size='large')
+            plt.ylabel(r'$nu_y$', size='large')
+            leg = plt.legend(loc='best')
+            plt.tight_layout()
+
+        extra_save_kwargs = dict(xptbt=tbt['xp'], yptbt=tbt['yp'])
+
+    elif courant_snyder:
         if return_fft_spec:
             nus, fft_nus, fft_hAxs, fft_hAys = calc_chrom_from_tbt_cs(
                 delta_array, tbt['x'], tbt['y'], nux0, nuy0,
