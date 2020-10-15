@@ -2958,6 +2958,7 @@ def plot_chrom(
     assert max_resonance_line_order <= 5
 
     ret = {} # variable to be returned
+    ret['aper'] = {}
 
     is_nuxlim_frac = False
     if nuxlim:
@@ -3129,14 +3130,17 @@ def plot_chrom(
                     max_neg_res_xing_delta = np.max(neg_xing_deltas)
 
 
+    ret['aper']['scanned'] = [np.min(deltas), np.max(deltas)]
     if deltalim is not None:
         delta_incl = np.logical_and(deltas >= np.min(deltalim),
                                     deltas <= np.max(deltalim))
     else:
         delta_incl = np.ones(deltas.shape).astype(bool)
     deltas = deltas[delta_incl]
+    ret['aper']['plotted'] = [np.min(deltas), np.max(deltas)]
     nuxs = nuxs[delta_incl]
     nuys = nuys[delta_incl]
+
 
     fit_deltas_for_plot = np.linspace(np.min(deltas), np.max(deltas), 101)
 
@@ -3265,15 +3269,19 @@ def plot_chrom(
             ax2.axhline(_nu, linestyle='--', color='r')
         if nuylim[0] <= _nu + 0.5 <= nuylim[1]: # half-integer tune line
             ax2.axhline(_nu + 0.5, linestyle=':', color='r')
-    # Add lines at min defined tune boundaries
+    # Add lines at max defined tune boundaries
     _deltalim = ax1.get_xlim()
-    for _delta in [min_pos_undef_delta, max_neg_undef_delta]:
+    ret['aper']['undefined_tunes'] = []
+    for _delta in [max_neg_undef_delta, min_pos_undef_delta]:
         if _deltalim[0] <= (_delta * 1e2) <= _deltalim[1]:
             ax1.axvline(_delta * 1e2, linestyle='--', color='k')
-    # Add min(in abs) integer/half-integer resonance crossing lines
-    for _delta in [min_pos_res_xing_delta, max_neg_res_xing_delta]:
+            ret['aper']['undefined_tunes'].append(_delta)
+    # Add lines at max apertures w/o crossing integer/half-integer resonance
+    ret['aper']['resonance_xing'] = []
+    for _delta in [max_neg_res_xing_delta, min_pos_res_xing_delta]:
         if _deltalim[0] <= (_delta * 1e2) <= _deltalim[1]:
             ax1.axvline(_delta * 1e2, linestyle=':', color='k')
+            ret['aper']['resonance_xing'].append(_delta)
     #
     if title != '':
         ax1.set_title(title, size=font_sz, pad=60)
@@ -4785,6 +4793,7 @@ def plot_tswa_both_sides(
     assert max_resonance_line_order <= 5
 
     ret = {} # variable to be returned
+    ret['aper'] = {}
 
     is_nuxlim_frac = False
     if nuxlim:
@@ -4903,6 +4912,7 @@ def plot_tswa_both_sides(
     else:
         max_neg_undef_v0 = np.nan
 
+    ret['aper']['scanned'] = [np.min(v0s['-']), np.max(v0s['+'])]
 
     twoJxs, twoJys, Jxs, Jys, nux_fit, nuy_fit, fit_label = [{} for _ in range(7)]
     twoJx0s, twoJy0s, Jx0s, Jy0s, nux_fit0, nuy_fit0, fit0_label = [{} for _ in range(7)]
@@ -5287,15 +5297,19 @@ def plot_tswa_both_sides(
                 ax2.axhline(_nu, linestyle='--', color='r')
             if nuylim[0] <= _nu + 0.5 <= nuylim[1]: # half-integer tune line
                 ax2.axhline(_nu + 0.5, linestyle=':', color='r')
-        # Add lines at min defined tune boundaries
+        # Add lines at max defined tune boundaries
+        ret['aper']['undefined_tunes'] = []
         _vlim = ax1.get_xlim()
-        for _v0 in [min_pos_undef_v0, max_neg_undef_v0]:
+        for _v0 in [max_neg_undef_v0, min_pos_undef_v0]:
             if _vlim[0] <= (_v0 * 1e3) <= _vlim[1]:
                 ax1.axvline(_v0 * 1e3, linestyle='--', color='k')
-        # Add min(in abs) integer/half-integer resonance crossing lines
-        for _v0 in [min_pos_res_xing_v, max_neg_res_xing_v]:
+                ret['aper']['undefined_tunes'].append(_v0)
+        # Add lines at max apertures w/o crossing integer/half-integer resonance
+        ret['aper']['resonance_xing'] = []
+        for _v0 in [max_neg_res_xing_v, min_pos_res_xing_v]:
             if _vlim[0] <= (_v0 * 1e3) <= _vlim[1]:
                 ax1.axvline(_v0 * 1e3, linestyle=':', color='k')
+                ret['aper']['resonance_xing'].append(_v0)
         #
         if title != '':
             ax1.set_title(title, size=font_sz, pad=60)

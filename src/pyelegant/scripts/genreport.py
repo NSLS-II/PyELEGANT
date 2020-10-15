@@ -1556,6 +1556,16 @@ class Report_NSLS2U_Default:
             with open(self.suppl_plot_data_filepath['tswa'], 'rb') as f:
                 _, tswa_data = pickle.load(f)
             _fit_opts = tswa_data['fit_options']
+            try:
+                aper_undef = {plane: tswa_data[plane]['aper']['undefined_tunes']
+                              for plane in ['x', 'y']}
+            except KeyError:
+                aper_undef = None
+            try:
+                aper_res_xing = {plane: tswa_data[plane]['aper']['resonance_xing']
+                                 for plane in ['x', 'y']}
+            except KeyError:
+                aper_res_xing = None
 
             doc.append((
                 f'The plots for tune shift with horizontal amplitude were generated '
@@ -1606,14 +1616,54 @@ class Report_NSLS2U_Default:
                 f'\le y_0 [\mathrm{{mm}}] \le {_fit_opts["fit_ymax"]*1e3:+.3f}$.'))
 
             doc.append(plx.NewParagraph())
-            legend_explanation = (
-                'In the (a) figures, the horizontal dash lines (--) correspond '
-                'to integer tunes, while the horizontal dotted lines (:) '
-                'correspond to half-integer tunes. The vertical dash lines (--) '
-                'correspond to the maximum apertures after excluding lost '
-                'particles and undefined tunes. The vertical dotted lines (:) '
-                'correspond to the maximum apertures without crossing integer '
-                'or half-integer tunes.'
+            aper_str = {}
+            for aper_dict, _k in [(aper_undef, 'undef'),
+                                  (aper_res_xing, 'res_xing')]:
+                if aper_dict is None:
+                    aper_str[_k] = ''
+                    #'(x: [-1.52, +2.34] mm; y: (-2.40, +2.40) mm)'
+                else:
+                    try:
+                        aper_list = aper_dict['x']
+                    except KeyError:
+                        aper_list = []
+                    if aper_list == []:
+                        _s_x = ''
+                    else:
+                        _s_x = ', '.join([f'{_v * 1e3:+.2f}' for _v in aper_list])
+                        _s_x = f'$x: [{_s_x}]$ mm'
+
+                    try:
+                        aper_list = aper_dict['y']
+                    except KeyError:
+                        aper_list = []
+                    if aper_list == []:
+                        _s_y = ''
+                    else:
+                        _s_y = ', '.join([f'{_v * 1e3:+.2f}' for _v in aper_list])
+                        _s_y = f'$y: [{_s_y}]$ mm'
+
+                    if (_s_x != '') and (_s_y != ''):
+                        _s = '; '.join([_s_x, _s_y])
+                    elif _s_x != '':
+                        _s = _s_x
+                    elif _s_y != '':
+                        _s = _s_y
+                    else:
+                        _s = ''
+
+                    if _s != '':
+                        aper_str[_k] = f' ({_s})'
+                    else:
+                        aper_str[_k] = ''
+            legend_explanation = plx.NoEscape(
+                'In the (a) figures, the horizontal dash (-{}-) and dotted (:) '
+                'lines correspond to integer and half-integer tunes, respectively. '
+                'The vertical dash (-{}-) and dotted (:) lines correspond to the '
+                'maximum apertures after excluding lost particles and undefined '
+                f'tunes{aper_str["undef"]}, and to the maximum apertures without '
+                f'crossing integer or half-integer tunes{aper_str["res_xing"]}, '
+                'respectively.'
             )
             doc.append(legend_explanation)
             doc.append(plx.NewParagraph())
@@ -1664,6 +1714,14 @@ class Report_NSLS2U_Default:
             with open(self.suppl_plot_data_filepath['nonlin_chrom'], 'rb') as f:
                 nonlin_chrom_data = pickle.load(f)
             _fit_opts = nonlin_chrom_data['fit_options']
+            try:
+                aper_undef = nonlin_chrom_data['aper']['undefined_tunes']
+            except KeyError:
+                aper_undef = None
+            try:
+                aper_res_xing = nonlin_chrom_data['aper']['resonance_xing']
+            except KeyError:
+                aper_res_xing = None
 
             n_turns = d['input']['n_turns']
             ndelta = d['input']['ndelta']
@@ -1697,14 +1755,22 @@ class Report_NSLS2U_Default:
                 f'{_fit_opts["fit_deltalim"][1]*1e2:+.3f}$.'))
 
             doc.append(plx.NewParagraph())
-            legend_explanation = (
-                'In the figure (a), the horizontal dash lines (--) correspond '
-                'to integer tunes, while the horizontal dotted lines (:) '
-                'correspond to half-integer tunes. The vertical dash lines (--) '
-                'correspond to the maximum apertures after excluding lost '
-                'particles and undefined tunes. The vertical dotted lines (:) '
-                'correspond to the maximum apertures without crossing integer '
-                'or half-integer tunes.'
+            aper_str = {}
+            for aper_list, _k in [(aper_undef, 'undef'),
+                                  (aper_res_xing, 'res_xing')]:
+                if (aper_list is None) or (aper_list == []):
+                    aper_str[_k] = ''
+                else:
+                    _s = ', '.join([f'{_v * 1e2:+.2f}' for _v in aper_list])
+                    aper_str[_k] = f' ($\delta: [{_s}]$\%)'
+            legend_explanation = plx.NoEscape(
+                'In the figure (a), the horizontal dash (-{}-) and dotted (:) '
+                'lines correspond to integer and half-integer tunes, respectively. '
+                'The vertical dash (-{}-) and dotted (:) lines correspond to the '
+                'maximum apertures after excluding lost particles and undefined '
+                f'tunes{aper_str["undef"]}, and to the maximum apertures without '
+                f'crossing integer or half-integer tunes{aper_str["res_xing"]}, '
+                'respectively.'
             )
             doc.append(legend_explanation)
             doc.append(plx.NewParagraph())
