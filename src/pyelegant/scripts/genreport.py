@@ -1606,6 +1606,17 @@ class Report_NSLS2U_Default:
                 f'\le y_0 [\mathrm{{mm}}] \le {_fit_opts["fit_ymax"]*1e3:+.3f}$.'))
 
             doc.append(plx.NewParagraph())
+            legend_explanation = (
+                'In the (a) figures, the horizontal dash lines (--) correspond '
+                'to integer tunes, while the horizontal dotted lines (:) '
+                'correspond to half-integer tunes. The vertical dash lines (--) '
+                'correspond to the maximum apertures after excluding lost '
+                'particles and undefined tunes. The vertical dotted lines (:) '
+                'correspond to the maximum apertures without crossing integer '
+                'or half-integer tunes.'
+            )
+            doc.append(legend_explanation)
+            doc.append(plx.NewParagraph())
             doc.append(ver_sentence)
             doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
 
@@ -1685,6 +1696,17 @@ class Report_NSLS2U_Default:
                 f'${_fit_opts["fit_deltalim"][0]*1e2:+.3f} \le \delta [\%] \le '
                 f'{_fit_opts["fit_deltalim"][1]*1e2:+.3f}$.'))
 
+            doc.append(plx.NewParagraph())
+            legend_explanation = (
+                'In the figure (a), the horizontal dash lines (--) correspond '
+                'to integer tunes, while the horizontal dotted lines (:) '
+                'correspond to half-integer tunes. The vertical dash lines (--) '
+                'correspond to the maximum apertures after excluding lost '
+                'particles and undefined tunes. The vertical dotted lines (:) '
+                'correspond to the maximum apertures without crossing integer '
+                'or half-integer tunes.'
+            )
+            doc.append(legend_explanation)
             doc.append(plx.NewParagraph())
             doc.append(ver_sentence)
             doc.append(plx.VerticalSpace(plx.NoEscape('-10pt')))
