@@ -2494,7 +2494,7 @@ def calc_chrom_track(
                      label='calc_chrom_from_tbt_cs')
             plt.plot(delta_array * 1e2, nus['x'], 'r.-', label='sddsnaff')
             plt.xlabel(r'$\delta\, [\%]$', size='large')
-            plt.ylabel(r'$nu_x$', size='large')
+            plt.ylabel(r'$\nu_x$', size='large')
             leg = plt.legend(loc='best')
             plt.tight_layout()
 
@@ -2503,7 +2503,7 @@ def calc_chrom_track(
                      label='calc_chrom_from_tbt_cs')
             plt.plot(delta_array * 1e2, nus['y'], 'r.-', label='sddsnaff')
             plt.xlabel(r'$\delta\, [\%]$', size='large')
-            plt.ylabel(r'$nu_y$', size='large')
+            plt.ylabel(r'$\nu_y$', size='large')
             leg = plt.legend(loc='best')
             plt.tight_layout()
 
@@ -3302,9 +3302,10 @@ def plot_chrom(
 
 def calc_tswa_x(
     output_filepath, LTE_filepath, E_MeV, abs_xmax, nx, xsign='+',
-    courant_snyder=True, return_fft_spec=True, save_tbt=True, n_turns=256,
-    y0_offset=1e-5, use_beamline=None, N_KICKS=None, transmute_elements=None,
-    ele_filepath=None, output_file_type=None, del_tmp_files=True, print_cmd=False,
+    use_sddsnaff=True, courant_snyder=True, return_fft_spec=True, save_tbt=True,
+    n_turns=256, y0_offset=1e-5, use_beamline=None, N_KICKS=None,
+    transmute_elements=None, ele_filepath=None, output_file_type=None,
+    del_tmp_files=True, print_cmd=False,
     run_local=True, remote_opts=None):
     """"""
 
@@ -3320,7 +3321,7 @@ def calc_tswa_x(
 
     return _calc_tswa(
         'x', plane_specific_input, output_filepath, LTE_filepath, E_MeV,
-        x0_array, y0_array, courant_snyder=courant_snyder,
+        x0_array, y0_array, use_sddsnaff=use_sddsnaff, courant_snyder=courant_snyder,
         return_fft_spec=return_fft_spec, save_tbt=save_tbt,
         n_turns=n_turns, use_beamline=use_beamline,
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
@@ -3330,9 +3331,10 @@ def calc_tswa_x(
 
 def calc_tswa_y(
     output_filepath, LTE_filepath, E_MeV, abs_ymax, ny, ysign='+',
-    courant_snyder=True, return_fft_spec=True, save_tbt=True, n_turns=256,
-    x0_offset=1e-5, use_beamline=None, N_KICKS=None, transmute_elements=None,
-    ele_filepath=None, output_file_type=None, del_tmp_files=True, print_cmd=False,
+    use_sddsnaff=True, courant_snyder=True, return_fft_spec=True, save_tbt=True,
+    n_turns=256, x0_offset=1e-5, use_beamline=None, N_KICKS=None,
+    transmute_elements=None, ele_filepath=None, output_file_type=None,
+    del_tmp_files=True, print_cmd=False,
     run_local=True, remote_opts=None):
     """"""
 
@@ -3348,7 +3350,7 @@ def calc_tswa_y(
 
     return _calc_tswa(
         'y', plane_specific_input, output_filepath, LTE_filepath, E_MeV,
-        x0_array, y0_array, courant_snyder=courant_snyder,
+        x0_array, y0_array, use_sddsnaff=use_sddsnaff, courant_snyder=courant_snyder,
         return_fft_spec=return_fft_spec, save_tbt=save_tbt,
         n_turns=n_turns, use_beamline=use_beamline,
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
@@ -3358,7 +3360,8 @@ def calc_tswa_y(
 
 def _calc_tswa(
     scan_plane, plane_specific_input, output_filepath, LTE_filepath, E_MeV,
-    x0_array, y0_array, courant_snyder=True, return_fft_spec=True, save_tbt=True,
+    x0_array, y0_array, use_sddsnaff=True, courant_snyder=True,
+    return_fft_spec=True, save_tbt=True,
     n_turns=256, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
@@ -3375,7 +3378,8 @@ def _calc_tswa(
     input_dict = dict(
         scan_plane=scan_plane, plane_specific_input=plane_specific_input,
         LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
-        x0_array=x0_array, y0_array=y0_array, courant_snyder=courant_snyder,
+        x0_array=x0_array, y0_array=y0_array,
+        use_sddsnaff=use_sddsnaff, courant_snyder=courant_snyder,
         return_fft_spec=return_fft_spec, save_tbt=save_tbt, n_turns=n_turns,
         use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
@@ -3467,7 +3471,7 @@ def _calc_tswa(
     if run_local:
         tbt = dict(x = np.full((n_turns, nscan), np.nan),
                    y = np.full((n_turns, nscan), np.nan))
-        if courant_snyder:
+        if courant_snyder or use_sddsnaff:
             tbt['xp'] = np.full((n_turns, nscan), np.nan)
             tbt['yp'] = np.full((n_turns, nscan), np.nan)
 
@@ -3507,7 +3511,7 @@ def _calc_tswa(
             xy0_array, remote_opts['ntasks'])
 
         coords_list = ['x', 'y']
-        if courant_snyder:
+        if courant_snyder or use_sddsnaff:
             coords_list += ['xp', 'yp']
 
         module_name = 'pyelegant.nonlin'
@@ -3528,7 +3532,7 @@ def _calc_tswa(
 
         tbt = dict(x = np.full((n_turns, nscan), np.nan),
                    y = np.full((n_turns, nscan), np.nan))
-        if courant_snyder:
+        if courant_snyder or use_sddsnaff:
             tbt['xp'] = np.full((n_turns, nscan), np.nan)
             tbt['yp'] = np.full((n_turns, nscan), np.nan)
         for plane in coords_list:
@@ -3539,7 +3543,99 @@ def _calc_tswa(
 
     #t0 = time.time()
     # Estimate tunes and amplitudes from TbT data
-    if courant_snyder:
+    if use_sddsnaff:
+        tmp = tempfile.NamedTemporaryFile(
+            dir=None, delete=False, prefix=f'tmpTbt_', suffix='.sdds')
+        tbt_sdds_path = Path(tmp.name)
+        naff_sdds_path = tbt_sdds_path.parent.joinpath(f'{tbt_sdds_path.stem}.naff')
+        tmp.close()
+
+        pass_array = np.array(range(tbt['x'].shape[0]))
+        nus = dict(x=np.full(tbt['x'].shape[1], np.nan),
+                   y=np.full(tbt['x'].shape[1], np.nan),)
+        As = dict(x=np.full(tbt['x'].shape[1], np.nan),
+                  y=np.full(tbt['x'].shape[1], np.nan),)
+        for iXY, (x, xp, y, yp) in enumerate(zip(
+            tbt['x'].T, tbt['xp'].T, tbt['y'].T, tbt['yp'].T)):
+            sdds.dicts2sdds(tbt_sdds_path,
+                            columns=dict(Pass=pass_array, x=x, xp=xp, y=y, yp=yp),
+                            outputMode='binary', tempdir_path=None, suppress_err_msg=True)
+
+            cmd = (f'sddsnaff {tbt_sdds_path} {naff_sdds_path} '
+                   '-column=Pass -pair=x,xp -pair=y,yp -terminate=frequencies=1')
+            p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+            out, err = p.communicate()
+            if out: print(f'stdout: {out}')
+            if err: print(f'stderr: {err}')
+            if False:
+                cmd = f'sddsprintout {naff_sdds_path} -col="(xFrequency,yFrequency)"'
+                p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+                out, err = p.communicate()
+                if out: print(f'stdout: {out}')
+                if err: print(f'stderr: {err}')
+            naff_d, naff_meta = sdds.sdds2dicts(naff_sdds_path)
+
+            nus['x'][iXY] = naff_d['columns']['xFrequency'][0]
+            nus['y'][iXY] = naff_d['columns']['yFrequency'][0]
+
+            As['x'][iXY] = naff_d['columns']['xAmplitude'][0]
+            As['y'][iXY] = naff_d['columns']['yAmplitude'][0]
+
+        try: tbt_sdds_path.unlink()
+        except: pass
+        try: naff_sdds_path.unlink()
+        except: pass
+
+        if False:
+            other_nus, other_As = calc_tswa_from_tbt_cs(
+                scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0,
+                tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
+                init_guess_from_prev_step=True, return_fft_spec=False)
+
+            As['x'][As['x'] == -1.0] = np.nan
+            As['y'][As['y'] == -1.0] = np.nan
+
+            iPlane = (0 if scan_plane == 'x' else 1)
+
+            plt.figure()
+            plt.plot(xy0_array[:, iPlane] * 1e3, other_nus['x'], 'b.-',
+                     label='calc_tswa_from_tbt_cs')
+            plt.plot(xy0_array[:, iPlane] * 1e3, nus['x'], 'r.-', label='sddsnaff')
+            plt.xlabel(fr'${scan_plane}_0\, [\mathrm{{mm}}]$', size='large')
+            plt.ylabel(r'$\nu_x$', size='large')
+            leg = plt.legend(loc='best')
+            plt.tight_layout()
+
+            plt.figure()
+            plt.plot(xy0_array[:, iPlane] * 1e3, other_nus['y'], 'b.-',
+                     label='calc_tswa_from_tbt_cs')
+            plt.plot(xy0_array[:, iPlane] * 1e3, nus['y'], 'r.-', label='sddsnaff')
+            plt.xlabel(fr'${scan_plane}_0\, [\mathrm{{mm}}]$', size='large')
+            plt.ylabel(r'$\nu_y$', size='large')
+            leg = plt.legend(loc='best')
+            plt.tight_layout()
+
+            plt.figure()
+            plt.plot(xy0_array[:, iPlane] * 1e3, other_As['x'] * 1e3, 'b.-',
+                     label='calc_tswa_from_tbt_cs')
+            plt.plot(xy0_array[:, iPlane] * 1e3, As['x'] * 1e3, 'r.-', label='sddsnaff')
+            plt.xlabel(fr'${scan_plane}_0\, [\mathrm{{mm}}]$', size='large')
+            plt.ylabel(r'$A_x\, [\mathrm{{mm}}]$', size='large')
+            leg = plt.legend(loc='best')
+            plt.tight_layout()
+
+            plt.figure()
+            plt.plot(xy0_array[:, iPlane] * 1e3, other_As['y'] * 1e3, 'b.-',
+                     label='calc_tswa_from_tbt_cs')
+            plt.plot(xy0_array[:, iPlane] * 1e3, As['y'] * 1e3, 'r.-', label='sddsnaff')
+            plt.xlabel(fr'${scan_plane}_0\, [\mathrm{{mm}}]$', size='large')
+            plt.ylabel(r'$A_y\, [\mathrm{{mm}}]$', size='large')
+            leg = plt.legend(loc='best')
+            plt.tight_layout()
+
+        extra_save_kwargs = dict(xptbt=tbt['xp'], yptbt=tbt['yp'])
+
+    elif courant_snyder:
         if return_fft_spec:
             nus, As, fft_nus, fft_hAxs, fft_hAys = calc_tswa_from_tbt_cs(
                 scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0,
