@@ -2987,6 +2987,8 @@ def plot_chrom(
             nux0 = d['nux0']
             nuy0 = d['nuy0']
 
+            on_mom_nu0 = dict(x=nux0, y=nuy0)
+
             nux0_int = np.floor(nux0)
             nuy0_int = np.floor(nuy0)
 
@@ -2996,12 +2998,19 @@ def plot_chrom(
             nux0 = np.nanmedian(nuxs)
             nuy0 = np.nanmedian(nuys)
 
+            on_mom_nu0 = None
+
             nux0_int = np.floor(nux0)
             nuy0_int = np.floor(nuy0)
         if 'fft_nus' in d:
             fft_d = {k: d[k] for k in ['fft_nus', 'fft_hAxs', 'fft_hAys']}
         else:
             fft_d = None
+
+        if 'undefined_tunes' in d:
+            undefined_tunes = d['undefined_tunes']
+        else:
+            undefined_tunes = (np.isnan(nuxs) | np.isnan(nuys))
     except:
         f = h5py.File(output_filepath, 'r')
         deltas = f['deltas'][()]
@@ -3013,6 +3022,8 @@ def plot_chrom(
             nux0 = f['nux0'][()]
             nuy0 = f['nuy0'][()]
 
+            on_mom_nu0 = dict(x=nux0, y=nuy0)
+
             nux0_int = np.floor(nux0)
             nuy0_int = np.floor(nuy0)
 
@@ -3022,13 +3033,36 @@ def plot_chrom(
             nux0 = np.nanmedian(nuxs)
             nuy0 = np.nanmedian(nuys)
 
+            on_mom_nu0 = None
+
             nux0_int = np.floor(nux0)
             nuy0_int = np.floor(nuy0)
         if 'fft_nus' in f:
             fft_d = {k: f[k][()] for k in ['fft_nus', 'fft_hAxs', 'fft_hAys']}
         else:
             fft_d = None
+
+        if 'undefined_tunes' in f:
+            undefined_tunes = f['undefined_tunes'][()]
+        else:
+            undefined_tunes = (np.isnan(nuxs) | np.isnan(nuys))
+
         f.close()
+
+    # Find undefined tune boundaries (i.e., either particle lost or spectrum too chaotic)
+    undef_deltas = deltas[undefined_tunes]
+    #
+    pos_undef_deltas = undef_deltas[undef_deltas >= 0.0]
+    if pos_undef_deltas.size != 0:
+        min_pos_undef_delta = np.min(pos_undef_deltas)
+    else:
+        min_pos_undef_delta = np.nan
+    #
+    neg_undef_deltas = undef_deltas[undef_deltas <= 0.0]
+    if neg_undef_deltas.size != 0:
+        max_neg_undef_delta = np.max(neg_undef_deltas)
+    else:
+        max_neg_undef_delta = np.nan
 
     # Correct nuxs if smoothing shifted from nux0 by ~1
     for i in np.argsort(np.abs(deltas)):
@@ -3050,6 +3084,50 @@ def plot_chrom(
             elif nuys[i] < nuy0 - 0.5:
                 nuys += 1
             break
+
+    # Find first off-momentum integer/half-integer resonance crossing tunes
+    upper_res_xing_nu = {}
+    lower_res_xing_nu = {}
+    if on_mom_nu0 is not None:
+        for plane in ['x', 'y']:
+            on_mom_nu0_int = np.floor(on_mom_nu0[plane])
+            on_mom_nu0_frac = on_mom_nu0[plane] - on_mom_nu0_int
+            if on_mom_nu0_frac < 0.5:
+                upper_res_xing_nu[plane] = on_mom_nu0_int + 0.5
+                lower_res_xing_nu[plane] = on_mom_nu0_int
+            elif on_mom_nu0_frac > 0.5:
+                upper_res_xing_nu[plane] = on_mom_nu0_int + 1.0
+                lower_res_xing_nu[plane] = on_mom_nu0_int + 0.5
+            else:
+                pass
+    min_pos_res_xing_delta = np.nan
+    max_neg_res_xing_delta = np.nan
+    if upper_res_xing_nu != {}:
+        def_deltas = deltas[~undefined_tunes]
+        if def_deltas.size != 0:
+            def_nuxs = nuxs[~undefined_tunes]
+            def_nuys = nuys[~undefined_tunes]
+            positive = (def_deltas >= 0.0)
+            negative = (def_deltas <= 0.0)
+            if def_deltas[positive].size != 0:
+                pos_xing_deltas = def_deltas[positive][
+                    (def_nuxs[positive] > upper_res_xing_nu['x']) |
+                    (def_nuxs[positive] < lower_res_xing_nu['x']) |
+                    (def_nuys[positive] > upper_res_xing_nu['y']) |
+                    (def_nuys[positive] < lower_res_xing_nu['y'])
+                ]
+                if pos_xing_deltas.size != 0:
+                    min_pos_res_xing_delta = np.min(pos_xing_deltas)
+            if def_deltas[negative].size != 0:
+                neg_xing_deltas = def_deltas[negative][
+                    (def_nuxs[negative] > upper_res_xing_nu['x']) |
+                    (def_nuxs[negative] < lower_res_xing_nu['x']) |
+                    (def_nuys[negative] > upper_res_xing_nu['y']) |
+                    (def_nuys[negative] < lower_res_xing_nu['y'])
+                ]
+                if neg_xing_deltas.size != 0:
+                    max_neg_res_xing_delta = np.max(neg_xing_deltas)
+
 
     if deltalim is not None:
         delta_incl = np.logical_and(deltas >= np.min(deltalim),
@@ -3176,6 +3254,26 @@ def plot_chrom(
     # Reset nux/nuy limits, which may have been changed by adding fitted lines
     ax1.set_ylim(nuxlim)
     ax2.set_ylim(nuylim)
+    # Add integer/half-integer tune lines, if within visible range
+    for _nu in range(int(np.floor(nuxlim[0])), int(np.ceil(nuxlim[1]))+1):
+        if nuxlim[0] <= _nu <= nuxlim[1]: # integer tune line
+            ax1.axhline(_nu, linestyle='--', color='b')
+        if nuxlim[0] <= _nu + 0.5 <= nuxlim[1]: # half-integer tune line
+            ax1.axhline(_nu + 0.5, linestyle=':', color='b')
+    for _nu in range(int(np.floor(nuylim[0])), int(np.ceil(nuylim[1]))+1):
+        if nuylim[0] <= _nu <= nuylim[1]: # integer tune line
+            ax2.axhline(_nu, linestyle='--', color='r')
+        if nuylim[0] <= _nu + 0.5 <= nuylim[1]: # half-integer tune line
+            ax2.axhline(_nu + 0.5, linestyle=':', color='r')
+    # Add lines at min defined tune boundaries
+    _deltalim = ax1.get_xlim()
+    for _delta in [min_pos_undef_delta, max_neg_undef_delta]:
+        if _deltalim[0] <= _delta <= _deltalim[1]:
+            ax1.axvline(_delta * 1e2, linestyle='--', color='k')
+    # Add min(in abs) integer/half-integer resonance crossing lines
+    for _delta in [min_pos_res_xing_delta, max_neg_res_xing_delta]:
+        if _deltalim[0] <= _delta <= _deltalim[1]:
+            ax1.axvline(_delta * 1e2, linestyle=':', color='k')
     if title != '':
         ax1.set_title(title, size=font_sz, pad=60)
     combined_lines = fit_lines1 + fit_lines2
