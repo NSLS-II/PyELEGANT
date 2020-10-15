@@ -3268,12 +3268,13 @@ def plot_chrom(
     # Add lines at min defined tune boundaries
     _deltalim = ax1.get_xlim()
     for _delta in [min_pos_undef_delta, max_neg_undef_delta]:
-        if _deltalim[0] <= _delta <= _deltalim[1]:
+        if _deltalim[0] <= (_delta * 1e2) <= _deltalim[1]:
             ax1.axvline(_delta * 1e2, linestyle='--', color='k')
     # Add min(in abs) integer/half-integer resonance crossing lines
     for _delta in [min_pos_res_xing_delta, max_neg_res_xing_delta]:
-        if _deltalim[0] <= _delta <= _deltalim[1]:
+        if _deltalim[0] <= (_delta * 1e2) <= _deltalim[1]:
             ax1.axvline(_delta * 1e2, linestyle=':', color='k')
+    #
     if title != '':
         ax1.set_title(title, size=font_sz, pad=60)
     combined_lines = fit_lines1 + fit_lines2
@@ -4803,8 +4804,8 @@ def plot_tswa_both_sides(
         raise ValueError('"nuxlim" and "nuylim" must be either both fractional or both non-fractional')
 
     (scan_plane, x0s, y0s, nuxs, nuys, Axs, Ays, time_domain_Axs, time_domain_Ays,
-     nux0, nuy0, betax, betay, fft_d) = [
-         {} for _ in range(14)]
+     nux0, nuy0, betax, betay, fft_d, undefined_tunes) = [
+         {} for _ in range(15)]
 
     for side, output_filepath in [('+', output_filepath_positive),
                                   ('-', output_filepath_negative)]:
@@ -4820,6 +4821,11 @@ def plot_tswa_both_sides(
             betax[side], betay[side] = d['betax'], d['betay']
             if 'fft_nus' in d:
                 fft_d[side] = {k: d[k] for k in ['fft_nus', 'fft_hAxs', 'fft_hAys']}
+
+            if 'undefined_tunes' in d:
+                undefined_tunes[side] = d['undefined_tunes']
+            else:
+                undefined_tunes[side] = (np.isnan(nuxs[side]) | np.isnan(nuys[side]))
         except:
             f = h5py.File(output_filepath, 'r')
             scan_plane[side] = f['input']['scan_plane'][()]
@@ -4837,6 +4843,12 @@ def plot_tswa_both_sides(
             betay[side] = f['betay'][()]
             if 'fft_nus' in f:
                 fft_d[side] = {k: f[k][()] for k in ['fft_nus', 'fft_hAxs', 'fft_hAys']}
+
+            if 'undefined_tunes' in f:
+                undefined_tunes[side] = f['undefined_tunes'][()]
+            else:
+                undefined_tunes[side] = (np.isnan(nuxs[side]) | np.isnan(nuys[side]))
+
             f.close()
 
     if fft_d == {}:
@@ -4873,6 +4885,25 @@ def plot_tswa_both_sides(
     nux0_int = np.floor(nux0)
     nuy0_int = np.floor(nuy0)
 
+    # Find undefined tune boundaries (i.e., either particle lost or spectrum too chaotic)
+    if scan_plane == 'x':
+        v0s = x0s
+    elif scan_plane == 'y':
+        v0s = y0s
+    else:
+        raise ValueError
+    pos_undef_v0s = v0s['+'][undefined_tunes['+']]
+    if pos_undef_v0s.size != 0:
+        min_pos_undef_v0 = np.min(pos_undef_v0s)
+    else:
+        min_pos_undef_v0 = np.nan
+    neg_undef_v0s = v0s['-'][undefined_tunes['-']]
+    if neg_undef_v0s.size != 0:
+        max_neg_undef_v0 = np.max(neg_undef_v0s)
+    else:
+        max_neg_undef_v0 = np.nan
+
+
     twoJxs, twoJys, Jxs, Jys, nux_fit, nuy_fit, fit_label = [{} for _ in range(7)]
     twoJx0s, twoJy0s, Jx0s, Jy0s, nux_fit0, nuy_fit0, fit0_label = [{} for _ in range(7)]
     if scan_plane == 'x':
@@ -4884,6 +4915,24 @@ def plot_tswa_both_sides(
 
     #beta_str = fr'(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})'
     beta_str = fr'\{{(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})\}}'
+
+    # Find first integer/half-integer resonance crossing tunes
+    upper_res_xing_nu = {}
+    lower_res_xing_nu = {}
+    for plane, _nu0 in [('x', nux0), ('y', nuy0)]:
+        _nu0_int = np.floor(_nu0)
+        _nu0_frac = _nu0 - _nu0_int
+        if _nu0_frac < 0.5:
+            upper_res_xing_nu[plane] = _nu0_int + 0.5
+            lower_res_xing_nu[plane] = _nu0_int
+        elif _nu0_frac > 0.5:
+            upper_res_xing_nu[plane] = _nu0_int + 1.0
+            lower_res_xing_nu[plane] = _nu0_int + 0.5
+        else:
+            pass
+    #
+    min_pos_res_xing_v = np.nan
+    max_neg_res_xing_v = np.nan
 
     for side in ['+', '-']:
 
@@ -4918,6 +4967,24 @@ def plot_tswa_both_sides(
                 elif nuys[side][i] < nuy0 - 0.5:
                     nuys[side] += 1
                 break
+
+        # Find xy0s at which tunes cross integer/half-integer resonance
+        if upper_res_xing_nu != {}:
+            def_v0s = v0s[~undefined_tunes[side]]
+            if def_v0s.size != 0:
+                def_nuxs = nuxs[side][~undefined_tunes[side]]
+                def_nuys = nuys[side][~undefined_tunes[side]]
+                xing_vs = def_v0s[
+                    (def_nuxs > upper_res_xing_nu['x']) |
+                    (def_nuxs < lower_res_xing_nu['x']) |
+                    (def_nuys > upper_res_xing_nu['y']) |
+                    (def_nuys < lower_res_xing_nu['y'])
+                ]
+                if xing_vs.size != 0:
+                    if side == '+':
+                        min_pos_res_xing_v = np.min(xing_vs)
+                    elif side == '-':
+                        max_neg_res_xing_v = np.max(xing_vs)
 
         twoJxs[side] = Axs[side]**2 / betax
         twoJys[side] = Ays[side]**2 / betay
@@ -5209,6 +5276,26 @@ def plot_tswa_both_sides(
         nuylim[1] += (nuylim[1] - nuylim[0]) * 0.1
         ax1.set_ylim(nuxlim)
         ax2.set_ylim(nuylim)
+        # Add integer/half-integer tune lines, if within visible range
+        for _nu in range(int(np.floor(nuxlim[0])), int(np.ceil(nuxlim[1]))+1):
+            if nuxlim[0] <= _nu <= nuxlim[1]: # integer tune line
+                ax1.axhline(_nu, linestyle='--', color='b')
+            if nuxlim[0] <= _nu + 0.5 <= nuxlim[1]: # half-integer tune line
+                ax1.axhline(_nu + 0.5, linestyle=':', color='b')
+        for _nu in range(int(np.floor(nuylim[0])), int(np.ceil(nuylim[1]))+1):
+            if nuylim[0] <= _nu <= nuylim[1]: # integer tune line
+                ax2.axhline(_nu, linestyle='--', color='r')
+            if nuylim[0] <= _nu + 0.5 <= nuylim[1]: # half-integer tune line
+                ax2.axhline(_nu + 0.5, linestyle=':', color='r')
+        # Add lines at min defined tune boundaries
+        _vlim = ax1.get_xlim()
+        for _v0 in [min_pos_undef_v0, max_neg_undef_v0]:
+            if _vlim[0] <= (_v0 * 1e3) <= _vlim[1]:
+                ax1.axvline(_v0 * 1e3, linestyle='--', color='k')
+        # Add min(in abs) integer/half-integer resonance crossing lines
+        for _v0 in [min_pos_res_xing_v, max_neg_res_xing_v]:
+            if _vlim[0] <= (_v0 * 1e3) <= _vlim[1]:
+                ax1.axvline(_v0 * 1e3, linestyle=':', color='k')
         #
         if title != '':
             ax1.set_title(title, size=font_sz, pad=60)
