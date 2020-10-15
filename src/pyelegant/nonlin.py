@@ -2245,11 +2245,14 @@ def calc_chrom_twiss(
     else:
         raise NotImplementedError
 
+    survived = (~np.isnan(nuxs) & ~np.isnan(nuys))
+    undefined_tunes = ~survived
+
     timestamp_fin = util.get_current_local_time_str()
 
     _save_chrom_data(
         output_filepath, output_file_type, delta_array, nuxs, nuys,
-        timestamp_fin, input_dict)
+        survived, undefined_tunes, timestamp_fin, input_dict)
 
     if del_tmp_files:
         for fp in ed.actual_output_filepath_list + [ele_filepath]:
@@ -2443,6 +2446,8 @@ def calc_chrom_track(
 
     #print(tElapsed)
 
+    survived = np.all(~np.isnan(tbt['x']), axis=0)
+
     #t0 = time.time()
     # Estimate tunes from TbT data
     if use_sddsnaff:
@@ -2482,6 +2487,10 @@ def calc_chrom_track(
         except: pass
         try: naff_sdds_path.unlink()
         except: pass
+
+        undefined_tunes = (nus['x'] == -1.0) | (nus['y'] == -1.0)
+        nus['x'][undefined_tunes] = np.nan
+        nus['y'][undefined_tunes] = np.nan
 
         if False:
             other_nus = calc_chrom_from_tbt_cs(
@@ -2527,9 +2536,13 @@ def calc_chrom_track(
             extra_save_kwargs = dict(
                 xptbt=tbt['xp'], yptbt=tbt['yp'],
                 betax=betax, alphax=alphax, betay=betay, alphay=alphay)
+
+        undefined_tunes = (np.isnan(nus['x']) | np.isnan(nus['y']))
     else:
         nus = calc_chrom_from_tbt_ps(delta_array, tbt['x'], tbt['y'], nux0, nuy0)
         extra_save_kwargs = {}
+
+        undefined_tunes = (np.isnan(nus['x']) | np.isnan(nus['y']))
     nuxs = nus['x']
     nuys = nus['y']
     #print('* Time elapsed for tune estimation: {:.3f}'.format(time.time() - t0))
@@ -2538,8 +2551,9 @@ def calc_chrom_track(
 
     _save_chrom_data(
         output_filepath, output_file_type, delta_array, nuxs, nuys,
-        timestamp_fin, input_dict, xtbt=tbt['x'], ytbt=tbt['y'],
-        nux0=nux0, nuy0=nuy0, save_tbt=save_tbt, **extra_save_kwargs)
+        survived, undefined_tunes, timestamp_fin, input_dict,
+        xtbt=tbt['x'], ytbt=tbt['y'], nux0=nux0, nuy0=nuy0, save_tbt=save_tbt,
+        **extra_save_kwargs)
 
     if del_tmp_files:
         util.delete_temp_files(
@@ -2852,7 +2866,8 @@ def _calc_chrom_track_get_tbt(
     return sub_tbt
 
 def _save_chrom_data(
-    output_filepath, output_file_type, delta_array, nuxs, nuys, timestamp_fin,
+    output_filepath, output_file_type, delta_array, nuxs, nuys,
+    survived, undefined_tunes, timestamp_fin,
     input_dict, xtbt=None, ytbt=None, nux0=None, nuy0=None,
     xptbt=None, yptbt=None, betax=None, alphax=None, betay=None, alphay=None,
     fft_nus=None, fft_hAxs=None, fft_hAys=None, save_tbt=True):
@@ -2892,11 +2907,14 @@ def _save_chrom_data(
             f['betay'] = betay
         if alphay:
             f['alphay'] = alphay
+        f.create_dataset('survived', data=survived, **_kwargs)
+        f.create_dataset('undefined_tunes', data=undefined_tunes, **_kwargs)
         f['timestamp_fin'] = timestamp_fin
         f.close()
 
     elif output_file_type == 'pgz':
         d = dict(deltas=delta_array, nuxs=nuxs, nuys=nuys,
+                 survived=survived, undefined_tunes=undefined_tunes,
                  input=input_dict, timestamp_fin=timestamp_fin,
                  _version_PyELEGANT=__version__['PyELEGANT'],
                  _version_ELEGANT=__version__['ELEGANT'],
@@ -3095,7 +3113,7 @@ def plot_chrom(
     if nuxlim:
         ax1.set_ylim(nuxlim)
     else:
-        nuxlim = ax1.get_ylim()
+        nuxlim = list(ax1.get_ylim())
     #fit_lines1 = ax1.plot(
         #fit_deltas * 1e2, np.poly1d(coeffs['x'])(fit_deltas) - offset[fit_delta_incl], 'b-',
         #label=fit_label['x'])
@@ -3128,7 +3146,7 @@ def plot_chrom(
     if nuylim:
         ax2.set_ylim(nuylim)
     else:
-        nuylim = ax2.get_ylim()
+        nuylim = list(ax2.get_ylim())
     #fit_lines2 = ax2.plot(
         #fit_deltas * 1e2, np.poly1d(coeffs['y'])(fit_deltas) - offset[fit_delta_incl], 'r-',
         #label=fit_label['y'])
@@ -3541,6 +3559,8 @@ def _calc_tswa(
 
     #print(tElapsed)
 
+    survived = np.all(~np.isnan(tbt['x']), axis=0)
+
     #t0 = time.time()
     # Estimate tunes and amplitudes from TbT data
     if use_sddsnaff:
@@ -3586,14 +3606,17 @@ def _calc_tswa(
         try: naff_sdds_path.unlink()
         except: pass
 
+        undefined_tunes = (nus['x'] == -1.0) | (nus['y'] == -1.0)
+        nus['x'][undefined_tunes] = np.nan
+        nus['y'][undefined_tunes] = np.nan
+        As['x'][undefined_tunes] = np.nan
+        As['y'][undefined_tunes] = np.nan
+
         if False:
             other_nus, other_As = calc_tswa_from_tbt_cs(
                 scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0,
                 tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
                 init_guess_from_prev_step=True, return_fft_spec=False)
-
-            As['x'][As['x'] == -1.0] = np.nan
-            As['y'][As['y'] == -1.0] = np.nan
 
             iPlane = (0 if scan_plane == 'x' else 1)
 
@@ -3651,10 +3674,14 @@ def _calc_tswa(
                 tbt['xp'], tbt['yp'], betax, alphax, betay, alphay,
                 init_guess_from_prev_step=True, return_fft_spec=False)
             extra_save_kwargs = dict(xptbt=tbt['xp'], yptbt=tbt['yp'])
+
+        undefined_tunes = (np.isnan(nus['x']) | np.isnan(nus['y']))
     else:
         nus, As = calc_tswa_from_tbt_ps(
             scan_plane, x0_array, y0_array, tbt['x'], tbt['y'], nux0, nuy0)
         extra_save_kwargs = {}
+
+        undefined_tunes = (np.isnan(nus['x']) | np.isnan(nus['y']))
     nuxs, nuys = nus['x'], nus['y']
     Axs, Ays = As['x'], As['y']
     time_domain_Axs = np.std(tbt['x'], axis=0, ddof=1) * np.sqrt(2)
@@ -3666,8 +3693,8 @@ def _calc_tswa(
     _save_tswa_data(
         output_filepath, output_file_type, x0_array, y0_array, tbt['x'], tbt['y'],
         betax, alphax, betay, alphay, nux0, nuy0, nuxs, nuys, Axs, Ays,
-        time_domain_Axs, time_domain_Ays, timestamp_fin, input_dict,
-        save_tbt=save_tbt, **extra_save_kwargs)
+        time_domain_Axs, time_domain_Ays, survived, undefined_tunes,
+        timestamp_fin, input_dict, save_tbt=save_tbt, **extra_save_kwargs)
 
     if del_tmp_files:
         util.delete_temp_files(
@@ -3901,7 +3928,8 @@ def calc_tswa_from_tbt_cs(
 def _save_tswa_data(
     output_filepath, output_file_type, x0_array, y0_array, xtbt, ytbt,
     betax, alphax, betay, alphay, nux0, nuy0, nuxs, nuys, Axs, Ays,
-    time_domain_Axs, time_domain_Ays, timestamp_fin, input_dict,
+    time_domain_Axs, time_domain_Ays, survived, undefined_tunes,
+    timestamp_fin, input_dict,
     xptbt=None, yptbt=None, fft_nus=None, fft_hAxs=None, fft_hAys=None,
     save_tbt=True):
     """
@@ -3937,6 +3965,8 @@ def _save_tswa_data(
         f.create_dataset('Ays', data=Ays, **_kwargs)
         f.create_dataset('time_domain_Axs', data=time_domain_Axs, **_kwargs)
         f.create_dataset('time_domain_Ays', data=time_domain_Ays, **_kwargs)
+        f.create_dataset('survived', data=survived, **_kwargs)
+        f.create_dataset('undefined_tunes', data=undefined_tunes, **_kwargs)
         f['timestamp_fin'] = timestamp_fin
         f.close()
 
@@ -3946,6 +3976,7 @@ def _save_tswa_data(
             betax=betax, betay=betay, alphax=alphax, alphay=alphay,
             nuxs=nuxs, nuys=nuys, Axs=Axs, Ays=Ays,
             time_domain_Axs=time_domain_Axs, time_domain_Ays=time_domain_Ays,
+            survived=survived, undefined_tunes=undefined_tunes,
             input=input_dict, timestamp_fin=timestamp_fin,
             _version_PyELEGANT=__version__['PyELEGANT'],
             _version_ELEGANT=__version__['ELEGANT'],
