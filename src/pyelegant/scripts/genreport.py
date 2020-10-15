@@ -7028,6 +7028,7 @@ class Report_NSLS2U_Default:
                 mod_kwargs[f'{plane}sign'] = sign_symbol
 
                 func(output_filepath, LTE_filepath, E_MeV_default, abs_max, n,
+                     use_sddsnaff=True,
                      courant_snyder=True, return_fft_spec=save_fft, save_tbt=False,
                      n_turns=n_turns, N_KICKS=N_KICKS,
                      del_tmp_files=True, run_local=False,
@@ -7069,7 +7070,7 @@ class Report_NSLS2U_Default:
 
         pe.nonlin.calc_chrom_track(
             output_filepath, LTE_filepath, E_MeV_default,
-            delta_min, delta_max, ndelta,
+            delta_min, delta_max, ndelta, use_sddsnaff=True,
             courant_snyder=True, return_fft_spec=save_fft, save_tbt=False,
             use_beamline=use_beamline, N_KICKS=N_KICKS,
             n_turns=n_turns, x0_offset=x_offset, y0_offset=y_offset,
