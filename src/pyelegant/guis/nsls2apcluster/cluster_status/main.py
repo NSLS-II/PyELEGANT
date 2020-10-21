@@ -518,8 +518,10 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
 
         nonsusp_color = 'red'
         susp_color = 'green'
+        no_nodes_avail_color = 'grey'
 
-        progbar_style_sheet_templates = {'0': '', '1': '', 'else': ''}
+        progbar_style_sheet_templates = {'0': '', '1': '', 'else': '',
+                                         'no_nodes_avail': ''}
         for k in list(progbar_style_sheet_templates):
             progbar_style_sheet_templates[k] = '''
         QProgressBar{{
@@ -557,6 +559,16 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
 
             margin: 0px;
         }}}}'''.format(nonsusp_color=nonsusp_color, susp_color=susp_color)
+        k = 'no_nodes_avail'
+        progbar_style_sheet_templates[k] += '''
+        QProgressBar::chunk {{
+            background-color: {no_nodes_avail_color};
+
+            margin: 0px;
+        }}'''
+        progbar_style_sheet_templates[k] = \
+            progbar_style_sheet_templates[k].format(
+                no_nodes_avail_color=no_nodes_avail_color)
 
         for iRow, d in enumerate(group_summary):
 
@@ -592,22 +604,29 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             self.tableWidget_load.resizeRowToContents(iRow)
 
             prog = QtWidgets.QProgressBar()
-            prog.setMaximum(d['n_tot'])
-            prog.setMinimum(0)
-            prog.setValue(d['n_alloc'])
-            prog.setFormat('%v / %m (%p%)')
+            if d['n_tot'] != 0:
+                prog.setMaximum(d['n_tot'])
+                prog.setMinimum(0)
+                prog.setValue(d['n_alloc'])
+                prog.setFormat('%v / %m (%p%)')
+                if d["n_alloc"] != 0:
+                    pbar_frac = (d["n_alloc"] - d['n_suspendable']) / d["n_alloc"]
+                else:
+                    pbar_frac = 1.0
+                if pbar_frac == 0.0:
+                    sheet = progbar_style_sheet_templates['0']
+                elif pbar_frac == 1.0:
+                    sheet = progbar_style_sheet_templates['1']
+                else:
+                    sheet = progbar_style_sheet_templates['else'].format(
+                        pbar_frac1=pbar_frac, pbar_frac2=min([pbar_frac+1e-5, 1.0]))
+            else:
+                prog.setMaximum(1)
+                prog.setMinimum(0)
+                prog.setValue(1)
+                prog.setFormat('No Nodes Available')
+                sheet = progbar_style_sheet_templates['no_nodes_avail']
 
-            if d["n_alloc"] != 0:
-                pbar_frac = (d["n_alloc"] - d['n_suspendable']) / d["n_alloc"]
-            else:
-                pbar_frac = 1.0
-            if pbar_frac == 0.0:
-                sheet = progbar_style_sheet_templates['0']
-            elif pbar_frac == 1.0:
-                sheet = progbar_style_sheet_templates['1']
-            else:
-                sheet = progbar_style_sheet_templates['else'].format(
-                    pbar_frac1=pbar_frac, pbar_frac2=min([pbar_frac+1e-5, 1.0]))
             prog.setStyleSheet(sheet)
 
             t.setCellWidget(iRow, iCol, prog)
