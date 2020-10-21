@@ -1828,6 +1828,9 @@ class Report_NSLS2U_Default:
                         res_xing_flag = 'not '
                 else:
                     res_xing_flag = 'not '
+                forbid_resonance_crossing_sentence = f'''\
+                The search was {res_xing_flag}terminated when crossing
+                half-integer and integer tunes.'''
                 #
                 if 'soft_failure' in d['input']:
                     if d['input']['soft_failure']:
@@ -1839,29 +1842,39 @@ class Report_NSLS2U_Default:
                 else:
                     soft_fail_sentence = ''
                 #
-                rf_cavity_on = d['input'].get('rf_cavity_on', False)
                 radiation_on = d['input'].get('radiation_on', False)
                 harmonic_number = d['input'].get('harmonic_number', 1320)
-                rf_bucket_percent = d['input'].get('rf_bucket_percent', None)
-                overvoltage_factor = d['input'].get('overvoltage_factor', None)
-                rf_volt = d['input'].get('rf_volt', None)
+                rf_cavity_on = d['input'].get('rf_cavity_on', False)
+                if 'rf_cavity_opts' in d:
+                    rf_cavity_opts = d['rf_cavity_opts']
+                else:
+                    rf_cavity_opts = None
                 derived_rf_params = d['input']['derived_rf_params']
+                if rf_cavity_on or radiation_on:
+                    forbid_resonance_crossing_sentence = ''
+                    # ^ "forbid_resonance_crossing" is always force set to False
+                    #   when RF cavity/radiation is on.
                 if rf_cavity_on:
-                    if rf_bucket_percent is not None:
-                        rf_input = (
-                            f'RF bucket height of {rf_bucket_percent:.3g}\% '
-                            f'(RF voltage of {derived_rf_params["rf_volt"]/1e6:.3g} MV)')
-                    elif overvoltage_factor is not None:
-                        rf_input = (
-                            f'overvoltage factor of {overvoltage_factor:.3g} '
-                            f'(RF voltage of {derived_rf_params["rf_volt"]/1e6:.3g} MV and '
-                            f'RF bucket height of {derived_rf_params["bucket_percent"]:.3g}\%)')
-                    elif rf_volt is not None:
-                        rf_input = (
-                            f'RF voltage of {rf_volt/1e6:.3g} MV '
-                            f'(RF bucket height of {derived_rf_params["bucket_percent"]:.3g}\%)')
+                    if 'auto_voltage_from_nonlin_chrom' in rf_cavity_opts:
+                        _auto_opt = rf_cavity_opts['auto_voltage_from_nonlin_chrom']
+                        auto_height_sentence = (
+                            '; automatically determined from the nonlinear '
+                            'chromaticity aperture data based on ')
+                        if _auto_opt == 'resonance_crossing':
+                            auto_height_sentence += 'int./half-int. resonance crossing'
+                        elif _auto_opt == 'undefined_tunes':
+                            auto_height_sentence += 'lost particles and undefined tunes'
+                        elif _auto_opt == 'scan_range':
+                            auto_height_sentence += 'the scanned RF bucket height range'
+                        else:
+                            raise ValueError('This should NOT be reachable.')
                     else:
-                        raise RuntimeError('This should not be reachable.')
+                        auto_height_sentence = ''
+                    rf_input = (
+                        f'RF bucket height of '
+                        f'{derived_rf_params["bucket_percent"]:.3g}\% '
+                        f'(RF voltage of {derived_rf_params["rf_volt"]/1e6:.3g} '
+                        f'MV{auto_height_sentence})')
 
                     rf_rad_sentence = f'''\
                 An RF cavity was turned on with harmonic number of
@@ -1889,8 +1902,7 @@ class Report_NSLS2U_Default:
                 aperture search started from {delta_negative_start*1e2:-.3f}\%
                 up to {delta_negative_limit*1e2:-.3f}\%, with the initial step
                 size of {init_delta_step_size*1e2:.6f}\%.
-                The search was {res_xing_flag}terminated when crossing
-                half-integer and integer tunes.
+                {forbid_resonance_crossing_sentence}
                 {soft_fail_sentence}
                 {rf_rad_sentence}
                 '''
@@ -7183,11 +7195,106 @@ class Report_NSLS2U_Default:
         n_turns = calc_opts.pop('n_turns')
 
         h = self.conf.get('harmonic_number', 1320)
-        rf_cavity_on = calc_opts.pop('rf_cavity_on', False) # "False" <= v1.2
         radiation_on = calc_opts.pop('radiation_on', False) # "False" <= v1.2
-        rf_bucket_percent = calc_opts.pop('rf_bucket_percent', None)
-        overvoltage_factor = calc_opts.pop('overvoltage_factor', None)
-        rf_volt = calc_opts.pop('rf_volt', None)
+        rf_cavity_opts = calc_opts.pop('rf_cavity', None)
+        if rf_cavity_opts is None:
+            rf_cavity_on = False # "False" <= v1.2
+        else:
+            rf_cavity_on = rf_cavity_opts.get('on', True) # "True" >= v1.3
+
+        if rf_cavity_on:
+            if 'rf_bucket_percent' in rf_cavity_opts:
+
+                if 'auto_voltage_from_nonlin_chrom' in rf_cavity_opts:
+                    print(('\nWARNING: "auto_voltage_from_nonlin_chrom" will be '
+                           'ignored as "rf_bucket_percent" is specified.\n'))
+
+                rf_bucket_percent = rf_cavity_opts['rf_bucket_percent']
+                overvoltage_factor = rf_volt = None
+
+            elif 'auto_voltage_from_nonlin_chrom' in rf_cavity_opts:
+
+                _auto_opt = rf_cavity_opts['auto_voltage_from_nonlin_chrom']
+                if _auto_opt not in ('resonance_crossing', 'undefined_tunes',
+                                     'scan_range'):
+                    raise ValueError(
+                        ('Invalid nonlin/calc_opts/mom_aper/rf_cavity/auto_voltage_from_nonlin_chrom.\n'
+                         'Valid inputs are: "resonance_crossing", "undefined_tunes", "scan_range"'))
+
+                try:
+                    with open(self.suppl_plot_data_filepath['nonlin_chrom'], 'rb') as f:
+                        nonlin_chrom_data = pickle.load(f)
+
+                    aper = nonlin_chrom_data['aper']
+
+                    aper_delta = aper['scanned']
+                    if _auto_opt in ('undefined_tunes', 'resonance_crossing'):
+                        aper_delta += aper['undefined_tunes']
+                    if _auto_opt == 'resonance_crossing':
+                        aper_delta += aper['resonance_xing']
+                except:
+                    print(
+                        ('ERROR: Failed to load necessary data from nonlin_chrom plot supplementary\n'
+                         'data file. Please re-plot nonlin_chrom.'))
+                    raise
+
+                aper_delta = np.array(aper_delta)
+                pos_aper_delta = aper_delta[aper_delta > 0.0]
+                neg_aper_delta = aper_delta[aper_delta < 0.0]
+                if pos_aper_delta.size != 0:
+                    min_pos_delta = np.min(pos_aper_delta)
+                else:
+                    raise RuntimeError(
+                        ('No positive momentum aperture extracted from nonlin_chrom.\n'
+                         'Make sure to include positive delta values in nonlin_chrom scan range.'))
+                if neg_aper_delta.size != 0:
+                    max_neg_delta = np.max(neg_aper_delta)
+                else:
+                    raise RuntimeError(
+                        ('No negative momentum aperture extracted from nonlin_chrom.\n'
+                         'Make sure to include negative delta values in nonlin_chrom scan range.'))
+
+                print('* Max momentum apertures determined from nonlin_chrom:')
+                print(f'({max_neg_delta*1e2:.3f}, {min_pos_delta*1e2:+.3f}) [%]')
+
+                rf_bucket_percent = np.min(np.abs([max_neg_delta, min_pos_delta])) * 1e2
+                overvoltage_factor = rf_volt = None
+                print('* RF bucket height automatically determined from nonlin_chrom:')
+                print(f'{rf_bucket_percent:.3f} [%]')
+
+            else:
+                raise ValueError(
+                    ('When "nonlin/calc_opts/mom_aper/rf_cavity/on" is set to True,\n'
+                     'you must specify either "rf_bucket_percent" or "auto_voltage_from_nonlin_chrom"\n'
+                     'in "nonlin/calc_opts/mom_aper/rf_cavity"'))
+
+            # Check whether "n_turns" is at least one synchrotron oscillation
+            # (Only perform this for "production", not for "test")
+            if opt_name == 'production':
+                _rf_volt = pe.nonlin.calc_ring_rf_params(
+                    h, self.lin_data['circumf'], self.lin_data['U0_MeV'] * 1e6,
+                    rf_bucket_percent=rf_bucket_percent,
+                    E_GeV=E_MeV_default / 1e3, alphac=self.lin_data['alphac']
+                    )['rf_volt']
+                nu_s = self.calc_sync_tune(
+                    E_MeV_default / 1e3, self.lin_data['U0_MeV'] * 1e6,
+                    self.lin_data['alphac'], h, _rf_volt)
+                n_req_turns = int(np.ceil(1 / nu_s))
+                if n_turns < n_req_turns:
+                    raise ValueError(
+                        (f'Since RF/radiation is turned on, you must track at least '
+                         f'one synchrotron oscillation period ({n_req_turns:d} turns).'))
+
+        if (rf_cavity_on and (not radiation_on)) or \
+           ((not rf_cavity_on) and radiation_on):
+            raise ValueError(
+                'RF cavity and radiation: You must either both turn on or both turn off.')
+
+        if (rf_cavity_on or radiation_on) and \
+           calc_opts.get('forbid_resonance_crossing', True): # "True" <= v1.2
+            print(('\nWARNING: "forbid_resonance_crossing" is force set to False when '
+                   'RF cavity or radiation is turned on.\n'))
+            calc_opts['forbid_resonance_crossing'] = False
 
         s_start = 0.0
 
@@ -7252,6 +7359,12 @@ class Report_NSLS2U_Default:
             overvoltage_factor=overvoltage_factor, rf_volt=rf_volt,
             use_beamline=use_beamline, N_KICKS=N_KICKS, del_tmp_files=True,
             run_local=False, remote_opts=remote_opts, **calc_opts)
+
+        d = pe.util.load_pgz_file(output_filepath)
+        # Add "rf_cavity_opts" to mom_aper data file, which is needed when
+        # building a report.
+        d['rf_cavity_opts'] = rf_cavity_opts
+        pe.util.robust_pgz_file_write(output_filepath, d)
 
     def is_ring_a_multiple_of_superperiods(self):
         """"""
@@ -7546,6 +7659,20 @@ class Report_NSLS2U_Default:
 
             with open(self.suppl_plot_data_filepath['mom_aper'], 'wb') as f:
                 pickle.dump(mom_aper_data, f)
+
+    @staticmethod
+    def calc_sync_tune(E_GeV, U0_eV, alphac, harmonic_number, rf_v):
+        """"""
+
+        # Synchronous Phase
+        synch_phases_deg = np.rad2deg(np.pi - np.arcsin(U0_eV / rf_v))
+
+        # Synchrotron Tune
+        nu_s = np.sqrt(
+            -rf_v / (E_GeV * 1e9) * np.cos(np.deg2rad(synch_phases_deg))
+            * alphac * harmonic_number / (2 * np.pi))
+
+        return nu_s
 
     def calc_rf_dep_props(self):
         """"""
@@ -9223,12 +9350,22 @@ class Report_NSLS2U_Default:
             except:
                 pass
 
+            com_map = yaml.comments.CommentedMap
+
             test = conf['nonlin']['calc_opts']['mom_aper']['test']
-            test['rf_cavity_on'] = True
+            #
+            _yaml_append_map(test, 'rf_cavity', com_map())
+            rf_cavity = test['rf_cavity']
+            rf_cavity['on'] = True
+            rf_cavity['auto_voltage_from_nonlin_chrom'] = 'resonance_crossing'
+            # ^ Valid entries are "resonance_crossing", "undefined_tunes", "scan_range"
+            #   in the order of decreasing priority.
+            #   If "rf_bucket_percent" is specified, "auto_voltage_from_nonlin_chrom"
+            #   will be ignored.
+            #
             test['radiation_on'] = True
-            test['rf_bucket_percent'] = 3.0
-            test['overvoltage_factor'] = None
-            test['rf_volt'] = None
+            #
+            test['forbid_resonance_crossing'] = False
 
         elif conf['report_version'] == '1.3':
             pass # Latest version. No need to upgrade.
@@ -9262,14 +9399,21 @@ class Report_NSLS2U_Default:
         except:
             pass
 
-        # Add "rf_cavity_on", "radiation_on",
-        # "rf_bucket_percent", "overvoltage_factor", "rf_volt"
+        # Add "rf_cavity" & "radiation_on"
         test = conf['nonlin']['calc_opts']['mom_aper']['test']
-        test['rf_cavity_on'] = True
+        #
+        _yaml_append_map(test, 'rf_cavity', com_map())
+        rf_cavity = test['rf_cavity']
+        rf_cavity['on'] = True
+        rf_cavity['auto_voltage_from_nonlin_chrom'] = 'resonance_crossing'
+        # ^ Valid entries are "resonance_crossing", "undefined_tunes", "scan_range"
+        #   in the order of decreasing priority.
+        #   If "rf_bucket_percent" is specified, "auto_voltage_from_nonlin_chrom"
+        #   will be ignored.
+        #
         test['radiation_on'] = True
-        test['rf_bucket_percent'] = 3.0
-        test['overvoltage_factor'] = None
-        test['rf_volt'] = None
+        #
+        test['forbid_resonance_crossing'] = False
 
         return conf
 
