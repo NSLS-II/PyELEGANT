@@ -38,12 +38,12 @@ def run(ele_filepath, macros=None, print_cmd=False,
     if tee_to is None:
         if print_cmd:
             print('$ ' + ' '.join(cmd_list))
-        p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, env=os.environ)
+        p = Popen(cmd_list, stdout=PIPE, stderr=PIPE)
     else:
         if tee_stderr:
-            p1 = Popen(cmd_list, stdout=PIPE, stderr=STDOUT, env=os.environ)
+            p1 = Popen(cmd_list, stdout=PIPE, stderr=STDOUT)
         else:
-            p1 = Popen(cmd_list, stdout=PIPE, stderr=PIPE, env=os.environ)
+            p1 = Popen(cmd_list, stdout=PIPE, stderr=PIPE)
 
         if isinstance(tee_to, str):
             cmd_list_2 = ['tee', tee_to]
@@ -57,8 +57,7 @@ def run(ele_filepath, macros=None, print_cmd=False,
                 equiv_cmd_connection = ['|']
             print('$ ' + ' '.join(cmd_list + equiv_cmd_connection + cmd_list_2))
 
-        p = Popen(cmd_list_2, stdin=p1.stdout, stdout=PIPE, stderr=PIPE,
-                  env=os.environ)
+        p = Popen(cmd_list_2, stdin=p1.stdout, stdout=PIPE, stderr=PIPE)
     out, err = p.communicate()
     out, err = out.decode('utf-8'), err.decode('utf-8')
 

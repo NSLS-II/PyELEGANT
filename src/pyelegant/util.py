@@ -564,8 +564,7 @@ def run_cmd_w_realtime_print(cmd_list, return_stdout=False, return_stderr=False)
     import errno
 
     masters, slaves = zip(pty.openpty(), pty.openpty())
-    p = Popen(cmd_list, stdin=slaves[0], stdout=slaves[0], stderr=slaves[1],
-              env=os.environ)
+    p = Popen(cmd_list, stdin=slaves[0], stdout=slaves[0], stderr=slaves[1])
     for fd in slaves:
         os.close(fd)
 
@@ -625,17 +624,16 @@ def chained_Popen(cmd_list):
     if len(cmd_list) == 1:
         cmd = cmd_list[0]
         p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE,
-                  encoding='utf-8', env=os.environ)
+                  encoding='utf-8')
 
     else:
         cmd = cmd_list[0]
-        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, env=os.environ)
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE)
         for cmd in cmd_list[1:-1]:
-            p = Popen(shlex.split(cmd), stdin=p.stdout, stdout=PIPE, stderr=PIPE,
-                      env=os.environ)
+            p = Popen(shlex.split(cmd), stdin=p.stdout, stdout=PIPE, stderr=PIPE)
         cmd = cmd_list[-1]
         p = Popen(shlex.split(cmd), stdin=p.stdout, stdout=PIPE, stderr=PIPE,
-                  encoding='utf-8', env=os.environ)
+                  encoding='utf-8')
 
     out, err = p.communicate()
 

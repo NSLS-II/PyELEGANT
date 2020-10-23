@@ -293,7 +293,7 @@ def realtime_updated_Popen(
     masters, slaves = zip(pty.openpty(), pty.openpty())
     if not robust_tail:
         p = Popen(shlex.split(cmd), stdin=slaves[0], stdout=slaves[0],
-                  stderr=slaves[1], cwd=cwd, env=os.environ)
+                  stderr=slaves[1], cwd=cwd)
     else:
         stdout_tmp_file = tempfile.NamedTemporaryFile(
             suffix='.log', dir=None, delete=True)
@@ -305,7 +305,7 @@ def realtime_updated_Popen(
             f'(({cmd}) | tee {stdout_filename}) 3>&1 1>&2 2>&3 | '
             f'tee {stderr_filename}')
         p = Popen(new_cmd, stdin=slaves[0], stdout=slaves[0],
-                  stderr=slaves[1], cwd=cwd, shell=True, env=os.environ)
+                  stderr=slaves[1], cwd=cwd, shell=True)
     for fd in slaves: os.close(fd)
 
     #readable = { masters[0]: sys.stdout, masters[1]: sys.stderr }

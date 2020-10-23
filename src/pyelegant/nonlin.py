@@ -1769,8 +1769,7 @@ def calc_Touschek_lifetime(
     if print_cmd:
         print('\n$ ' + ' '.join(cmd_list) + '\n')
 
-    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8',
-              env=os.environ)
+    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8')
     out, err = p.communicate()
     if std_print_enabled['out']:
         print(out)
@@ -2470,14 +2469,14 @@ def calc_chrom_track(
             cmd = (f'sddsnaff {tbt_sdds_path} {naff_sdds_path} '
                    '-column=Pass -pair=x,xp -pair=y,yp -terminate=frequencies=1')
             p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE,
-                      encoding='utf-8', env=os.environ)
+                      encoding='utf-8')
             out, err = p.communicate()
             if out: print(f'stdout: {out}')
             if err: print(f'stderr: {err}')
             if False:
                 cmd = f'sddsprintout {naff_sdds_path} -col="(xFrequency,yFrequency)"'
                 p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE,
-                          encoding='utf-8', env=os.environ)
+                          encoding='utf-8')
                 out, err = p.communicate()
                 if out: print(f'stdout: {out}')
                 if err: print(f'stderr: {err}')
@@ -3694,14 +3693,14 @@ def _calc_tswa(
             cmd = (f'sddsnaff {tbt_sdds_path} {naff_sdds_path} '
                    '-column=Pass -pair=x,xp -pair=y,yp -terminate=frequencies=1')
             p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE,
-                      encoding='utf-8', env=os.environ)
+                      encoding='utf-8')
             out, err = p.communicate()
             if out: print(f'stdout: {out}')
             if err: print(f'stderr: {err}')
             if False:
                 cmd = f'sddsprintout {naff_sdds_path} -col="(xFrequency,yFrequency)"'
                 p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE,
-                          encoding='utf-8', env=os.environ)
+                          encoding='utf-8')
                 out, err = p.communicate()
                 if out: print(f'stdout: {out}')
                 if err: print(f'stderr: {err}')
