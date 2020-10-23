@@ -1,3 +1,4 @@
+import os
 from subprocess import Popen, PIPE, STDOUT
 
 from . import std_print_enabled
@@ -37,12 +38,12 @@ def run(ele_filepath, macros=None, print_cmd=False,
     if tee_to is None:
         if print_cmd:
             print('$ ' + ' '.join(cmd_list))
-        p = Popen(cmd_list, stdout=PIPE, stderr=PIPE)
+        p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, env=os.environ)
     else:
         if tee_stderr:
-            p1 = Popen(cmd_list, stdout=PIPE, stderr=STDOUT)
+            p1 = Popen(cmd_list, stdout=PIPE, stderr=STDOUT, env=os.environ)
         else:
-            p1 = Popen(cmd_list, stdout=PIPE, stderr=PIPE)
+            p1 = Popen(cmd_list, stdout=PIPE, stderr=PIPE, env=os.environ)
 
         if isinstance(tee_to, str):
             cmd_list_2 = ['tee', tee_to]
@@ -56,7 +57,8 @@ def run(ele_filepath, macros=None, print_cmd=False,
                 equiv_cmd_connection = ['|']
             print('$ ' + ' '.join(cmd_list + equiv_cmd_connection + cmd_list_2))
 
-        p = Popen(cmd_list_2, stdin=p1.stdout, stdout=PIPE, stderr=PIPE)
+        p = Popen(cmd_list_2, stdin=p1.stdout, stdout=PIPE, stderr=PIPE,
+                  env=os.environ)
     out, err = p.communicate()
     out, err = out.decode('utf-8'), err.decode('utf-8')
 

@@ -549,12 +549,12 @@ def run(
         if tee_to is None:
             if print_cmd:
                 print('$ ' + ' '.join(cmd_list))
-            p = Popen(cmd_list, stdout=PIPE, stderr=PIPE)
+            p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, env=os.environ)
         else:
             if tee_stderr:
-                p1 = Popen(cmd_list, stdout=PIPE, stderr=STDOUT)
+                p1 = Popen(cmd_list, stdout=PIPE, stderr=STDOUT, env=os.environ)
             else:
-                p1 = Popen(cmd_list, stdout=PIPE, stderr=PIPE)
+                p1 = Popen(cmd_list, stdout=PIPE, stderr=PIPE, env=os.environ)
 
             if isinstance(tee_to, str):
                 cmd_list_2 = ['tee', tee_to]
@@ -568,7 +568,8 @@ def run(
                     equiv_cmd_connection = ['|']
                 print('$ ' + ' '.join(cmd_list + equiv_cmd_connection + cmd_list_2))
 
-            p = Popen(cmd_list_2, stdin=p1.stdout, stdout=PIPE, stderr=PIPE)
+            p = Popen(cmd_list_2, stdin=p1.stdout, stdout=PIPE, stderr=PIPE,
+                      env=os.environ)
         out, err = p.communicate()
         out, err = out.decode('utf-8'), err.decode('utf-8')
 
@@ -588,7 +589,8 @@ def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False):
 
     nMaxSbatch = 3
     for iSbatch in range(nMaxSbatch):
-        p = Popen(['sbatch', sbatch_sh_filepath], stdout=PIPE, stderr=PIPE)
+        p = Popen(['sbatch', sbatch_sh_filepath], stdout=PIPE, stderr=PIPE,
+                  env=os.environ)
         out, err = p.communicate()
         out = out.decode('utf-8')
         err = err.decode('utf-8')
@@ -1065,7 +1067,8 @@ def monitor_simplex_log_progress(job_ID_str, simplex_log_prefix):
             time.sleep(5.0)
 
     # Launch sddsplot
-    p_sddsplot = Popen(srun_cmd, shell=True, stdout=PIPE, stderr=PIPE)
+    p_sddsplot = Popen(srun_cmd, shell=True, stdout=PIPE, stderr=PIPE,
+                       env=os.environ)
 
     # Get the launched job ID
     for _ in range(10):
@@ -1321,7 +1324,7 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
     err_counter = 0
     while True:
         p = Popen('sbatch {0}'.format(mpi_sub_sh_filepath),
-                  stdout=PIPE, stderr=PIPE, shell=True)
+                  stdout=PIPE, stderr=PIPE, shell=True, env=os.environ)
         out, err = p.communicate()
         out = out.decode()
         err = err.decode()
@@ -1414,7 +1417,8 @@ def srun_python_func(
     main_script_path = __file__[:-3]+'_srun_py_func_script.py'
     cmd = (f'srun -c 1 -J {job_name} -p {partition} {x11} {timelimit_str} '
            f'{nodelist} {exclude} python {main_script_path} {input_filepath}')
-    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8',
+              env=os.environ)
     out, err = p.communicate()
     print(out)
     if err:
@@ -1629,7 +1633,8 @@ def tmp_glob(node_name, pattern, sort_order='mtime'):
     temp_py.write_text('\n'.join(py_contents))
 
     cmd = f'srun --nodelist={node_name} --partition=debug python {str(temp_py)}'
-    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8',
+              env=os.environ)
     out, err = p.communicate()
 
     print(out.strip())
@@ -1687,7 +1692,8 @@ def tmp_rm(node_name, pattern):
     temp_py.write_text('\n'.join(py_contents))
 
     cmd = f'srun --nodelist={node_name} --partition=debug python {str(temp_py)}'
-    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8',
+              env=os.environ)
     out, err = p.communicate()
 
     print(out.strip())

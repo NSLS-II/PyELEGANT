@@ -35,7 +35,7 @@ def query(sdds_filepath, suppress_err_msg=False):
     """"""
 
     p = Popen(['sddsquery', sdds_filepath], stdout=PIPE, stderr=PIPE,
-              encoding='utf-8')
+              encoding='utf-8', env=os.environ)
     output, error = p.communicate()
     #if isinstance(output, bytes):
         #output = output.decode('utf-8')
@@ -149,7 +149,7 @@ def printout(sdds_filepath, param_name_list=None,
 
     if show_cmd:
         print(cmd_list)
-    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8', env=os.environ)
     output, error = p.communicate()
     #if isinstance(output, bytes):
         #output = output.decode('utf-8')
@@ -298,7 +298,7 @@ def printout(sdds_filepath, param_name_list=None,
 
     if show_cmd:
         print(cmd_list)
-    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8', env=os.environ)
     output, error = p.communicate()
     #if isinstance(output, bytes):
         #output = output.decode('utf-8')
@@ -631,7 +631,7 @@ def sdds2plaindata(
     for name in column_name_list:
         cmd_list.append(f'-column={name}')
 
-    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8', env=os.environ)
     output, error = p.communicate()
 
     if error and (not suppress_err_msg):
@@ -730,7 +730,7 @@ def plaindata2sdds(
     cmd_list = shlex.split(shell_cmd, posix=True)
     #print(cmd_list)
 
-    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    p = Popen(cmd_list, stdout=PIPE, stderr=PIPE, encoding='utf-8', env=os.environ)
     output, error = p.communicate()
 
     if error and (not suppress_err_msg):
