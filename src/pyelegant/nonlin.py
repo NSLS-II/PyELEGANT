@@ -5805,3 +5805,185 @@ def track(
 
     return output_filepath
 
+def calc_offmom_closed_orbits(
+    output_filepath, LTE_filepath, E_MeV, delta_array,
+    iteration_fraction=0.1, closed_orbit_iterations=500,
+    use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
+    output_file_type=None, del_tmp_files=True, print_cmd=False, run_local=True,
+    remote_opts=None):
+    """"""
+
+    LTE_file_pathobj = Path(LTE_filepath)
+
+    file_contents = LTE_file_pathobj.read_text()
+
+    input_dict = dict(
+        LTE_filepath=str(LTE_file_pathobj.resolve()), E_MeV=E_MeV,
+        delta_array=delta_array, iteration_fraction=iteration_fraction,
+        closed_orbit_iterations=closed_orbit_iterations,
+        use_beamline=use_beamline, N_KICKS=N_KICKS, transmute_elements=transmute_elements,
+        ele_filepath=ele_filepath, del_tmp_files=del_tmp_files,
+        run_local=run_local, remote_opts=remote_opts,
+        lattice_file_contents=file_contents,
+        timestamp_ini=util.get_current_local_time_str(),
+    )
+
+    output_file_type = util.auto_check_output_file_type(output_filepath, output_file_type)
+    input_dict['output_file_type'] = output_file_type
+
+    if output_file_type in ('hdf5', 'h5'):
+        util.save_input_to_hdf5(output_filepath, input_dict)
+
+    if ele_filepath is None:
+        tmp = tempfile.NamedTemporaryFile(
+            dir=Path.cwd(), delete=False, prefix=f'tmpOffMomCO_', suffix='.ele')
+        ele_pathobj = Path(tmp.name)
+        ele_filepath = str(ele_pathobj.resolve())
+        tmp.close()
+
+    ed = elebuilder.EleDesigner(ele_filepath, double_format='.12g')
+
+    elebuilder.add_transmute_blocks(ed, transmute_elements)
+
+    ed.add_newline()
+
+    ed.add_block('run_setup',
+        lattice=LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline,
+        final='%s.fin'
+    )
+
+    ed.add_newline()
+
+    temp_malign_elem_name = 'ELEGANT_OFFMOM_CO_MAL'
+    temp_malign_elem_def = f'{temp_malign_elem_name}: MALIGN'
+
+    ed.add_block('insert_elements',
+        name='*', exclude='*', add_at_start=True, element_def=temp_malign_elem_def
+    )
+
+    ed.add_newline()
+
+    ed.add_block('run_control')
+
+    ed.add_newline()
+
+    ed.add_block('alter_elements',
+        name=temp_malign_elem_name, type='MALIGN', item='DP', value='<delta>')
+
+    ed.add_newline()
+
+    ed.add_block('closed_orbit',
+        output='%s.clo', iteration_fraction=iteration_fraction,
+        closed_orbit_iterations=closed_orbit_iterations)
+
+    ed.add_newline()
+
+    ed.add_block('bunched_beam')
+
+    ed.add_newline()
+
+    ed.add_block('track')
+
+    ed.write()
+    #print(ed.actual_output_filepath_list)
+
+    for fp in ed.actual_output_filepath_list:
+        if fp.endswith('.clo'):
+            clo_filepath = fp
+        elif fp.endswith('.fin'):
+            fin_filepath = fp
+        else:
+            raise ValueError('This line should not be reached.')
+
+    delta_array = np.sort(delta_array)
+    negative = (delta_array < 0.0)
+    positive = ~negative
+    negative_inds = np.where(negative)[0]
+    positive_inds = np.where(positive)[0]
+
+    survived = np.zeros_like(delta_array).astype(bool)
+    converged = np.zeros_like(delta_array).astype(bool)
+    clos = {}
+    for k in ['s', 'x', 'xp', 'y', 'yp',
+              'ElementName', 'ElementOccurence', 'ElementType']:
+        clos[k] = None
+    clos['xerr'] = np.full(delta_array.size, np.nan)
+    clos['yerr'] = np.full(delta_array.size, np.nan)
+
+    # Run Elegant
+    if run_local:
+        for _is_positive, _one_side_delta_array in [
+            (True, delta_array[positive]),
+            (False, delta_array[negative][::-1])]:
+
+            for i, delta in enumerate(_one_side_delta_array):
+                run(ele_filepath, print_cmd=print_cmd,
+                    macros=dict(delta=f'{delta:.12g}'),
+                    print_stdout=std_print_enabled['out'],
+                    print_stderr=std_print_enabled['err'])
+
+                clo_output, _ = sdds.sdds2dicts(clo_filepath)
+                fin_output, _ = sdds.sdds2dicts(fin_filepath)
+
+                if _is_positive:
+                    j = positive_inds[i]
+                else:
+                    j = negative_inds[::-1][i]
+
+                survived[j] = (fin_output['params']['Transmission'] == 1.0)
+                if not survived[j]:
+                    break
+
+                converged[j] = (clo_output['params']['failed'] == 0)
+
+                clos['xerr'][j] = clo_output['params']['xError']
+                clos['yerr'][j] = clo_output['params']['yError']
+
+                if clos['s'] is None:
+                    for k in ['s', 'ElementName', 'ElementOccurence', 'ElementType']:
+                        clos[k] = clo_output['columns'][k]
+
+                    for k in ['x', 'xp', 'y', 'yp']:
+                        clos[k] = np.full((clos['s'].size, delta_array.size), np.nan)
+
+                for k in ['x', 'xp', 'y', 'yp']:
+                    clos[k][:, j] = clo_output['columns'][k]
+
+    else:
+        raise NotImplementedError
+
+    timestamp_fin = util.get_current_local_time_str()
+
+    if output_file_type in ('hdf5', 'h5'):
+        _kwargs = dict(compression='gzip')
+        f = h5py.File(output_filepath, 'a')
+        f.create_dataset('survived', data=survived, **_kwargs)
+        f.create_dataset('converged', data=converged, **_kwargs)
+        g = f.create_group('clos')
+        for k, v in clos.items():
+            g.create_dataset(k, data=v, **_kwargs)
+        f['timestamp_fin'] = timestamp_fin
+        f.close()
+    elif output_file_type == 'pgz':
+        d = dict(input=input_dict, timestamp_fin=timestamp_fin,
+                 _version_PyELEGANT=__version__['PyELEGANT'],
+                 _version_ELEGANT=__version__['ELEGANT'],
+                 )
+        d['survived'] = survived
+        d['converged'] = converged
+        d['clos'] = clos
+        util.robust_pgz_file_write(output_filepath, d, nMaxTry=10, sleep=10.0)
+    else:
+        raise ValueError()
+
+    if del_tmp_files:
+        for fp in ed.actual_output_filepath_list + [ele_filepath]:
+            if fp.startswith('/dev'):
+                continue
+            else:
+                try:
+                    os.remove(fp)
+                except:
+                    print(f'Failed to delete "{fp}"')
+
+    return output_filepath
