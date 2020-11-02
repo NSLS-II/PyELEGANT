@@ -953,12 +953,24 @@ class PageNonlinCalcTest(PageGenReport):
                 opts = None
             if opts is not None:
                 for k, v in opts.items():
-                    if k not in self.setter_getter[mode]:
-                        continue
-                    conv_type = self.setter_getter[mode][k]
-                    conv = self.converters[conv_type]['set']
-                    wtype = conv_type.split('_')[0]
-                    self.setField(f'{wtype}_{k}_{self.calc_type}_{mode}', conv(v))
+                    if not isinstance(v, dict):
+                        if k not in self.setter_getter[mode]:
+                            continue
+                        conv_type = self.setter_getter[mode][k]
+                        conv = self.converters[conv_type]['set']
+                        wtype = conv_type.split('_')[0]
+                        self.setField(f'{wtype}_{k}_{self.calc_type}_{mode}', conv(v))
+                    else:
+                        for k2, v2 in v.items():
+                            concat_k = f'{k}___{k2}'
+                            if concat_k not in self.setter_getter[mode]:
+                                continue
+                            conv_type = self.setter_getter[mode][concat_k]
+                            conv = self.converters[conv_type]['set']
+                            wtype = conv_type.split('_')[0]
+                            self.setField(
+                                f'{wtype}_{concat_k}_{self.calc_type}_{mode}',
+                                conv(v2))
 
     def validatePage(self):
         """"""
@@ -1054,6 +1066,11 @@ class PageNonlinCalcTest(PageGenReport):
                                 CommentedMap({}))
                         yaml_append_map(
                             new_calc_opts[mode]['remote_opts'], k, v)
+                elif '___' in k:
+                    k1, k2 = k.split('___')
+                    if k1 not in new_calc_opts[mode]:
+                        yaml_append_map(new_calc_opts[mode], k1, CommentedMap({}))
+                    yaml_append_map(new_calc_opts[mode][k1], k2, v)
                 else:
                     yaml_append_map(new_calc_opts[mode], k, v)
 
@@ -3623,6 +3640,8 @@ class PageMomAperTest(PageNonlinCalcTest):
             ('init_delta_step_size', edit), ('include_name_pattern', edit),
             ('steps_back', spin), ('splits', spin), ('split_step_divisor', spin),
             ('forbid_resonance_crossing', check), ('soft_failure', check),
+            ('rf_cavity___on', check), ('radiation_on', check),
+            ('rf_cavity___auto_voltage_from_nonlin_chrom', combo),
             ('partition', combo), ('ntasks', spin), ('time', edit)
         ]
         self.prod_list = [
@@ -3639,6 +3658,8 @@ class PageMomAperTest(PageNonlinCalcTest):
                 init_delta_step_size='edit_%', include_name_pattern='edit_str',
                 steps_back='spin', splits='spin', split_step_divisor='spin',
                 forbid_resonance_crossing='check', soft_failure='check',
+                rf_cavity___on='check', radiation_on='check',
+                rf_cavity___auto_voltage_from_nonlin_chrom='combo',
                 partition='combo', ntasks='spin', time='edit_str_None'),
             'production': dict(
                 n_turns='spin',
@@ -4182,7 +4203,7 @@ class PageRfTau(PageGenReport):
             U0_ev_list.append(_d['U0_eV'])
             sigma_delta_list.append(_d['sigma_delta_percent'] * 1e-2)
 
-        h = report_obj.conf['rf']['calc_opts']['harmonic_number']
+        h = report_obj.conf['harmonic_number']
 
         try:
             mmap_pgz_filepath = report_obj.get_nonlin_data_filepaths()['mom_aper']
@@ -4680,7 +4701,7 @@ class PageRfTau(PageGenReport):
             #
             conv_type = self.setter_getter['rf']['harmonic_number']
             conv = self.converters[conv_type]['get']
-            calc_opts['harmonic_number'] = conv(self.field('spin_harmonic_number'))
+            mod_conf['harmonic_number'] = conv(self.field('spin_harmonic_number'))
             #
             conv_type = self.setter_getter['rf']['rf_voltages']
             conv = partial(self.converters[conv_type]['get'], 'rf_voltages')
