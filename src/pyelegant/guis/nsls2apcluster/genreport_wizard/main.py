@@ -86,7 +86,7 @@ class ReportWizard(QtWidgets.QWizard):
             'LTE', 'straight_centers', 'phase_adv', 'straight_length',
             'test1', 'twiss_plots', 'paragraphs', 'N_KICKS', 'xy_aper_test',
             'fmap_xy_test', 'fmap_px_test', 'cmap_xy_test', 'cmap_px_test',
-            'mom_aper_test', 'tswa', 'nonlin_chrom', 'nonlin_prod', 'rf_tau']
+            'nonlin_chrom', 'mom_aper_test', 'tswa', 'nonlin_prod', 'rf_tau']
 
         self.page_links = {}
         for k in self.page_name_list:
