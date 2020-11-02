@@ -10,6 +10,7 @@ import fnmatch
 from types import SimpleNamespace
 import shutil
 from pathlib import Path
+import re
 import argparse
 from packaging import version
 
@@ -7118,6 +7119,8 @@ class Report_NSLS2U_Default:
             plane_specific_remote_opts = pe.util.deepcopy_dict(remote_opts)
             plane_specific_remote_opts['ntasks'] = min([remote_opts['ntasks'], n])
 
+            err_log_check = dict(funcs=[self._check_remote_err_log_exit_code])
+
             for sign, sign_symbol in [('plus', '+'), ('minus', '-')]:
 
                 plane_specific_remote_opts['job_name'] = f'{calc_type}_{plane}_{sign}'
@@ -7132,10 +7135,19 @@ class Report_NSLS2U_Default:
                      courant_snyder=True, return_fft_spec=save_fft, save_tbt=False,
                      n_turns=n_turns, N_KICKS=N_KICKS,
                      del_tmp_files=True, run_local=False,
-                     remote_opts=plane_specific_remote_opts, **mod_kwargs)
+                     remote_opts=plane_specific_remote_opts,
+                     err_log_check=err_log_check, **mod_kwargs)
 
                 sys.stdout.flush()
                 sys.stderr.flush()
+
+    @staticmethod
+    def _check_remote_err_log_exit_code(err_log_contents):
+        """"""
+
+        m = re.findall('srun: error:.+Exited with exit code', err_log_contents)
+
+        return len(m) == 0
 
     def calc_nonlin_chrom(
         self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
