@@ -3433,8 +3433,10 @@ def calc_tswa_x(
     n_turns=256, y0_offset=1e-5, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
-    run_local=True, remote_opts=None):
-    """"""
+    run_local=True, remote_opts=None, err_log_check=None, nMaxRemoteRetry=3):
+    """
+    If "err_log_check" is None, then "nMaxRemoteRetry" is irrelevant.
+    """
 
     if xsign == '+':
         x0_array = np.linspace(0.0, abs_xmax, nx)[1:] # exclude x == 0.0
@@ -3454,7 +3456,9 @@ def calc_tswa_x(
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, output_file_type=output_file_type,
         del_tmp_files=del_tmp_files, print_cmd=print_cmd,
-        run_local=run_local, remote_opts=remote_opts)
+        run_local=run_local, remote_opts=remote_opts, err_log_check=err_log_check,
+        nMaxRemoteRetry=nMaxRemoteRetry,
+    )
 
 def calc_tswa_y(
     output_filepath, LTE_filepath, E_MeV, abs_ymax, ny, ysign='+',
@@ -3462,8 +3466,10 @@ def calc_tswa_y(
     n_turns=256, x0_offset=1e-5, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
-    run_local=True, remote_opts=None):
-    """"""
+    run_local=True, remote_opts=None, err_log_check=None, nMaxRemoteRetry=3):
+    """
+    If "err_log_check" is None, then "nMaxRemoteRetry" is irrelevant.
+    """
 
     if ysign == '+':
         y0_array = np.linspace(0.0, abs_ymax, ny)[1:] # exclude y == 0.0
@@ -3483,7 +3489,9 @@ def calc_tswa_y(
         N_KICKS=N_KICKS, transmute_elements=transmute_elements,
         ele_filepath=ele_filepath, output_file_type=output_file_type,
         del_tmp_files=del_tmp_files, print_cmd=print_cmd,
-        run_local=run_local, remote_opts=remote_opts)
+        run_local=run_local, remote_opts=remote_opts, err_log_check=err_log_check,
+        nMaxRemoteRetry=nMaxRemoteRetry,
+    )
 
 def _calc_tswa(
     scan_plane, plane_specific_input, output_filepath, LTE_filepath, E_MeV,
@@ -3492,8 +3500,10 @@ def _calc_tswa(
     n_turns=256, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
-    run_local=True, remote_opts=None):
-    """"""
+    run_local=True, remote_opts=None, err_log_check=None, nMaxRemoteRetry=3):
+    """
+    If "err_log_check" is None, then "nMaxRemoteRetry" is irrelevant.
+    """
 
     assert x0_array.size == y0_array.size
     nscan = x0_array.size
@@ -3643,12 +3653,31 @@ def _calc_tswa(
 
         module_name = 'pyelegant.nonlin'
         func_name = '_calc_tswa_get_tbt'
-        chunked_results = remote.run_mpi_python(
-            remote_opts, module_name, func_name, xy0_sub_array_list,
-            (ele_pathobj.read_text(), ele_pathobj.name, watch_pathobj.name,
-             print_cmd, std_print_enabled['out'], std_print_enabled['err'],
-             coords_list),
-        )
+        iRemoteTry = 0
+        while True:
+            chunked_results = remote.run_mpi_python(
+                remote_opts, module_name, func_name, xy0_sub_array_list,
+                (ele_pathobj.read_text(), ele_pathobj.name, watch_pathobj.name,
+                 print_cmd, std_print_enabled['out'], std_print_enabled['err'],
+                 coords_list),
+                err_log_check=err_log_check,
+            )
+
+            if (err_log_check is not None) and isinstance(chunked_results, str):
+
+                err_log_text = chunked_results
+                print('\n** Error Log check found the following problem:')
+                print(err_log_text)
+
+                iRemoteTry += 1
+
+                if iRemoteTry >= nMaxRemoteRetry:
+                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
+                else:
+                    print('\n** Re-trying the remote run...\n')
+                    sys.stdout.flush()
+            else:
+                break
 
         tbt_chunked_list = dict()
         tbt_flat_list = dict()

@@ -828,7 +828,7 @@ def wait_for_completion(
     out_log_check=None, err_log_check=None):
     """"""
 
-    t0 = t_err_log = time.time()
+    t0 = time.time()
 
     dt_not_running = 0.0
     not_running_t0 = None
@@ -846,6 +846,10 @@ def wait_for_completion(
     cmd = f'squeue --noheader --job={job_ID_str} -o "%.{len(job_ID_str)+1}i %.3t %.4C %R"'
     num_cores = float('nan')
     used_nodes = 'unknown'
+    err_log = ''
+    if err_log_check is not None:
+        err_log_filename = f"{err_log_check['job_name']}.{job_ID_str}.err"
+        prev_err_log_file_size = 0
     while True:
         p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
         out, err = p.communicate()
@@ -902,17 +906,37 @@ def wait_for_completion(
 
                 break
 
-        if err_log_check is not None:
+        if (state == 'R') and (err_log_check is not None):
 
-            dt = time.time() - t_err_log
+            # Check if err log file size has increased. If not, there is no
+            # need to check the contents.
+            #print(f'Current directory is "{os.getcwd()}"')
+            for _ in range(3):
+                try:
+                    curr_err_log_file_size = os.stat(err_log_filename).st_size
+                    break
+                except FileNotFoundError:
+                    time.sleep(5.0)
+            else:
+                raise FileNotFoundError(err_log_filename)
+            if curr_err_log_file_size > prev_err_log_file_size:
 
-            if dt >= err_log_check['interval']:
+                prev_err_log_file_size = curr_err_log_file_size
+
+                err_log = Path(err_log_filename).read_text()
+
                 for _check_func in err_log_check['funcs']:
-                    if _check_func('{}.{}.err'.format(
-                        err_log_check['job_name'], job_ID_str)):
-                        break
+                    if _check_func(err_log):
+                        # Cancel the job
+                        cmd = f'scancel {job_ID_str}'
+                        p = Popen(shlex.split(cmd),
+                                  stdout=PIPE, stderr=PIPE, encoding='utf-8')
+                        out, err = p.communicate()
+                        if err:
+                            print(f'\n*** stderr: command: {cmd}')
+                            print(err)
 
-                t_err_log = time.time()
+                        break
 
         time.sleep(status_check_interval)
 
@@ -927,7 +951,8 @@ def wait_for_completion(
     print(f'Elapsed: Total = {h_dt_total}; Running = {h_dt_running}')
 
     ret = dict(
-        total=dt_total, running=dt_running, nodes=used_nodes, ncores=num_cores)
+        total=dt_total, running=dt_running, nodes=used_nodes, ncores=num_cores,
+        err_log=err_log)
 
     return ret
 
@@ -1285,7 +1310,7 @@ proc UpdateJobsRunning {} {
         f.write(contents)
 
 def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
-                   paths_to_prepend=None):
+                   paths_to_prepend=None, err_log_check=None):
     """
     Example:
         module_name = 'pyelegant.nonlin'
@@ -1342,13 +1367,14 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
 
     job_ID_str = out.replace('Submitted batch job', '').strip()
 
-    err_log_check = None
     if err_log_check is not None:
         err_log_check['job_name'] = job_name
 
-    wait_for_completion(
+    info = wait_for_completion(
         job_ID_str, remote_opts.get('status_check_interval', 3.0),
         err_log_check=err_log_check)
+    if info['err_log'] != '':
+        return info['err_log']
 
     results = util.load_pgz_file(output_filepath)
 
