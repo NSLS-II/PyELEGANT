@@ -6940,11 +6940,14 @@ class Report_NSLS2U_Default:
         remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
         remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
 
+        err_log_check = dict(funcs=[self._check_remote_err_log_exit_code])
+
         pe.nonlin.calc_find_aper_nlines(
             output_filepath, LTE_filepath, E_MeV_default, xmax=xmax, ymax=ymax,
             ini_ndiv=ini_ndiv, n_lines=n_lines, neg_y_search=neg_y_search,
             n_turns=n_turns, use_beamline=use_beamline, N_KICKS=N_KICKS,
-            del_tmp_files=True, run_local=False, remote_opts=remote_opts)
+            del_tmp_files=True, run_local=False, remote_opts=remote_opts,
+            err_log_check=err_log_check)
 
     def _calc_map_xy(
         self, map_type, use_beamline, N_KICKS, nonlin_data_filepaths,
@@ -6991,12 +6994,14 @@ class Report_NSLS2U_Default:
         else:
             raise ValueError
 
+        err_log_check = dict(funcs=[self._check_remote_err_log_exit_code])
+
         func(
             output_filepath, LTE_filepath, E_MeV_default,
             xmin, xmax, ymin, ymax, nx, ny, use_beamline=use_beamline,
             N_KICKS=N_KICKS, n_turns=n_turns, delta_offset=delta_offset,
             del_tmp_files=True, run_local=False, remote_opts=remote_opts,
-            **kwargs)
+            err_log_check=err_log_check, **kwargs)
 
     def calc_fmap_xy(
         self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
@@ -7057,11 +7062,13 @@ class Report_NSLS2U_Default:
         else:
             raise ValueError
 
+        err_log_check = dict(funcs=[self._check_remote_err_log_exit_code])
+
         func(output_filepath, LTE_filepath, E_MeV_default, delta_min, delta_max,
              xmin, xmax, ndelta, nx, use_beamline=use_beamline, N_KICKS=N_KICKS,
              n_turns=n_turns, y_offset=y_offset,
              del_tmp_files=True, run_local=False, remote_opts=remote_opts,
-             **kwargs)
+             err_log_check=err_log_check, **kwargs)
 
     def calc_fmap_px(
         self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
@@ -7147,7 +7154,7 @@ class Report_NSLS2U_Default:
 
         m = re.findall('srun: error:.+Exited with exit code', err_log_contents)
 
-        return len(m) == 0
+        return len(m) != 0
 
     def calc_nonlin_chrom(
         self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
@@ -7180,13 +7187,16 @@ class Report_NSLS2U_Default:
         #
         remote_opts['ntasks'] = min([remote_opts['ntasks'], ndelta])
 
+        err_log_check = dict(funcs=[self._check_remote_err_log_exit_code])
+
         pe.nonlin.calc_chrom_track(
             output_filepath, LTE_filepath, E_MeV_default,
             delta_min, delta_max, ndelta, use_sddsnaff=True,
             courant_snyder=True, return_fft_spec=save_fft, save_tbt=False,
             use_beamline=use_beamline, N_KICKS=N_KICKS,
             n_turns=n_turns, x0_offset=x_offset, y0_offset=y_offset,
-            del_tmp_files=True, run_local=False, remote_opts=remote_opts)
+            del_tmp_files=True, run_local=False, remote_opts=remote_opts,
+            err_log_check=err_log_check)
 
     def calc_mom_aper(
         self, use_beamline, N_KICKS, nonlin_data_filepaths, common_remote_opts):
@@ -7363,6 +7373,8 @@ class Report_NSLS2U_Default:
         remote_opts['ntasks'] = min([remote_opts['ntasks'], n_matched])
         assert remote_opts['ntasks'] >= 1
 
+        err_log_check = dict(funcs=[self._check_remote_err_log_exit_code])
+
         pe.nonlin.calc_mom_aper(
             output_filepath, LTE_filepath, E_MeV_default, n_turns=n_turns,
             s_start=s_start, s_end=s_end,
@@ -7370,7 +7382,8 @@ class Report_NSLS2U_Default:
             harmonic_number=h, rf_bucket_percent=rf_bucket_percent,
             overvoltage_factor=overvoltage_factor, rf_volt=rf_volt,
             use_beamline=use_beamline, N_KICKS=N_KICKS, del_tmp_files=True,
-            run_local=False, remote_opts=remote_opts, **calc_opts)
+            run_local=False, remote_opts=remote_opts,
+            err_log_check=err_log_check, **calc_opts)
 
         d = pe.util.load_pgz_file(output_filepath)
         # Add "rf_cavity_opts" to mom_aper data file, which is needed when
@@ -8143,13 +8156,48 @@ class Report_NSLS2U_Default:
                 for k, v in remote_opts.items():
                     _remote_opts[k] = v
 
+            err_log_check = dict(funcs=[self._check_remote_err_log_exit_code])
+
             module_name = 'pyelegant.scripts.genreport'
             func_name = 'get_ELE_Touschek_lifetime'
-            flat_results = pe.remote.run_mpi_python(
-                _remote_opts, module_name, func_name, rfV_EMeV_C_kappa_list,
-                (LTE_filepath, mmap_sdds_filepath_ring, h, max_mom_aper_percent,
-                 use_beamline_ring),
-            )
+
+            nMaxRemoteRetry = 3
+            iRemoteTry = 0
+            while True:
+                flat_results = pe.remote.run_mpi_python(
+                    _remote_opts, module_name, func_name, rfV_EMeV_C_kappa_list,
+                    (LTE_filepath, mmap_sdds_filepath_ring, h, max_mom_aper_percent,
+                     use_beamline_ring),
+                    err_log_check=err_log_check,
+                )
+
+                if (err_log_check is not None) and isinstance(flat_results, str):
+
+                    err_log_text = flat_results
+                    print('\n** Error Log check found the following problem:')
+                    print(err_log_text)
+
+                    iRemoteTry += 1
+
+                    if iRemoteTry >= nMaxRemoteRetry:
+                        raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
+                    else:
+                        print('\n** Re-trying the remote run...\n')
+                        sys.stdout.flush()
+
+                        # Even though there may well be many left over temp files
+                        # at this point, attempting to delete those files like:
+                        #   for fp in Path.cwd().glob('tmpCalcTwi_*'):
+                        #       fp.unlink()
+                        #   for fp in Path.cwd().glob('tmpTau_*'):
+                        #       fp.unlink()
+                        # is not a good idea, as this could potentially crash
+                        # another instance of scan_V_tau() if one is initiated
+                        # by another report generator script or GUI.
+                        # So, it's safer to just let users manually delete
+                        # all "tmp*" files.
+                else:
+                    break
 
             counter = 0
             taus_LoL = []
@@ -8541,6 +8589,8 @@ class Report_NSLS2U_Default:
                     for _d in req_d['extra_Es']:
                         U0_ev_list.append(_d['U0_eV'])
                         sigma_delta_list.append(_d['sigma_delta_percent'] * 1e-2)
+
+                    sys.stdout.flush()
 
                     V_scan_LoLs = self.scan_V_tau(
                         rf_volt_ranges, v_scan_npts, ntasks, E_MeV_list,

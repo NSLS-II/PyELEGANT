@@ -410,7 +410,7 @@ def write_sbatch_shell_file(
 def run(
     remote_opts, ele_filepath, macros=None, print_cmd=False,
     print_stdout=True, print_stderr=True, tee_to=None, tee_stderr=True,
-    output_filepaths=None):
+    output_filepaths=None, err_log_check=None):
     """"""
 
     if remote_opts is None:
@@ -477,7 +477,8 @@ def run(
 
             (job_ID_str, slurm_out_filepath, slurm_err_filepath, sbatch_info
              ) = _sbatch(sbatch_sh_filepath, job_name,
-                         exit_right_after_submission=exit_right_after_sbatch)
+                         exit_right_after_submission=exit_right_after_sbatch,
+                         err_log_check=err_log_check)
 
             if exit_right_after_sbatch:
                 output = dict(
@@ -581,7 +582,8 @@ def run(
 
     return output
 
-def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False):
+def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False,
+            err_log_check=None):
     """"""
 
     #mpi_rank_header = get_mpi_rank_header()
@@ -616,9 +618,13 @@ def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False):
 
         status_check_interval = 5.0 #10.0
 
-        err_log_check = dict(
-            interval=60.0, funcs=[check_unable_to_open_mode_w_File_exists],
-            job_name=job_name)
+        if err_log_check is None:
+            err_log_check = dict(
+                funcs=[check_unable_to_open_mode_w_File_exists],
+                job_name=job_name)
+        else:
+            err_log_check['job_name'] = job_name
+            err_log_check['funcs'] += [check_unable_to_open_mode_w_File_exists]
 
         sbatch_info = wait_for_completion(
             job_ID_str, status_check_interval, err_log_check=err_log_check)
@@ -779,45 +785,13 @@ def get_mpi_rank_header():
 
     return mpi_rank_header
 
-def check_unable_to_open_mode_w_File_exists(err_filepath):
+def check_unable_to_open_mode_w_File_exists(err_log_contents):
     """"""
 
-    if os.path.exists(err_filepath):
-        with open(err_filepath, 'r') as f:
-            contents = f.read()
-
-        if ('unable to open' in contents) and ('in mode w: File exists' in contents):
-            abort = True
-
-            job_ID_str = err_filepath.split('.')[-2]
-
-            print('\n##### Error: unable to open in mode w: File exists #####')
-            print('Cancelling the Pelegant job {}'.format(job_ID_str))
-
-            err_counter = 0
-            while True:
-                p = Popen('scancel {}'.format(job_ID_str),
-                          stdout=PIPE, stderr=PIPE, shell=True)
-                out, err = p.communicate()
-                out = out.decode('utf-8')
-                err = err.decode('utf-8')
-                print(out)
-                if err:
-                    err_counter += 1
-
-                    if err_counter >= 10:
-                        print(err)
-                        raise RuntimeError('Encountered error during cancellation of failed Pelegant run')
-                    else:
-                        print(err)
-                        sys.stdout.flush()
-                        time.sleep(30.0)
-                        continue
-                else:
-                    break
-
-        else:
-            abort = False
+    if ('unable to open' in err_log_contents) and \
+       ('in mode w: File exists' in err_log_contents):
+        abort = True
+        print('\n##### Error: unable to open in mode w: File exists #####')
     else:
         abort = False
 
@@ -924,9 +898,17 @@ def wait_for_completion(
                 prev_err_log_file_size = curr_err_log_file_size
 
                 err_log = Path(err_log_filename).read_text()
+                #print(err_log)
 
+                err_found = False
                 for _check_func in err_log_check['funcs']:
+                    #print(_check_func)
+                    #print(_check_func(err_log))
+                    #sys.stdout.flush()
                     if _check_func(err_log):
+
+                        err_found = True
+
                         # Cancel the job
                         cmd = f'scancel {job_ID_str}'
                         p = Popen(shlex.split(cmd),
@@ -937,6 +919,9 @@ def wait_for_completion(
                             print(err)
 
                         break
+
+                if err_found:
+                    break
 
         time.sleep(status_check_interval)
 
@@ -1373,10 +1358,11 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
     info = wait_for_completion(
         job_ID_str, remote_opts.get('status_check_interval', 3.0),
         err_log_check=err_log_check)
-    if info['err_log'] != '':
-        return info['err_log']
 
-    results = util.load_pgz_file(output_filepath)
+    if info['err_log'] == '':
+        results = util.load_pgz_file(output_filepath)
+    else:
+        results = info['err_log']
 
     if remote_opts.get('del_input_file', True):
         try: os.remove(input_filepath)

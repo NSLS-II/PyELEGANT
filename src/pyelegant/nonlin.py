@@ -31,7 +31,7 @@ def calc_cmap_xy(
     n_turns=1, delta_offset=0.0, forward_backward=1,
     use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
     output_file_type=None, del_tmp_files=True,
-    run_local=False, remote_opts=None):
+    run_local=False, remote_opts=None, err_log_check=None, nMaxRemoteRetry=2):
     """"""
 
     return _calc_cmap(
@@ -42,14 +42,15 @@ def calc_cmap_xy(
         use_beamline=use_beamline, N_KICKS=N_KICKS,
         transmute_elements=transmute_elements, ele_filepath=ele_filepath,
         output_file_type=output_file_type, del_tmp_files=del_tmp_files,
-        run_local=run_local, remote_opts=remote_opts)
+        run_local=run_local, remote_opts=remote_opts,
+        err_log_check=err_log_check, nMaxRemoteRetry=nMaxRemoteRetry)
 
 def calc_cmap_px(
     output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, xmin, xmax, ndelta, nx,
     n_turns=1, y_offset=0.0, forward_backward=1,
     use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
     output_file_type=None, del_tmp_files=True,
-    run_local=False, remote_opts=None):
+    run_local=False, remote_opts=None, err_log_check=None, nMaxRemoteRetry=2):
     """"""
 
     return _calc_cmap(
@@ -60,7 +61,8 @@ def calc_cmap_px(
         use_beamline=use_beamline, N_KICKS=N_KICKS,
         transmute_elements=transmute_elements, ele_filepath=ele_filepath,
         output_file_type=output_file_type, del_tmp_files=del_tmp_files,
-        run_local=run_local, remote_opts=remote_opts)
+        run_local=run_local, remote_opts=remote_opts,
+        err_log_check=err_log_check, nMaxRemoteRetry=nMaxRemoteRetry)
 
 def _calc_cmap(
     output_filepath, LTE_filepath, E_MeV, plane, xmin=-0.1, xmax=0.1, ymin=1e-6, ymax=0.1,
@@ -68,7 +70,7 @@ def _calc_cmap(
     delta_offset=0.0, y_offset=0.0, forward_backward=1,
     use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
     output_file_type=None, del_tmp_files=True,
-    run_local=False, remote_opts=None):
+    run_local=False, remote_opts=None, err_log_check=None, nMaxRemoteRetry=2):
     """"""
 
     if plane == 'xy':
@@ -197,11 +199,30 @@ def _calc_cmap(
                 output='cmap.%J.out', error='cmap.%J.err',
                 partition='normal', ntasks=50)
 
-        sbatch_info = remote.run(
-            remote_opts, ele_filepath, print_cmd=True,
-            print_stdout=std_print_enabled['out'],
-            print_stderr=std_print_enabled['err'],
-            output_filepaths=None)
+        iRemoteTry = 0
+        while True:
+            sbatch_info = remote.run(
+                remote_opts, ele_filepath, print_cmd=True,
+                print_stdout=std_print_enabled['out'],
+                print_stderr=std_print_enabled['err'],
+                output_filepaths=None, err_log_check=err_log_check)
+
+            if (err_log_check is not None) and (sbatch_info is not None) and \
+               (sbatch_info.get('err_log', '') != ''):
+
+                err_log_text = sbatch_info['err_log']
+                print('\n** Error Log check found the following problem:')
+                print(err_log_text)
+
+                iRemoteTry += 1
+
+                if iRemoteTry >= nMaxRemoteRetry:
+                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
+                else:
+                    print('\n** Re-trying the remote run...\n')
+                    sys.stdout.flush()
+            else:
+                break
 
     tmp_filepaths = dict(cmap=cmap_output_filepath)
     output, meta = {}, {}
@@ -463,7 +484,7 @@ def calc_fma_xy(
     n_turns=1024, delta_offset=0.0, quadratic_spacing=False, full_grid_output=False,
     use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
     output_file_type=None, del_tmp_files=True,
-    run_local=False, remote_opts=None):
+    run_local=False, remote_opts=None, err_log_check=None, nMaxRemoteRetry=2):
     """"""
 
     return _calc_fma(
@@ -474,14 +495,15 @@ def calc_fma_xy(
         use_beamline=use_beamline, N_KICKS=N_KICKS,
         transmute_elements=transmute_elements, ele_filepath=ele_filepath,
         output_file_type=output_file_type, del_tmp_files=del_tmp_files,
-        run_local=run_local, remote_opts=remote_opts)
+        run_local=run_local, remote_opts=remote_opts,
+        err_log_check=err_log_check, nMaxRemoteRetry=nMaxRemoteRetry)
 
 def calc_fma_px(
     output_filepath, LTE_filepath, E_MeV, delta_min, delta_max, xmin, xmax, ndelta, nx,
     n_turns=1024, y_offset=0.0, quadratic_spacing=False, full_grid_output=False,
     use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
     output_file_type=None, del_tmp_files=True,
-    run_local=False, remote_opts=None):
+    run_local=False, remote_opts=None, err_log_check=None, nMaxRemoteRetry=2):
     """"""
 
     return _calc_fma(
@@ -492,7 +514,8 @@ def calc_fma_px(
         use_beamline=use_beamline, N_KICKS=N_KICKS,
         transmute_elements=transmute_elements, ele_filepath=ele_filepath,
         output_file_type=output_file_type, del_tmp_files=del_tmp_files,
-        run_local=run_local, remote_opts=remote_opts)
+        run_local=run_local, remote_opts=remote_opts,
+        err_log_check=err_log_check, nMaxRemoteRetry=nMaxRemoteRetry)
 
 def _calc_fma(
     output_filepath, LTE_filepath, E_MeV, plane, xmin=-0.1, xmax=0.1, ymin=1e-6, ymax=0.1,
@@ -500,8 +523,10 @@ def _calc_fma(
     delta_offset=0.0, y_offset=0.0, quadratic_spacing=False, full_grid_output=False,
     use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
     output_file_type=None, del_tmp_files=True,
-    run_local=False, remote_opts=None):
-    """"""
+    run_local=False, remote_opts=None, err_log_check=None, nMaxRemoteRetry=2):
+    """
+    If "err_log_check" is None, then "nMaxRemoteRetry" is irrelevant.
+    """
 
     if plane == 'xy':
         pass
@@ -610,11 +635,30 @@ def _calc_fma(
                 output='fma.%J.out', error='fma.%J.err',
                 partition='normal', ntasks=50)
 
-        sbatch_info = remote.run(
-            remote_opts, ele_filepath, print_cmd=True,
-            print_stdout=std_print_enabled['out'],
-            print_stderr=std_print_enabled['err'],
-            output_filepaths=None)
+        iRemoteTry = 0
+        while True:
+            sbatch_info = remote.run(
+                remote_opts, ele_filepath, print_cmd=True,
+                print_stdout=std_print_enabled['out'],
+                print_stderr=std_print_enabled['err'],
+                output_filepaths=None, err_log_check=err_log_check)
+
+            if (err_log_check is not None) and (sbatch_info is not None) and \
+               (sbatch_info.get('err_log', '') != ''):
+
+                err_log_text = sbatch_info['err_log']
+                print('\n** Error Log check found the following problem:')
+                print(err_log_text)
+
+                iRemoteTry += 1
+
+                if iRemoteTry >= nMaxRemoteRetry:
+                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
+                else:
+                    print('\n** Re-trying the remote run...\n')
+                    sys.stdout.flush()
+            else:
+                break
 
     tmp_filepaths = dict(fma=fma_output_filepath)
     output, meta = {}, {}
@@ -885,7 +929,7 @@ def calc_find_aper_nlines(
     n_lines=11, neg_y_search=False,
     n_turns=1024, use_beamline=None, N_KICKS=None, transmute_elements=None,
     ele_filepath=None, output_file_type=None, del_tmp_files=True,
-    run_local=False, remote_opts=None):
+    run_local=False, remote_opts=None, err_log_check=None, nMaxRemoteRetry=2):
     """"""
 
     assert n_lines >= 3
@@ -970,11 +1014,30 @@ def calc_find_aper_nlines(
                 output='findaper.%J.out', error='findaper.%J.err',
                 partition='normal', ntasks=np.min([50, n_lines]))
 
-        sbatch_info = remote.run(
-            remote_opts, ele_filepath, print_cmd=True,
-            print_stdout=std_print_enabled['out'],
-            print_stderr=std_print_enabled['err'],
-            output_filepaths=None)
+        iRemoteTry = 0
+        while True:
+            sbatch_info = remote.run(
+                remote_opts, ele_filepath, print_cmd=True,
+                print_stdout=std_print_enabled['out'],
+                print_stderr=std_print_enabled['err'],
+                output_filepaths=None, err_log_check=err_log_check)
+
+            if (err_log_check is not None) and (sbatch_info is not None) and \
+               (sbatch_info.get('err_log', '') != ''):
+
+                err_log_text = sbatch_info['err_log']
+                print('\n** Error Log check found the following problem:')
+                print(err_log_text)
+
+                iRemoteTry += 1
+
+                if iRemoteTry >= nMaxRemoteRetry:
+                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
+                else:
+                    print('\n** Re-trying the remote run...\n')
+                    sys.stdout.flush()
+            else:
+                break
 
     tmp_filepaths = dict(aper=aper_output_filepath)
     output, meta = {}, {}
@@ -1226,7 +1289,7 @@ def calc_mom_aper(
     rf_bucket_percent=None, overvoltage_factor=None, rf_volt=None,
     n_turns=1024, use_beamline=None, N_KICKS=None, transmute_elements=None,
     ele_filepath=None, output_file_type=None, del_tmp_files=True,
-    run_local=False, remote_opts=None):
+    run_local=False, remote_opts=None, err_log_check=None, nMaxRemoteRetry=2):
     """"""
 
     if rf_cavity_on:
@@ -1492,11 +1555,30 @@ def calc_mom_aper(
                 output='momaper.%J.out', error='momaper.%J.err',
                 partition='normal', ntasks=50)
 
-        sbatch_info = remote.run(
-            remote_opts, ele_filepath, print_cmd=True,
-            print_stdout=std_print_enabled['out'],
-            print_stderr=std_print_enabled['err'],
-            output_filepaths=None)
+        iRemoteTry = 0
+        while True:
+            sbatch_info = remote.run(
+                remote_opts, ele_filepath, print_cmd=True,
+                print_stdout=std_print_enabled['out'],
+                print_stderr=std_print_enabled['err'],
+                output_filepaths=None, err_log_check=err_log_check)
+
+            if (err_log_check is not None) and (sbatch_info is not None) and \
+               (sbatch_info.get('err_log', '') != ''):
+
+                err_log_text = sbatch_info['err_log']
+                print('\n** Error Log check found the following problem:')
+                print(err_log_text)
+
+                iRemoteTry += 1
+
+                if iRemoteTry >= nMaxRemoteRetry:
+                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
+                else:
+                    print('\n** Re-trying the remote run...\n')
+                    sys.stdout.flush()
+            else:
+                break
 
     tmp_filepaths = dict(mmap=mmap_output_filepath)
     output, meta = {}, {}
@@ -2272,8 +2354,10 @@ def calc_chrom_track(
     n_turns=256, x0_offset=1e-5, y0_offset=1e-5, use_beamline=None, N_KICKS=None,
     transmute_elements=None, ele_filepath=None, output_file_type=None,
     del_tmp_files=True, print_cmd=False,
-    run_local=True, remote_opts=None):
-    """"""
+    run_local=True, remote_opts=None, err_log_check=None, nMaxRemoteRetry=3):
+    """
+    If "err_log_check" is None, then "nMaxRemoteRetry" is irrelevant.
+    """
 
     LTE_file_pathobj = Path(LTE_filepath)
 
@@ -2421,12 +2505,32 @@ def calc_chrom_track(
 
         module_name = 'pyelegant.nonlin'
         func_name = '_calc_chrom_track_get_tbt'
-        chunked_results = remote.run_mpi_python(
-            remote_opts, module_name, func_name, delta_sub_array_list,
-            (ele_pathobj.read_text(), ele_pathobj.name, watch_pathobj.name,
-             print_cmd, std_print_enabled['out'], std_print_enabled['err'],
-             coords_list),
-        )
+
+        iRemoteTry = 0
+        while True:
+            chunked_results = remote.run_mpi_python(
+                remote_opts, module_name, func_name, delta_sub_array_list,
+                (ele_pathobj.read_text(), ele_pathobj.name, watch_pathobj.name,
+                 print_cmd, std_print_enabled['out'], std_print_enabled['err'],
+                 coords_list),
+                err_log_check=err_log_check,
+            )
+
+            if (err_log_check is not None) and isinstance(chunked_results, str):
+
+                err_log_text = chunked_results
+                print('\n** Error Log check found the following problem:')
+                print(err_log_text)
+
+                iRemoteTry += 1
+
+                if iRemoteTry >= nMaxRemoteRetry:
+                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
+                else:
+                    print('\n** Re-trying the remote run...\n')
+                    sys.stdout.flush()
+            else:
+                break
 
         tbt_chunked_list = dict()
         tbt_flat_list = dict()
@@ -5648,7 +5752,7 @@ def track(
     output_coordinates=('x', 'xp', 'y', 'yp', 'delta'), double_format='',
     use_beamline=None, N_KICKS=None, transmute_elements=None, ele_filepath=None,
     output_file_type=None, del_tmp_files=True, print_cmd=False,
-    run_local=True, remote_opts=None):
+    run_local=True, remote_opts=None, err_log_check=None, nMaxRemoteRetry=3):
     """
     An example of "double_format" is '%25.16e'.
     """
@@ -5766,11 +5870,30 @@ def track(
         # ^ If this is more than 1, you will likely see an error like "Unable to
         #   access file /.../tmp*.twi--file is locked (SDDS_InitializeOutput)"
 
-        sbatch_info = remote.run(
-            remote_opts, ele_filepath, print_cmd=print_cmd,
-            print_stdout=std_print_enabled['out'],
-            print_stderr=std_print_enabled['err'],
-            output_filepaths=None)
+        iRemoteTry = 0
+        while True:
+            sbatch_info = remote.run(
+                remote_opts, ele_filepath, print_cmd=print_cmd,
+                print_stdout=std_print_enabled['out'],
+                print_stderr=std_print_enabled['err'],
+                output_filepaths=None, err_log_check=err_log_check)
+
+            if (err_log_check is not None) and (sbatch_info is not None) and \
+               (sbatch_info.get('err_log', '') != ''):
+
+                err_log_text = sbatch_info['err_log']
+                print('\n** Error Log check found the following problem:')
+                print(err_log_text)
+
+                iRemoteTry += 1
+
+                if iRemoteTry >= nMaxRemoteRetry:
+                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
+                else:
+                    print('\n** Re-trying the remote run...\n')
+                    sys.stdout.flush()
+            else:
+                break
     #
     output, _ = sdds.sdds2dicts(watch_pathobj)
     #
