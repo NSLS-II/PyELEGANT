@@ -15,10 +15,13 @@ import dill
 MPI.pickle.__init__(dill.dumps, dill.loads) # <= This works for mpi4py v.3.0
 
 #----------------------------------------------------------------------
-def _mpi_starmap(func_or_classmethod, param_list, *args):
+def _mpi_starmap(func_or_classmethod, param_list, *args, path=None):
     """"""
 
-    executor = MPIPoolExecutor()
+    if path is not None:
+        executor = MPIPoolExecutor(path=path)
+    else:
+        executor = MPIPoolExecutor()
 
     #print('param_list:', param_list)
     #print('args:', args)
@@ -70,7 +73,8 @@ if __name__ == '__main__':
         func = getattr(mod, d['func_name'])
 
         #results = _mpi_starmap(func, d['param_list'], *d['args'])
-        results = _mpi_starmap(partial(_wrapper, func), d['param_list'], *d['args'])
+        results = _mpi_starmap(partial(_wrapper, func), d['param_list'], *d['args'],
+                               path=paths_to_prepend)
 
         if d['output_filepath']:
             with gzip.GzipFile(d['output_filepath'], 'w') as f:
