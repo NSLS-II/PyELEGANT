@@ -821,6 +821,7 @@ def wait_for_completion(
     num_cores = float('nan')
     used_nodes = 'unknown'
     err_log = ''
+    err_found = False
     if err_log_check is not None:
         err_log_filename = f"{err_log_check['job_name']}.{job_ID_str}.err"
         prev_err_log_file_size = 0
@@ -937,7 +938,7 @@ def wait_for_completion(
 
     ret = dict(
         total=dt_total, running=dt_running, nodes=used_nodes, ncores=num_cores,
-        err_log=err_log)
+        err_log=err_log, err_found=err_found)
 
     return ret
 
@@ -1359,7 +1360,7 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
         job_ID_str, remote_opts.get('status_check_interval', 3.0),
         err_log_check=err_log_check)
 
-    if info['err_log'] == '':
+    if not info['err_found']:
         results = util.load_pgz_file(output_filepath)
     else:
         results = info['err_log']
