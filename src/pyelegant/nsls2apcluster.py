@@ -1425,8 +1425,12 @@ def srun_python_func(
         dill.dump(d, f, protocol=-1)
 
     main_script_path = __file__[:-3]+'_srun_py_func_script.py'
-    cmd = (f'srun -c 1 -J {job_name} -p {partition} {x11} {timelimit_str} '
+    cmd = (f'srun -c 2 -J {job_name} -p {partition} {x11} {timelimit_str} '
            f'{nodelist} {exclude} python {main_script_path} {input_filepath}')
+    #   # ^ Don't use "-c 1". If you do, it will still uses 2 cores, but runs
+    #       2 process of the same simultaneously (you can tell from the print
+    #       statements.) With "-c 2", there will be only one process but can
+    #       utilize 2 cores.
     p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
     out, err = p.communicate()
     print(out)
