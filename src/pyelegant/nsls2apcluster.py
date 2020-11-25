@@ -346,6 +346,13 @@ def extract_slurm_opts(remote_opts):
             else:
                 slurm_opts[k] = '--{}={:d}'.format(k, v)
 
+        elif k in ('cpus_per_task',):
+
+            if v is None:
+                slurm_opts[k] = ''
+            else:
+                slurm_opts[k] = '-c {:d}'.format(v)
+
         elif k in ('job_name', 'mail_user'):
 
             if v is None:
@@ -1404,6 +1411,11 @@ def srun_python_func(
 
     job_name = remote_opts.get('job_name', 'job')
     partition = remote_opts.get('partition', 'normal')
+    cpus_per_task = remote_opts.get('cpus_per_task', 2)
+    # ^ Don't use "-c 1". If you do, it will still uses 2 cores, but runs
+    # 2 process of the same simultaneously (you can tell from the print
+    # statements.) With "-c 2", there will be only one process but can
+    # utilize 2 cores.
     x11 = ('' if not remote_opts.get('x11', False) else 'export MPLBACKEND="agg"')
     spread_job = ('' if not remote_opts.get('spread_job', False) else '--spread-job')
     nodelist = ('' if 'nodelist' not in remote_opts
@@ -1425,12 +1437,8 @@ def srun_python_func(
         dill.dump(d, f, protocol=-1)
 
     main_script_path = __file__[:-3]+'_srun_py_func_script.py'
-    cmd = (f'srun -c 2 -J {job_name} -p {partition} {x11} {timelimit_str} '
+    cmd = (f'srun -c {cpus_per_task:d} -J {job_name} -p {partition} {x11} {timelimit_str} '
            f'{nodelist} {exclude} python {main_script_path} {input_filepath}')
-    #   # ^ Don't use "-c 1". If you do, it will still uses 2 cores, but runs
-    #       2 process of the same simultaneously (you can tell from the print
-    #       statements.) With "-c 2", there will be only one process but can
-    #       utilize 2 cores.
     p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
     out, err = p.communicate()
     print(out)
@@ -1747,3 +1755,119 @@ def bash_move(src, dst):
     if err:
         print('# stderr:')
         print(err)
+
+def starmap_async(remote_opts, module_name, func_name, func_args_iterable,
+                  paths_to_prepend=None, err_log_check=None):
+    """"""
+
+    if remote_opts is None:
+        remote_opts = deepcopy(DEFAULT_REMOTE_OPTS)
+
+    if 'abort_filepath' in remote_opts:
+        abort_info = dict(filepath=remote_opts['abort_filepath'],
+                          ref_timestamp=time.time())
+    else:
+        abort_info = None
+
+    slurm_opts = extract_slurm_opts(remote_opts)
+
+    if 'job_name' not in slurm_opts:
+        print('* Using `sbatch` requires "job_name" option to be specified. Using default.')
+        slurm_opts['job_name'] = '--job-name={}'.format(
+            DEFAULT_REMOTE_OPTS['job_name'])
+
+    # Make sure output/error log filenames conform to expectations
+    job_name = slurm_opts['job_name'].split('=')[-1]
+    slurm_opts['output'] = '--output={}.%J.out'.format(job_name)
+    slurm_opts['error'] = '--error={}.%J.err'.format(job_name)
+
+    job_info_list = []
+    for func_args in func_args_iterable:
+
+        d = dict(module_name=module_name, func_name=func_name,
+                 func_args=func_args, func_kwargs={})
+
+        tmp = tempfile.NamedTemporaryFile(dir=os.getcwd(), delete=False,
+                                          prefix='tmpInput_', suffix='.pgz')
+        input_filepath = os.path.abspath(tmp.name)
+        output_filepath = os.path.abspath(tmp.name.replace('tmpInput_', 'tmpOutput_'))
+        tmp.close()
+
+        d['output_filepath'] = output_filepath
+
+        with open(input_filepath, 'wb') as f:
+
+            if paths_to_prepend is None:
+                paths_to_prepend = []
+            dill.dump(paths_to_prepend, f, protocol=-1)
+
+            dill.dump(d, f, protocol=-1)
+
+        tmp = tempfile.NamedTemporaryFile(
+            dir=os.getcwd(), delete=False, prefix='tmpSbatch_', suffix='.sh')
+        sbatch_sh_filepath = os.path.abspath(tmp.name)
+
+        main_script_path = __file__[:-3]+'_srun_py_func_script.py'
+        srun_cmd = f'srun python {main_script_path} {input_filepath}'
+
+        write_sbatch_shell_file(
+            sbatch_sh_filepath, slurm_opts, srun_cmd, nMaxTry=10, sleep=10.0)
+
+        (job_ID_str, slurm_out_filepath, slurm_err_filepath, _
+         ) = _sbatch(sbatch_sh_filepath, job_name,
+                     exit_right_after_submission=True)
+
+        job_info = dict(
+            input_filepath=input_filepath, output_filepath=output_filepath,
+            sbatch_sh_filepath=sbatch_sh_filepath, job_ID_str=job_ID_str,
+            slurm_out_filepath=slurm_out_filepath,
+            slurm_err_filepath=slurm_err_filepath)
+        job_info_list.append(job_info)
+
+    status_check_interval = 5.0 #10.0
+
+    if err_log_check is None:
+        err_log_check = dict(
+            funcs=[check_unable_to_open_mode_w_File_exists],
+            job_name=job_name)
+    else:
+        err_log_check['job_name'] = job_name
+        err_log_check['funcs'] += [check_unable_to_open_mode_w_File_exists]
+
+    results_list = []
+    for job_d in job_info_list:
+
+        if (abort_info is not None) and util.is_file_updated(
+            abort_info['filepath'], abort_info['ref_timestamp']):
+            print('\n\n*** Immediate abort requested. Aborting now.')
+            raise RuntimeError('Abort requested.')
+
+        sbatch_info = wait_for_completion(
+            job_d['job_ID_str'], status_check_interval, err_log_check=err_log_check)
+
+        if not sbatch_info['err_found']:
+            results = util.load_pgz_file(job_d['output_filepath'])
+        else:
+            results = sbatch_info['err_log']
+            return results
+
+        results_list.append(results)
+
+        if not remote_opts.get('diag_mode', False):
+            if remote_opts.get('del_input_file', True):
+                try: os.remove(job_d['input_filepath'])
+                except: pass
+            if remote_opts.get('del_output_file', True):
+                try: os.remove(job_d['output_filepath'])
+                except: pass
+            if remote_opts.get('del_sub_sh_file', True):
+                try: os.remove(job_d['sbatch_sh_filepath'])
+                except: pass
+            if remote_opts.get('del_job_out_file', True):
+                try: os.remove(job_d['slurm_out_filepath'])
+                except: pass
+            if remote_opts.get('del_job_err_file', True):
+                try: os.remove(job_d['slurm_err_filepath'])
+                except: pass
+
+    return results_list
