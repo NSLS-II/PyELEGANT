@@ -361,18 +361,24 @@ def _calc_matrix_elem_linear_natural_chrom(twi_arrays, parameters_arrays):
 
         if K1 > -rhoinv_sqr:
             kx = np.sqrt(K1 + rhoinv_sqr)
-            dksi = (-1) * K1 / (16 * np.pi * bx0 * kx**3) * (
-                2 * kx * L * (ax0**2 + (bx0 * kx)**2 + 1)
-                - (ax0**2 - (bx0 * kx)**2 + 1) * np.sin(2 * kx * L)
-                - 4 * ax0 * bx0 * kx * (np.sin(kx * L)**2)
-            )
+            if kx != 0.0:
+                dksi = (-1) * K1 / (16 * np.pi * bx0 * kx**3) * (
+                    2 * kx * L * (ax0**2 + (bx0 * kx)**2 + 1)
+                    - (ax0**2 - (bx0 * kx)**2 + 1) * np.sin(2 * kx * L)
+                    - 4 * ax0 * bx0 * kx * (np.sin(kx * L)**2)
+                )
+            else:
+                dksi = 0.0
         else:
             kx = np.sqrt(-K1 - rhoinv_sqr)
-            dksi = (-1) * K1 / (16 * np.pi * bx0 * kx**3) * (
-                2 * kx * L * (-(ax0**2) + (bx0 * kx)**2 - 1)
-                + (ax0**2 + (bx0 * kx)**2 + 1) * np.sinh(2 * kx * L)
-                - 4 * ax0 * bx0 * kx * (np.sinh(kx * L)**2)
-            )
+            if kx != 0.0:
+                dksi = (-1) * K1 / (16 * np.pi * bx0 * kx**3) * (
+                    2 * kx * L * (-(ax0**2) + (bx0 * kx)**2 - 1)
+                    + (ax0**2 + (bx0 * kx)**2 + 1) * np.sinh(2 * kx * L)
+                    - 4 * ax0 * bx0 * kx * (np.sinh(kx * L)**2)
+                )
+            else:
+                dksi = 0.0
         output['nat_ksi_x'].append(dksi)
 
         if K1 < 0.0:
@@ -384,11 +390,14 @@ def _calc_matrix_elem_linear_natural_chrom(twi_arrays, parameters_arrays):
             )
         else:
             ky = np.sqrt(K1)
-            dksi = (+1) * K1 / (16 * np.pi * by0 * ky**3) * (
-                2 * ky * L * (-(ay0**2) + (by0 * ky)**2 - 1)
-                + (ay0**2 + (by0 * ky)**2 + 1) * np.sinh(2 * ky * L)
-                - 4 * ay0 * by0 * ky * (np.sinh(ky * L)**2)
-            )
+            if ky != 0.0:
+                dksi = (+1) * K1 / (16 * np.pi * by0 * ky**3) * (
+                    2 * ky * L * (-(ay0**2) + (by0 * ky)**2 - 1)
+                    + (ay0**2 + (by0 * ky)**2 + 1) * np.sinh(2 * ky * L)
+                    - 4 * ay0 * by0 * ky * (np.sinh(ky * L)**2)
+                )
+            else:
+                dksi = 0.0
         output['nat_ksi_y'].append(dksi)
 
     for k in ['nat_ksi_x', 'nat_ksi_y']:
