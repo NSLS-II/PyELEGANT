@@ -96,7 +96,7 @@ def tunes(
 def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
     ele_filepath=None, del_tmp_files=True,
     sextupoles=None, exclude=None, dnux_dp=0.0, dnuy_dp=0.0, n_iterations=5,
-    correction_fraction=0.9, tolerance=0.0,
+    correction_fraction=0.9, tolerance=0.0, max_abs_K2=None,
     run_local=True, remote_opts=None):
     """"""
 
@@ -125,7 +125,9 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
         sextupoles=used_sexts_str, exclude=exclude,
         dnux_dp=dnux_dp, dnuy_dp=dnuy_dp,
         n_iterations=n_iterations, correction_fraction=correction_fraction,
-        tolerance=tolerance, change_defined_values=True)
+        tolerance=tolerance, change_defined_values=True,
+        strength_limit=(0.0 if max_abs_K2 is None else max_abs_K2),
+        )
 
     ed.add_newline()
 
