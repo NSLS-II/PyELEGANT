@@ -271,7 +271,11 @@ def plot_closed_orbit(clo_columns: dict, clo_params: dict) -> None:
     plt.tight_layout()
 
 class ClosedOrbitCalculator:
-    """"""
+    """
+    If you observe too large closed orbit distortion (particularly horizontally)
+    without any orbit kicks even after "closed_orbit_accuracy" is reduced, it is
+    recommended to increase N_KICKS for CSBEND elements (e.g., 40).
+    """
 
     def __init__(
         self, LTE_filepath: str, E_MeV: float, fixed_length: bool = True,
