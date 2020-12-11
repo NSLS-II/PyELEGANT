@@ -3088,8 +3088,6 @@ def plot_chrom(
         deltas = d['deltas']
         nuxs = d['nuxs']
         nuys = d['nuys']
-        nuxs = smooth_nu_int_jump(nuxs, jump_thresh=0.5)
-        nuys = smooth_nu_int_jump(nuys, jump_thresh=0.5)
         if 'nux0' in d:
             nux0 = d['nux0']
             nuy0 = d['nuy0']
@@ -3099,9 +3097,17 @@ def plot_chrom(
             nux0_int = np.floor(nux0)
             nuy0_int = np.floor(nuy0)
 
+            on_mom_delta_index = np.argmin(np.abs(deltas))
+            _kwargs = dict(jump_thresh=0.5, ref_index=on_mom_delta_index)
+            nuxs = smooth_nu_int_jump(nuxs, **_kwargs)
+            nuys = smooth_nu_int_jump(nuys, **_kwargs)
+
             nuxs += nux0_int
             nuys += nuy0_int
-        else:
+        else: # This method may well not be so robust.
+            nuxs = smooth_nu_int_jump(nuxs, jump_thresh=0.5)
+            nuys = smooth_nu_int_jump(nuys, jump_thresh=0.5)
+
             nux0 = np.nanmedian(nuxs)
             nuy0 = np.nanmedian(nuys)
 
@@ -3123,8 +3129,6 @@ def plot_chrom(
         deltas = f['deltas'][()]
         nuxs = f['nuxs'][()]
         nuys = f['nuys'][()]
-        nuxs = smooth_nu_int_jump(nuxs, jump_thresh=0.5)
-        nuys = smooth_nu_int_jump(nuys, jump_thresh=0.5)
         if 'nux0' in f:
             nux0 = f['nux0'][()]
             nuy0 = f['nuy0'][()]
@@ -3134,9 +3138,17 @@ def plot_chrom(
             nux0_int = np.floor(nux0)
             nuy0_int = np.floor(nuy0)
 
+            on_mom_delta_index = np.argmin(np.abs(deltas))
+            _kwargs = dict(jump_thresh=0.5, ref_index=on_mom_delta_index)
+            nuxs = smooth_nu_int_jump(nuxs, **_kwargs)
+            nuys = smooth_nu_int_jump(nuys, **_kwargs)
+
             nuxs += nux0_int
             nuys += nuy0_int
-        else:
+        else: # This method may well not be so robust.
+            nuxs = smooth_nu_int_jump(nuxs, jump_thresh=0.5)
+            nuys = smooth_nu_int_jump(nuys, jump_thresh=0.5)
+
             nux0 = np.nanmedian(nuxs)
             nuy0 = np.nanmedian(nuys)
 
@@ -4244,7 +4256,7 @@ def _save_tswa_data(
     else:
         raise ValueError()
 
-def smooth_nu_int_jump(nu_array, jump_thresh=0.5):
+def smooth_nu_int_jump(nu_array, jump_thresh=0.5, ref_index=None):
     """"""
 
     assert jump_thresh > 0.0
@@ -4282,6 +4294,13 @@ def smooth_nu_int_jump(nu_array, jump_thresh=0.5):
     else:
         raise RuntimeError(
             'Max # of shifting exceeded. This should not happen. Check algorithm.')
+
+    if ref_index is not None:
+        ref_nu = nu_array[ref_index]
+        if ref_nu >= 0.0:
+            nu_array -= np.floor(ref_nu)
+        else:
+            nu_array -= np.ceil(ref_nu)
 
     return nu_array
 
@@ -4352,9 +4371,6 @@ def plot_tswa(
             fft_d = None
         f.close()
 
-    nuxs = smooth_nu_int_jump(nuxs, jump_thresh=0.5)
-    nuys = smooth_nu_int_jump(nuys, jump_thresh=0.5)
-
     if use_time_domain_amplitude:
         Axs = time_domain_Axs
         Ays = time_domain_Ays
@@ -4362,35 +4378,54 @@ def plot_tswa(
     nux0_int = np.floor(nux0)
     nuy0_int = np.floor(nuy0)
 
-    nuxs += nux0_int
-    nuys += nuy0_int
+    if False:
+        nuxs = smooth_nu_int_jump(nuxs, jump_thresh=0.5)
+        nuys = smooth_nu_int_jump(nuys, jump_thresh=0.5)
 
-    if scan_plane == 'x':
-        v0s = x0s
-    elif scan_plane == 'y':
-        v0s = y0s
+        nuxs += nux0_int
+        nuys += nuy0_int
+
+        if scan_plane == 'x':
+            v0s = x0s
+        elif scan_plane == 'y':
+            v0s = y0s
+        else:
+            raise ValueError
+        # Correct nuxs if smoothing shifted from nux0 by ~1
+        for i in np.argsort(np.abs(v0s)):
+            if np.isnan(nuxs[i]):
+                continue
+            else:
+                if nuxs[i] > nux0 + 0.5:
+                    nuxs -= 1
+                elif nuxs[i] < nux0 - 0.5:
+                    nuxs += 1
+                break
+        # Correct nuys if smoothing shifted from nuy0 by ~1
+        for i in np.argsort(np.abs(v0s)):
+            if np.isnan(nuys[i]):
+                continue
+            else:
+                if nuys[i] > nuy0 + 0.5:
+                    nuys -= 1
+                elif nuys[i] < nuy0 - 0.5:
+                    nuys += 1
+                break
     else:
-        raise ValueError
-    # Correct nuxs if smoothing shifted from nux0 by ~1
-    for i in np.argsort(np.abs(v0s)):
-        if np.isnan(nuxs[i]):
-            continue
+        if scan_plane == 'x':
+            v0s = x0s
+        elif scan_plane == 'y':
+            v0s = y0s
         else:
-            if nuxs[i] > nux0 + 0.5:
-                nuxs -= 1
-            elif nuxs[i] < nux0 - 0.5:
-                nuxs += 1
-            break
-    # Correct nuys if smoothing shifted from nuy0 by ~1
-    for i in np.argsort(np.abs(v0s)):
-        if np.isnan(nuys[i]):
-            continue
-        else:
-            if nuys[i] > nuy0 + 0.5:
-                nuys -= 1
-            elif nuys[i] < nuy0 - 0.5:
-                nuys += 1
-            break
+            raise ValueError
+
+        on_axis_index = np.argmin(np.abs(v0s))
+        _kwargs = dict(jump_thresh=0.5, ref_index=on_axis_index)
+        nuxs = smooth_nu_int_jump(nuxs, **_kwargs)
+        nuys = smooth_nu_int_jump(nuys, **_kwargs)
+
+        nuxs += nux0_int
+        nuys += nuy0_int
 
     twoJxs = Axs**2 / betax
     twoJys = Ays**2 / betay
@@ -5020,10 +5055,6 @@ def plot_tswa_both_sides(
     else:
         raise ValueError
 
-    for side in ['+', '-']:
-        nuxs[side] = smooth_nu_int_jump(nuxs[side], jump_thresh=0.5)
-        nuys[side] = smooth_nu_int_jump(nuys[side], jump_thresh=0.5)
-
     if use_time_domain_amplitude:
         Axs = time_domain_Axs
         Ays = time_domain_Ays
@@ -5085,35 +5116,54 @@ def plot_tswa_both_sides(
 
         ret[side] = {}
 
-        nuxs[side] += nux0_int
-        nuys[side] += nuy0_int
+        if False:
+            nuxs[side] = smooth_nu_int_jump(nuxs[side], jump_thresh=0.5)
+            nuys[side] = smooth_nu_int_jump(nuys[side], jump_thresh=0.5)
 
-        if scan_plane == 'x':
-            v0s = x0s[side]
-        elif scan_plane == 'y':
-            v0s = y0s[side]
+            nuxs[side] += nux0_int
+            nuys[side] += nuy0_int
+
+            if scan_plane == 'x':
+                v0s = x0s[side]
+            elif scan_plane == 'y':
+                v0s = y0s[side]
+            else:
+                raise ValueError
+            # Correct nuxs if smoothing shifted from nux0 by ~1
+            for i in np.argsort(np.abs(v0s)):
+                if np.isnan(nuxs[side][i]):
+                    continue
+                else:
+                    if nuxs[side][i] > nux0 + 0.5:
+                        nuxs[side] -= 1
+                    elif nuxs[side][i] < nux0 - 0.5:
+                        nuxs[side] += 1
+                    break
+            # Correct nuys if smoothing shifted from nuy0 by ~1
+            for i in np.argsort(np.abs(v0s)):
+                if np.isnan(nuys[side][i]):
+                    continue
+                else:
+                    if nuys[side][i] > nuy0 + 0.5:
+                        nuys[side] -= 1
+                    elif nuys[side][i] < nuy0 - 0.5:
+                        nuys[side] += 1
+                    break
         else:
-            raise ValueError
-        # Correct nuxs if smoothing shifted from nux0 by ~1
-        for i in np.argsort(np.abs(v0s)):
-            if np.isnan(nuxs[side][i]):
-                continue
+            if scan_plane == 'x':
+                v0s = x0s[side]
+            elif scan_plane == 'y':
+                v0s = y0s[side]
             else:
-                if nuxs[side][i] > nux0 + 0.5:
-                    nuxs[side] -= 1
-                elif nuxs[side][i] < nux0 - 0.5:
-                    nuxs[side] += 1
-                break
-        # Correct nuys if smoothing shifted from nuy0 by ~1
-        for i in np.argsort(np.abs(v0s)):
-            if np.isnan(nuys[side][i]):
-                continue
-            else:
-                if nuys[side][i] > nuy0 + 0.5:
-                    nuys[side] -= 1
-                elif nuys[side][i] < nuy0 - 0.5:
-                    nuys[side] += 1
-                break
+                raise ValueError
+
+            on_axis_index = np.argmin(np.abs(v0s))
+            _kwargs = dict(jump_thresh=0.5, ref_index=on_axis_index)
+            nuxs[side] = smooth_nu_int_jump(nuxs[side], **_kwargs)
+            nuys[side] = smooth_nu_int_jump(nuys[side], **_kwargs)
+
+            nuxs[side] += nux0_int
+            nuys[side] += nuy0_int
 
         # Find xy0s at which tunes cross integer/half-integer resonance
         if upper_res_xing_nu != {}:
