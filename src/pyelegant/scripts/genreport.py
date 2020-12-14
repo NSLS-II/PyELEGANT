@@ -2279,6 +2279,9 @@ class Report_NSLS2U_Default:
 
                         doc.append(plx.ClearPage())
 
+                    if 'plot_opts' not in self.conf['lifetime']:
+                        return
+
                     plot_meta_filepath = os.path.join(self.report_folderpath,
                                                       'lifetime_plots.pgz')
 

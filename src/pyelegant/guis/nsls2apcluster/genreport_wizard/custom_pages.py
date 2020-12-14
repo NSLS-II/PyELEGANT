@@ -4845,6 +4845,9 @@ class PageRfTau(PageGenReport):
                 for _k, _v in self.tau_special_data['loss_plots_set'].items():
                     loss_plots_indexes[_k].clear()
                     loss_plots_indexes[_k].extend(_v)
+            else:
+                if 'plot_opts' in lifetime:
+                    del lifetime['plot_opts']
 
         else:
             if 'lifetime' in mod_conf:
