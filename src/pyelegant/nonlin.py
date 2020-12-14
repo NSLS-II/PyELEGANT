@@ -5905,6 +5905,8 @@ def track(
         run(ele_filepath, print_cmd=print_cmd,
             print_stdout=std_print_enabled['out'],
             print_stderr=std_print_enabled['err'])
+
+        sbatch_info = None
     else:
 
         if remote_opts is None:
