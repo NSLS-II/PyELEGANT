@@ -625,13 +625,15 @@ def _sbatch(sbatch_sh_filepath, job_name, exit_right_after_submission=False,
 
         status_check_interval = 5.0 #10.0
 
+        _min_err_log_check = _get_min_err_log_check()
         if err_log_check is None:
-            err_log_check = dict(
-                funcs=[check_unable_to_open_mode_w_File_exists],
-                job_name=job_name)
+            err_log_check = _min_err_log_check
         else:
-            err_log_check['job_name'] = job_name
-            err_log_check['funcs'] += [check_unable_to_open_mode_w_File_exists]
+            for _func in _min_err_log_check['funcs']:
+                if _func not in err_log_check['funcs']:
+                    err_log_check['funcs'].append(_func)
+
+        err_log_check['job_name'] = job_name
 
         sbatch_info = wait_for_completion(
             job_ID_str, status_check_interval, err_log_check=err_log_check)
@@ -804,6 +806,26 @@ def check_unable_to_open_mode_w_File_exists(err_log_contents):
 
     return abort
 
+def check_remote_err_log_exit_code(err_log_contents):
+    """"""
+
+    m = re.findall('srun: error:.+Exited with exit code', err_log_contents)
+
+    if len(m) != 0:
+        abort = True
+        print('\n##### Error #####')
+        print(err_log_contents)
+    else:
+        abort = False
+
+    return abort
+
+def _get_min_err_log_check():
+    """"""
+
+    return dict(funcs=[check_unable_to_open_mode_w_File_exists,
+                       check_remote_err_log_exit_code])
+
 def wait_for_completion(
     job_ID_str, status_check_interval, timelimit_action=None,
     out_log_check=None, err_log_check=None):
@@ -923,6 +945,7 @@ def wait_for_completion(
                                   stdout=PIPE, stderr=PIPE, encoding='utf-8')
                         out, err = p.communicate()
                         if err:
+                            print(f'Tried cancelling Job {job_ID_str}')
                             print(f'\n*** stderr: command: {cmd}')
                             print(err)
 
@@ -1360,8 +1383,15 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
 
     job_ID_str = out.replace('Submitted batch job', '').strip()
 
-    if err_log_check is not None:
-        err_log_check['job_name'] = job_name
+    _min_err_log_check = _get_min_err_log_check()
+    if err_log_check is None:
+        err_log_check = _min_err_log_check
+    else:
+        for _func in _min_err_log_check['funcs']:
+            if _func not in err_log_check['funcs']:
+                err_log_check['funcs'].append(_func)
+
+    err_log_check['job_name'] = job_name
 
     info = wait_for_completion(
         job_ID_str, remote_opts.get('status_check_interval', 3.0),
@@ -1826,13 +1856,15 @@ def starmap_async(remote_opts, module_name, func_name, func_args_iterable,
 
     status_check_interval = 5.0 #10.0
 
+    _min_err_log_check = _get_min_err_log_check()
     if err_log_check is None:
-        err_log_check = dict(
-            funcs=[check_unable_to_open_mode_w_File_exists],
-            job_name=job_name)
+        err_log_check = _min_err_log_check
     else:
-        err_log_check['job_name'] = job_name
-        err_log_check['funcs'] += [check_unable_to_open_mode_w_File_exists]
+        for _func in _min_err_log_check['funcs']:
+            if _func not in err_log_check['funcs']:
+                err_log_check['funcs'].append(_func)
+
+    err_log_check['job_name'] = job_name
 
     results_list = []
     for job_d in job_info_list:
