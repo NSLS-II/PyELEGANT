@@ -1871,3 +1871,21 @@ def starmap_async(remote_opts, module_name, func_name, func_args_iterable,
                 except: pass
 
     return results_list
+
+def sendRunCompleteMail(subject, content):
+    """"""
+
+    import getpass
+    import smtplib
+    from email.message import EmailMessage
+
+    username = getpass.getuser()
+
+    s = smtplib.SMTP('localhost')
+    msg = EmailMessage()
+    msg['From'] = f'{username}@{s.local_hostname}'
+    msg['To'] = f'{username}@bnl.gov'
+    msg['Subject'] = subject
+    msg.set_content(content)
+    s.send_message(msg)
+    s.quit()
