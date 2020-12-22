@@ -1326,7 +1326,8 @@ proc UpdateJobsRunning {} {
         f.write(contents)
 
 def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
-                   paths_to_prepend=None, err_log_check=None):
+                   paths_to_prepend=None, err_log_check=None,
+                   ret_slurm_info=False):
     """
     Example:
         module_name = 'pyelegant.nonlin'
@@ -1418,7 +1419,10 @@ def run_mpi_python(remote_opts, module_name, func_name, param_list, args,
         try: os.remove(f'{job_name}.{job_ID_str}.err')
         except: pass
 
-    return results
+    if not ret_slurm_info:
+        return results
+    else:
+        return results, info
 
 def srun_python_func(
     remote_opts, module_name, func_name, func_args, func_kwargs, paths_to_prepend=None):
