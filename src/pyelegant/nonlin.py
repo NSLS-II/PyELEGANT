@@ -192,6 +192,8 @@ def _calc_cmap(
         run(ele_filepath, print_cmd=False,
             print_stdout=std_print_enabled['out'],
             print_stderr=std_print_enabled['err'])
+
+        sbatch_info = None
     else:
         if remote_opts is None:
             remote_opts = dict(
@@ -199,30 +201,8 @@ def _calc_cmap(
                 output='cmap.%J.out', error='cmap.%J.err',
                 partition='normal', ntasks=50)
 
-        iRemoteTry = 0
-        while True:
-            sbatch_info = remote.run(
-                remote_opts, ele_filepath, print_cmd=True,
-                print_stdout=std_print_enabled['out'],
-                print_stderr=std_print_enabled['err'],
-                output_filepaths=None, err_log_check=err_log_check)
-
-            if (err_log_check is not None) and (sbatch_info is not None) and \
-               (sbatch_info.get('err_log', '') != ''):
-
-                err_log_text = sbatch_info['err_log']
-                print('\n** Error Log check found the following problem:')
-                print(err_log_text)
-
-                iRemoteTry += 1
-
-                if iRemoteTry >= nMaxRemoteRetry:
-                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
-                else:
-                    print('\n** Re-trying the remote run...\n')
-                    sys.stdout.flush()
-            else:
-                break
+        sbatch_info = _relaunchable_remote_run(
+            remote_opts, ele_filepath, err_log_check, nMaxRemoteRetry)
 
     tmp_filepaths = dict(cmap=cmap_output_filepath)
     output, meta = {}, {}
@@ -628,6 +608,8 @@ def _calc_fma(
         run(ele_filepath, print_cmd=False,
             print_stdout=std_print_enabled['out'],
             print_stderr=std_print_enabled['err'])
+
+        sbatch_info = None
     else:
         if remote_opts is None:
             remote_opts = dict(
@@ -635,30 +617,8 @@ def _calc_fma(
                 output='fma.%J.out', error='fma.%J.err',
                 partition='normal', ntasks=50)
 
-        iRemoteTry = 0
-        while True:
-            sbatch_info = remote.run(
-                remote_opts, ele_filepath, print_cmd=True,
-                print_stdout=std_print_enabled['out'],
-                print_stderr=std_print_enabled['err'],
-                output_filepaths=None, err_log_check=err_log_check)
-
-            if (err_log_check is not None) and (sbatch_info is not None) and \
-               (sbatch_info.get('err_log', '') != ''):
-
-                err_log_text = sbatch_info['err_log']
-                print('\n** Error Log check found the following problem:')
-                print(err_log_text)
-
-                iRemoteTry += 1
-
-                if iRemoteTry >= nMaxRemoteRetry:
-                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
-                else:
-                    print('\n** Re-trying the remote run...\n')
-                    sys.stdout.flush()
-            else:
-                break
+        sbatch_info = _relaunchable_remote_run(
+            remote_opts, ele_filepath, err_log_check, nMaxRemoteRetry)
 
     tmp_filepaths = dict(fma=fma_output_filepath)
     output, meta = {}, {}
@@ -1007,6 +967,8 @@ def calc_find_aper_nlines(
         run(ele_filepath, print_cmd=False,
             print_stdout=std_print_enabled['out'],
             print_stderr=std_print_enabled['err'])
+
+        sbatch_info = None
     else:
         if remote_opts is None:
             remote_opts = dict(
@@ -1014,30 +976,8 @@ def calc_find_aper_nlines(
                 output='findaper.%J.out', error='findaper.%J.err',
                 partition='normal', ntasks=np.min([50, n_lines]))
 
-        iRemoteTry = 0
-        while True:
-            sbatch_info = remote.run(
-                remote_opts, ele_filepath, print_cmd=True,
-                print_stdout=std_print_enabled['out'],
-                print_stderr=std_print_enabled['err'],
-                output_filepaths=None, err_log_check=err_log_check)
-
-            if (err_log_check is not None) and (sbatch_info is not None) and \
-               (sbatch_info.get('err_log', '') != ''):
-
-                err_log_text = sbatch_info['err_log']
-                print('\n** Error Log check found the following problem:')
-                print(err_log_text)
-
-                iRemoteTry += 1
-
-                if iRemoteTry >= nMaxRemoteRetry:
-                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
-                else:
-                    print('\n** Re-trying the remote run...\n')
-                    sys.stdout.flush()
-            else:
-                break
+        sbatch_info = _relaunchable_remote_run(
+            remote_opts, ele_filepath, err_log_check, nMaxRemoteRetry)
 
     tmp_filepaths = dict(aper=aper_output_filepath)
     output, meta = {}, {}
@@ -1548,6 +1488,8 @@ def calc_mom_aper(
         run(ele_filepath, print_cmd=False,
             print_stdout=std_print_enabled['out'],
             print_stderr=std_print_enabled['err'])
+
+        sbatch_info = None
     else:
         if remote_opts is None:
             remote_opts = dict(
@@ -1555,30 +1497,8 @@ def calc_mom_aper(
                 output='momaper.%J.out', error='momaper.%J.err',
                 partition='normal', ntasks=50)
 
-        iRemoteTry = 0
-        while True:
-            sbatch_info = remote.run(
-                remote_opts, ele_filepath, print_cmd=True,
-                print_stdout=std_print_enabled['out'],
-                print_stderr=std_print_enabled['err'],
-                output_filepaths=None, err_log_check=err_log_check)
-
-            if (err_log_check is not None) and (sbatch_info is not None) and \
-               (sbatch_info.get('err_log', '') != ''):
-
-                err_log_text = sbatch_info['err_log']
-                print('\n** Error Log check found the following problem:')
-                print(err_log_text)
-
-                iRemoteTry += 1
-
-                if iRemoteTry >= nMaxRemoteRetry:
-                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
-                else:
-                    print('\n** Re-trying the remote run...\n')
-                    sys.stdout.flush()
-            else:
-                break
+        sbatch_info = _relaunchable_remote_run(
+            remote_opts, ele_filepath, err_log_check, nMaxRemoteRetry)
 
     tmp_filepaths = dict(mmap=mmap_output_filepath)
     output, meta = {}, {}
@@ -5922,30 +5842,8 @@ def track(
         # ^ If this is more than 1, you will likely see an error like "Unable to
         #   access file /.../tmp*.twi--file is locked (SDDS_InitializeOutput)"
 
-        iRemoteTry = 0
-        while True:
-            sbatch_info = remote.run(
-                remote_opts, ele_filepath, print_cmd=print_cmd,
-                print_stdout=std_print_enabled['out'],
-                print_stderr=std_print_enabled['err'],
-                output_filepaths=None, err_log_check=err_log_check)
-
-            if (err_log_check is not None) and (sbatch_info is not None) and \
-               (sbatch_info.get('err_log', '') != ''):
-
-                err_log_text = sbatch_info['err_log']
-                print('\n** Error Log check found the following problem:')
-                print(err_log_text)
-
-                iRemoteTry += 1
-
-                if iRemoteTry >= nMaxRemoteRetry:
-                    raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
-                else:
-                    print('\n** Re-trying the remote run...\n')
-                    sys.stdout.flush()
-            else:
-                break
+        sbatch_info = _relaunchable_remote_run(
+            remote_opts, ele_filepath, err_log_check, nMaxRemoteRetry)
     #
     output, _ = sdds.sdds2dicts(watch_pathobj)
     #
@@ -6191,3 +6089,33 @@ def calc_offmom_closed_orbits(
                     print(f'Failed to delete "{fp}"')
 
     return output_filepath
+
+def _relaunchable_remote_run(remote_opts, ele_filepath, err_log_check, nMaxRemoteRetry):
+    """"""
+
+    iRemoteTry = 0
+    while True:
+        sbatch_info = remote.run(
+            remote_opts, ele_filepath, print_cmd=True,
+            print_stdout=std_print_enabled['out'],
+            print_stderr=std_print_enabled['err'],
+            output_filepaths=None, err_log_check=err_log_check)
+
+        if (err_log_check is not None) and (sbatch_info is not None) and \
+           sbatch_info['err_found']:
+
+            err_log_text = sbatch_info['err_log']
+            print('\n** Error Log check found the following problem:')
+            print(err_log_text)
+
+            iRemoteTry += 1
+
+            if iRemoteTry >= nMaxRemoteRetry:
+                raise RuntimeError('Max number of remote tries exceeded. Check the error logs.')
+            else:
+                print('\n** Re-trying the remote run...\n')
+                sys.stdout.flush()
+        else:
+            break
+
+    return sbatch_info
