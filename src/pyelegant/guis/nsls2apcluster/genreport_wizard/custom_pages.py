@@ -32,6 +32,16 @@ from pyelegant.scripts import genreport
 
 TEST_MODE = False
 
+def _strip_unquote(s):
+    """"""
+
+    s = s.strip()
+
+    if s.startswith('"') and s.endswith('"'):
+        return s[1:-1]
+    else:
+        return s
+
 def _check_if_yaml_writable(yaml_object):
     """"""
 
@@ -2781,10 +2791,10 @@ class PageStraightDrifts(PageStandard):
             length = self.conf['lattice_props']['req_props']['length']
             self.setField(
                 'edit_half_LS_drifts',
-                ', '.join([s.strip() for s in length['LS']['name_list']]))
+                ', '.join([_strip_unquote(s) for s in length['LS']['name_list']]))
             self.setField(
                 'edit_half_SS_drifts',
-                ', '.join([s.strip() for s in length['SS']['name_list']]))
+                ', '.join([_strip_unquote(s) for s in length['SS']['name_list']]))
         except:
             if TEST_MODE:
                 self.setField('edit_half_LS_drifts', 'DH5')
@@ -2842,10 +2852,18 @@ class PageStraightDrifts(PageStandard):
         d = mod_conf['lattice_props']['req_props']
         f = partial(update_aliased_scalar, mod_conf)
         #
-        f(d['length']['LS'], 'name_list', half_LS_drift_name_list)
+        f(d['length']['LS'], 'name_list', [name if ':' not in name
+                                           else f'"{name}"'
+                                           for name in half_LS_drift_name_list])
+        # ^ Need to add quotes to avoid YAML parsing error for those elements
+        #   whose names contain ":".
         f(d['length']['LS'], 'multiplier', 2.0)
         #
-        f(d['length']['SS'], 'name_list', half_SS_drift_name_list)
+        f(d['length']['SS'], 'name_list', [name if ':' not in name
+                                           else f'"{name}"'
+                                           for name in half_SS_drift_name_list])
+        # ^ Need to add quotes to avoid YAML parsing error for those elements
+        #   whose names contain ":".
         f(d['length']['SS'], 'multiplier', 2.0)
 
         #_check_if_yaml_writable(mod_conf)

@@ -659,9 +659,9 @@ class Report_NSLS2U_Default:
         folded_list = []
         for iLine in range(nLinesInFold):
             indexes = [i * nLinesInFold + iLine for i in range(nFolds)]
-            line = ': # :'.join([
+            line = '! # !'.join([
                 flat_elem_s_name_type_list[i] if i < nLines
-                else ':'.join([' '] * 3) for i in indexes])
+                else '!'.join([' '] * 3) for i in indexes])
             # ^ Add "#" to denote empty column
             folded_list.append(line)
 
@@ -704,7 +704,7 @@ class Report_NSLS2U_Default:
                 table.end_table_last_footer()
 
                 for line in folded_list:
-                    table.add_row([_s.strip().replace('#', '') for _s in line.split(':')])
+                    table.add_row([_s.strip().replace('#', '') for _s in line.split('!')])
 
     def add_pdf_lattice_props(self, twiss_plot_captions):
         """"""
@@ -5574,7 +5574,8 @@ class Report_NSLS2U_Default:
             elem_name = elem_name.upper()
             elem_type = elem_type.upper()
 
-            if elem_type in ('CSBEND', 'RBEN', 'SBEN', 'RBEND', 'SBEND'):
+            if elem_type in ('CSBEND', 'RBEN', 'SBEN', 'RBEND', 'SBEND',
+                             'CCBEND'):
                 props = {}
                 for k in ['L', 'ANGLE', 'E1', 'E2', 'K1']:
                     temp = ed.get_LTE_elem_prop(elem_name, k)
@@ -5626,11 +5627,11 @@ class Report_NSLS2U_Default:
         widths['ElementType'] = np.max([len(name) for name in res['flr']['columns']['ElementType']])
         for k, v in widths.items():
             widths[k] = max([v, len(titles[k])])
-        header_template = (f'{{:>{widths["s"]}}} : '
-                           f'{{:{widths["ElementName"]}}} : '
+        header_template = (f'{{:>{widths["s"]}}} ! '
+                           f'{{:{widths["ElementName"]}}} ! '
                            f'{{:{widths["ElementType"]}}}')
-        value_template = (f'{{:>{widths["s"]}.{s_decimal:d}f}} : '
-                          f'{{:{widths["ElementName"]}}} : '
+        value_template = (f'{{:>{widths["s"]}.{s_decimal:d}f}} ! '
+                          f'{{:{widths["ElementName"]}}} ! '
                           f'{{:{widths["ElementType"]}}}')
         header = header_template.format(
             titles['s'], titles['ElementName'], titles['ElementType'])
@@ -5686,6 +5687,9 @@ class Report_NSLS2U_Default:
         for k2 in ['LS', 'SS']:
             elem_d = req_conf['length'][k2]
             elem_name_list = [name.upper() for name in elem_d['name_list']]
+            elem_name_list = [
+                name[1:-1] if name.startswith('"') and name.endswith('"')
+                else name for name in elem_name_list]
             first_inds = np.where(res['flr']['columns']['ElementName']
                                   == elem_name_list[0])[0]
             for fi in first_inds:
@@ -7364,7 +7368,7 @@ class Report_NSLS2U_Default:
         # an integer or slightly below an integer.
         if ring_flat_elem_names is None:
             elem_names = [
-                line.split(':')[1].strip() for line in
+                line.split('!')[1].strip() for line in
                 self.lin_data['flat_elem_s_name_type_list'][2:]] # exclude header lines
         else:
             elem_names = ring_flat_elem_names
