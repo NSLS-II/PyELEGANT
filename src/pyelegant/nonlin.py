@@ -1117,10 +1117,27 @@ def calc_rf_bucket_heights(E_GeV, alphac, U0_eV, h, rf_volts):
     gamma = 1.0 + E_GeV * 1e9 / m_e_eV
     gamma_t = 1.0 / np.sqrt(alphac)
     slip_fac = 1.0 / (gamma_t**2) - 1.0 / (gamma**2) # approx. equal to "mom_compac"
-    q = rf_volts / U0_eV # overvoltage factor
-    F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
-    rf_bucket_heights_percents = 1e2 * np.sqrt(
-        U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
+    try:
+        len(rf_volts)
+
+        # When "rf_volts" is a vector
+
+        rf_bucket_heights_percents = np.zeros_like(rf_volts)
+
+        valid = np.array(rf_volts) > U0_eV
+        q = rf_volts[valid] / U0_eV # overvoltage factor
+        F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
+        rf_bucket_heights_percents[valid] = 1e2 * np.sqrt(
+            U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
+
+    except TypeError: # When "rf_volts" is a scalar
+        if rf_volts > U0_eV:
+            q = rf_volts / U0_eV # overvoltage factor
+            F_q = 2.0 * (np.sqrt(q**2 - 1) - np.arccos(1.0 / q))
+            rf_bucket_heights_percents = 1e2 * np.sqrt(
+                U0_eV / (np.pi * np.abs(slip_fac) * h * (E_GeV * 1e9)) * F_q)
+        else:
+            rf_bucket_heights_percents = 0.0
 
     return rf_bucket_heights_percents
 
