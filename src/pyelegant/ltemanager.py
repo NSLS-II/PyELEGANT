@@ -16,7 +16,7 @@ class Lattice():
 
         self.handled_element_types = [
             'DRIF','EDRIFT','RFCA',
-            'CSBEND', 'CSBEN', 'SBEN','SBEND',
+            'CSBEND', 'CSBEN', 'SBEN','SBEND', 'CCBEND',
             'KQUAD', 'QUAD',
             'KSEXT', 'SEXT',
             'KOCT', 'OCTU',
@@ -136,7 +136,9 @@ class Lattice():
         "LTE_text" must not contain comments and ampersands.
         """
 
-        matches = re.findall('\s+"?([\w\$]+)"?[ \t]*:[ \t]*(\w+)[ \t]*,?(.*)',
+        #matches = re.findall('\s+"?([\w\$]+)"?[ \t]*:[ \t]*(\w+)[ \t]*,?(.*)',
+                             #' '+LTE_text)
+        matches = re.findall('\s+"?([\w\$:\.]+)"?[ \t]*:[ \t]*(\w+)[ \t]*,?(.*)',
                              ' '+LTE_text)
         # ^ Need to add the initial whitespace to pick up the first occurrence
 
@@ -151,14 +153,18 @@ class Lattice():
         "LTE_text" must not contain comments and ampersands.
         """
 
+        #matches = re.findall(
+            #'\s+("?[\w\$:\.]+"?)[ \t]*:[ \t]*("?\w+"?)[ \t]*,?(.*)', LTE_text)
         matches = re.findall(
-            '\s+("?[\w\$]+"?)[ \t]*:[ \t]*("?\w+"?)[ \t]*,?(.*)', LTE_text)
+            '\s+"?([\w\$:\.]+)"?[ \t]*:[ \t]*"?([\w\$:\.]+)"?[ \t]*,?(.*)', LTE_text)
 
         beamline_def = []
         for (name, type_name, rest) in matches:
             if type_name.upper() == 'LINE':
                 rest = rest.strip().replace('=','').replace('(','').replace(')','')
                 name_list = [s.strip().upper() for s in rest.split(',') if s.strip() != '']
+                name_list = [s[1:-1] if s.startswith('"') and s.endswith('"')
+                             else s for s in name_list]
                 if name[0] == '"' or name[-1] == '"':
                     assert name[0] == name[-1] == '"'
                     name = name[1:-1]
@@ -311,6 +317,15 @@ class Lattice():
 
             used_beamline_defs_w_mults.append(
                 (defined_BL_name, sep_name_multiplier_list))
+
+        # Re-order used beamline definitions in the order of appearance in the LTE file
+        # (Otherwise, when writing to a new LTE, parsing by ELEGANT may fail.)
+        _beamline_names_w_mults = [v[0] for v in used_beamline_defs_w_mults]
+        used_beamline_defs_w_mults = [
+            used_beamline_defs_w_mults[_beamline_names_w_mults.index(beamline_name)]
+            for beamline_name in all_beamline_names
+            if beamline_name in actually_used_beamline_names
+        ]
 
         return dict(used_beamline_name=used_beamline_name,
                     beamline_defs=used_beamline_defs_w_mults,
@@ -639,8 +654,10 @@ class Lattice():
 
         lines = []
 
-        #for elem_name, elem_type, prop_str in d['elem_defs']:
         for elem_name, elem_type, prop_str in elem_defs:
+            if ':' in elem_name: # Must enclose element name with double quotes
+                # if the name contains ":".
+                elem_name = f'"{elem_name}"'
             def_line = f'{elem_name}: {elem_type}'
             if prop_str != '':
                 def_line += f', {prop_str}'
@@ -648,7 +665,6 @@ class Lattice():
 
         lines.append(' ')
 
-        #for beamline_name, bdef in d['beamline_defs']:
         for beamline_name, bdef in beamline_defs:
             def_parts = []
             for name, multiplier in bdef:
@@ -660,6 +676,10 @@ class Lattice():
                     def_parts.append(f'{multiplier:d}*{name}')
 
             def_line = ', '.join(def_parts)
+
+            if ':' in beamline_name: # Must enclose beamline name with double
+                # quotes if the name contains ":".
+                beamline_name = f'"{beamline_name}"'
 
             lines.append(
                 Lattice.get_wrapped_line(f'{beamline_name}: LINE=({def_line})'))
