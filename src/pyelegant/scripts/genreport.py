@@ -7232,11 +7232,26 @@ class Report_NSLS2U_Default:
             rf_cavity_on = rf_cavity_opts.get('on', True) # "True" >= v1.3
 
         if rf_cavity_on:
-            if 'rf_bucket_percent' in rf_cavity_opts:
+            if 'rf_volt' in rf_cavity_opts:
 
+                if 'rf_bucket_percent' in rf_cavity_opts:
+                    print(('\nWARNING: "rf_bucket_percent" will be '
+                           'ignored as "rf_volt" is specified.'))
                 if 'auto_voltage_from_nonlin_chrom' in rf_cavity_opts:
                     print(('\nWARNING: "auto_voltage_from_nonlin_chrom" will be '
-                           'ignored as "rf_bucket_percent" is specified.\n'))
+                           'ignored as "rf_volt" is specified.'))
+
+                rf_volt = rf_cavity_opts['rf_volt']
+                rf_bucket_percent = overvoltage_factor = None
+
+            elif 'rf_bucket_percent' in rf_cavity_opts:
+
+                if 'rf_volt' in rf_cavity_opts:
+                    print(('\nWARNING: "rf_volt" will be '
+                           'ignored as "rf_bucket_percent" is specified.'))
+                if 'auto_voltage_from_nonlin_chrom' in rf_cavity_opts:
+                    print(('\nWARNING: "auto_voltage_from_nonlin_chrom" will be '
+                           'ignored as "rf_bucket_percent" is specified.'))
 
                 rf_bucket_percent = rf_cavity_opts['rf_bucket_percent']
                 overvoltage_factor = rf_volt = None
@@ -7294,17 +7309,20 @@ class Report_NSLS2U_Default:
             else:
                 raise ValueError(
                     ('When "nonlin/calc_opts/mom_aper/rf_cavity/on" is set to True,\n'
-                     'you must specify either "rf_bucket_percent" or "auto_voltage_from_nonlin_chrom"\n'
+                     'you must specify either "rf_volt", "rf_bucket_percent" or "auto_voltage_from_nonlin_chrom"\n'
                      'in "nonlin/calc_opts/mom_aper/rf_cavity"'))
 
             # Check whether "n_turns" is at least one synchrotron oscillation
             # (Only perform this for "production", not for "test")
             if opt_name == 'production':
-                _rf_volt = pe.nonlin.calc_ring_rf_params(
-                    h, self.lin_data['circumf'], self.lin_data['U0_MeV'] * 1e6,
-                    rf_bucket_percent=rf_bucket_percent,
-                    E_GeV=E_MeV_default / 1e3, alphac=self.lin_data['alphac']
-                    )['rf_volt']
+                if rf_volt is None:
+                    _rf_volt = pe.nonlin.calc_ring_rf_params(
+                        h, self.lin_data['circumf'], self.lin_data['U0_MeV'] * 1e6,
+                        rf_bucket_percent=rf_bucket_percent,
+                        E_GeV=E_MeV_default / 1e3, alphac=self.lin_data['alphac']
+                        )['rf_volt']
+                else:
+                    _rf_volt = rf_volt
                 nu_s = self.calc_sync_tune(
                     E_MeV_default / 1e3, self.lin_data['U0_MeV'] * 1e6,
                     self.lin_data['alphac'], h, _rf_volt)
