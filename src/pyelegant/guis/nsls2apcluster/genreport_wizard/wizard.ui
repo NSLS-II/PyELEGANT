@@ -544,6 +544,49 @@ p, li { white-space: pre-wrap; }
      </layout>
     </item>
     <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_95">
+      <item>
+       <widget class="QLabel" name="label_34">
+        <property name="maximumSize">
+         <size>
+          <width>100</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Harmonic Number &lt;span style=&quot; font-size:11pt; color:#ff0000;&quot;&gt;*&lt;/span&gt;:&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QSpinBox" name="spinBox_harmonic_number">
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>9999</number>
+        </property>
+        <property name="value">
+         <number>1320</number>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_61">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <item>
      <layout class="QHBoxLayout" name="horizontalLayout_18">
       <item>
        <widget class="QLabel" name="label_12">
@@ -7747,7 +7790,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                <widget class="QLabel" name="label_145">
                 <property name="minimumSize">
                  <size>
-                  <width>67</width>
+                  <width>56</width>
                   <height>0</height>
                  </size>
                 </property>
@@ -7758,7 +7801,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                  </size>
                 </property>
                 <property name="text">
-                 <string>Auto Voltage:</string>
+                 <string>RF Voltage:</string>
                 </property>
                 <property name="alignment">
                  <set>Qt::AlignCenter</set>
@@ -7797,7 +7840,20 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                   <string>scan_range</string>
                  </property>
                 </item>
+                <item>
+                 <property name="text">
+                  <string>manual [V]</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>manual [%]</string>
+                 </property>
+                </item>
                </widget>
+              </item>
+              <item>
+               <widget class="QLineEdit" name="lineEdit_manual_rf_mom_aper_test"/>
               </item>
              </layout>
             </item>
@@ -10075,41 +10131,6 @@ nx, ny:= 50</string>
                </widget>
               </item>
               <item>
-               <widget class="QLabel" name="label_193">
-                <property name="maximumSize">
-                 <size>
-                  <width>61</width>
-                  <height>16777215</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>Harmonic #:</string>
-                </property>
-                <property name="alignment">
-                 <set>Qt::AlignCenter</set>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QSpinBox" name="spinBox_harmonic_number">
-                <property name="maximumSize">
-                 <size>
-                  <width>51</width>
-                  <height>16777215</height>
-                 </size>
-                </property>
-                <property name="minimum">
-                 <number>1</number>
-                </property>
-                <property name="maximum">
-                 <number>2000</number>
-                </property>
-                <property name="value">
-                 <number>1320</number>
-                </property>
-               </widget>
-              </item>
-              <item>
                <widget class="QLabel" name="label_194">
                 <property name="maximumSize">
                  <size>
@@ -11304,7 +11325,6 @@ nx, ny:= 50</string>
   <tabstop>tabWidget_rf_tau_opts</tabstop>
   <tabstop>checkBox_rf_include</tabstop>
   <tabstop>checkBox_rf_recalc</tabstop>
-  <tabstop>spinBox_harmonic_number</tabstop>
   <tabstop>lineEdit_rf_voltages</tabstop>
   <tabstop>checkBox_tau_calc_include</tabstop>
   <tabstop>checkBox_tau_recalc</tabstop>

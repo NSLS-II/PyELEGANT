@@ -1874,6 +1874,9 @@ class PageLTE(PageStandard):
                 f'edit_{k}',
                 self.safeFindChild(QtWidgets.QLineEdit, f'lineEdit_{k_wo_star}'))
         self.registerFieldOnFirstShow(
+            'spin_harmonic_number*',
+            self.safeFindChild(QtWidgets.QSpinBox, 'spinBox_harmonic_number'))
+        self.registerFieldOnFirstShow(
             'date_LTE_received*',
             self.safeFindChild(QtWidgets.QDateEdit, 'dateEdit_LTE_received'))
         self.registerFieldOnFirstShow(
@@ -1897,6 +1900,10 @@ class PageLTE(PageStandard):
             k_wo_star = (k[:-1] if k.endswith('*') else k)
             w = self.safeFindChild(QtWidgets.QLineEdit, f'lineEdit_{k_wo_star}')
             w.textChanged.connect(self.completeChanged)
+        #
+        w = self.safeFindChild(QtWidgets.QSpinBox, 'spinBox_harmonic_number')
+        w.valueChanged.connect(self.completeChanged)
+        #w.textChanged.connect(self.completeChanged) # Only available from Qt 5.14
 
         self._pageInitialized = True
 
@@ -1939,6 +1946,10 @@ class PageLTE(PageStandard):
             E_MeV_list = E_MeV
         E_GeV_str = ', '.join([f'{E_MeV / 1e3:.3g}' for E_MeV in E_MeV_list])
         self.setField('edit_E_GeV', E_GeV_str)
+
+        h = self.conf.get('harmonic_number', 1320)
+        assert isinstance(h, int)
+        self.setField('spin_harmonic_number', h)
 
         self.setField('edit_use_beamline_cell',
                       str(self.conf.get('use_beamline_cell', '').strip()))
@@ -2213,6 +2224,18 @@ class PageLTE(PageStandard):
         f(mod_conf, 'E_MeV', seq)
         if False:
             _check_if_yaml_writable(mod_conf)
+        #
+        harmonic_number = self.field('spin_harmonic_number')
+        try:
+            assert harmonic_number > 1
+        except:
+            traceback.print_exc()
+            text = 'Invalid value'
+            info_text = (
+                'Harmonic number must be a positive integer!')
+            showInvalidPageInputDialog(text, info_text)
+            return False
+        f(mod_conf, 'harmonic_number', harmonic_number)
         #
         f(mod_conf, 'use_beamline_cell', use_beamline_cell)
         f(mod_conf, 'use_beamline_ring', use_beamline_ring)
@@ -3659,7 +3682,8 @@ class PageMomAperTest(PageNonlinCalcTest):
             ('steps_back', spin), ('splits', spin), ('split_step_divisor', spin),
             ('forbid_resonance_crossing', check), ('soft_failure', check),
             ('rf_cavity___on', check), ('radiation_on', check),
-            ('rf_cavity___auto_voltage_from_nonlin_chrom', combo),
+            #('rf_cavity___auto_voltage_from_nonlin_chrom', combo),
+            #('rf_cavity___manual', edit),
             ('partition', combo), ('ntasks', spin), ('time', edit)
         ]
         self.prod_list = [
@@ -3677,7 +3701,8 @@ class PageMomAperTest(PageNonlinCalcTest):
                 steps_back='spin', splits='spin', split_step_divisor='spin',
                 forbid_resonance_crossing='check', soft_failure='check',
                 rf_cavity___on='check', radiation_on='check',
-                rf_cavity___auto_voltage_from_nonlin_chrom='combo',
+                #rf_cavity___auto_voltage_from_nonlin_chrom='combo',
+                #rf_cavity___manual='edit_float',
                 partition='combo', ntasks='spin', time='edit_str_None'),
             'production': dict(
                 n_turns='spin',
@@ -3688,14 +3713,111 @@ class PageMomAperTest(PageNonlinCalcTest):
 
         self.calc_type = 'mom_aper'
         self.register_test_prod_option_widgets()
+        #
+        # Register special widgets
+        w = self.safeFindChild(combo, 'comboBox_rf_cavity___auto_voltage_from_nonlin_chrom_mom_aper_test')
+        self.registerFieldOnFirstShow('combo_auto_voltage', w)
+        w = self.safeFindChild(edit, 'lineEdit_manual_rf_mom_aper_test')
+        self.registerFieldOnFirstShow('edit_manual_voltage', w)
 
         # Set fields
         self.set_test_prod_option_fields()
+        #
+        # Set special fields
+        try:
+            rf_cav_opts = self.conf['nonlin']['calc_opts']['mom_aper']['test']['rf_cavity']
+        except:
+            rf_cav_opts = None
+        if rf_cav_opts is not None:
+            w_c = self.safeFindChild(combo, 'comboBox_rf_cavity___auto_voltage_from_nonlin_chrom_mom_aper_test')
+            w_e = self.safeFindChild(edit, 'lineEdit_manual_rf_mom_aper_test')
+            man_rf_volt = rf_cav_opts.get('rf_volt', None)
+            man_rf_percent = rf_cav_opts.get('rf_bucket_percent', None)
+            auto_opt = rf_cav_opts.get('auto_voltage_from_nonlin_chrom',
+                                       'resonance_crossing')
+            if man_rf_volt is not None:
+                w_e.setText(self.converters['edit_float']['set'](man_rf_volt))
+                index = w_c.findText('manual [V]')
+                assert index != -1
+                w_c.setCurrentIndex(index)
+                w_e.setEnabled(True)
+            elif man_rf_percent is not None:
+                w_e.setText(self.converters['edit_float']['set'](man_rf_percent))
+                index = w_c.findText('manual [%]')
+                assert index != -1
+                w_c.setCurrentIndex(index)
+                w_e.setEnabled(True)
+            else:
+                index = w_c.findText(auto_opt)
+                if index != -1:
+                    w_c.setCurrentIndex(index)
+                    w_e.setEnabled(False)
+                else:
+                    text = 'Invalid rf_cavity option'
+                    info_text = f'nonlin/calc_opts/mom_aper/test/rf_cavity: {str(rf_cav_opts)}'
+                    showInvalidPageInputDialog(text, info_text)
+                    return
+        else:
+            index = w_c.findText('resonance_crossing')
+            assert index != -1
+            w_c.setCurrentIndex(index)
+            w_e.setEnabled(False)
 
         # Establish connections
         self.establish_connections()
 
+        w = self.safeFindChild(combo, 'comboBox_rf_cavity___auto_voltage_from_nonlin_chrom_mom_aper_test')
+        w.currentTextChanged.connect(self.updateManualRFLineEditState)
+
         self._pageInitialized = True
+
+    def updateManualRFLineEditState(self, new_text):
+        """"""
+
+        w = self.safeFindChild(QtWidgets.QLineEdit, 'lineEdit_manual_rf_mom_aper_test')
+
+        if new_text in ('resonance_crossing', 'undefined_tunes', 'scan_range'):
+            w.setEnabled(False)
+        elif new_text in ('manual [V]', 'manual [%]'):
+            w.setEnabled(True)
+        else:
+            raise ValueError(f'Unexpected text value: "{new_text}"')
+
+    def modify_conf(self, orig_conf):
+        """"""
+
+        mod_conf = super().modify_conf(orig_conf)
+
+        # Handle special fields
+
+        edit, combo = (QtWidgets.QLineEdit, QtWidgets.QComboBox)
+        w_c = self.safeFindChild(combo, 'comboBox_rf_cavity___auto_voltage_from_nonlin_chrom_mom_aper_test')
+        w_e = self.safeFindChild(edit, 'lineEdit_manual_rf_mom_aper_test')
+
+        rf_cav_opts = mod_conf['nonlin']['calc_opts']['mom_aper']['test']['rf_cavity']
+
+        text = w_c.currentText()
+        if text in ('resonance_crossing', 'undefined_tunes', 'scan_range'):
+            yaml_append_map(rf_cav_opts, 'auto_voltage_from_nonlin_chrom', text)
+            for k in ['rf_volt', 'rf_bucket_percent']:
+                if k in rf_cav_opts:
+                    del rf_cav_opts[k]
+        elif text == 'manual [V]':
+            v = self.converters['edit_float']['get'](w_e.text())
+            yaml_append_map(rf_cav_opts, 'rf_volt', v)
+            for k in ['rf_bucket_percent', 'auto_voltage_from_nonlin_chrom']:
+                if k in rf_cav_opts:
+                    del rf_cav_opts[k]
+        elif text == 'manual [%]':
+            v = self.converters['edit_float']['get'](w_e.text())
+            yaml_append_map(rf_cav_opts, 'rf_bucket_percent', v)
+            for k in ['rf_volt', 'auto_voltage_from_nonlin_chrom']:
+                if k in rf_cav_opts:
+                    del rf_cav_opts[k]
+        else:
+            raise ValueError(f'Unexpected text value: "{text}"')
+
+        return mod_conf
 
 class PageTswa(PageNonlinCalcPlot):
     """"""
@@ -4015,7 +4137,8 @@ class PageRfTau(PageGenReport):
                                     QtWidgets.QCheckBox, QtWidgets.QComboBox)
         self.rf_list = [
             ('rf_include', check), ('rf_recalc', check),
-            ('harmonic_number', spin), ('rf_voltages', edit),
+            #('harmonic_number', spin),
+            ('rf_voltages', edit),
             ('bucket_height_min', edit), ('bucket_height_max', edit),
             ('v_scan_npts', spin), ('ntasks_rf_tau', spin),
         ]
@@ -4030,7 +4153,7 @@ class PageRfTau(PageGenReport):
 
         self.setter_getter = {
             'rf': dict(
-                rf_include='check', rf_recalc='check', harmonic_number='spin',
+                rf_include='check', rf_recalc='check', #harmonic_number='spin',
                 rf_voltages='edit_special',
                 bucket_height_min='edit_float',
                 bucket_height_max='edit_float',
@@ -4460,10 +4583,11 @@ class PageRfTau(PageGenReport):
             #
             if 'calc_opts' in rf:
                 calc_opts = rf['calc_opts']
-                conv_type = self.setter_getter['rf']['harmonic_number']
-                conv = self.converters[conv_type]['set']
-                self.setField('spin_harmonic_number',
-                              conv(calc_opts.get('harmonic_number', 1320)))
+                #
+                #conv_type = self.setter_getter['rf']['harmonic_number']
+                #conv = self.converters[conv_type]['set']
+                #self.setField('spin_harmonic_number',
+                              #conv(calc_opts.get('harmonic_number', 1320)))
                 #
                 conv_type = self.setter_getter['rf']['rf_voltages']
                 conv = partial(self.converters[conv_type]['set'], 'rf_voltages')
@@ -4717,9 +4841,9 @@ class PageRfTau(PageGenReport):
             #
             calc_opts = rf['calc_opts']
             #
-            conv_type = self.setter_getter['rf']['harmonic_number']
-            conv = self.converters[conv_type]['get']
-            mod_conf['harmonic_number'] = conv(self.field('spin_harmonic_number'))
+            #conv_type = self.setter_getter['rf']['harmonic_number']
+            #conv = self.converters[conv_type]['get']
+            #mod_conf['harmonic_number'] = conv(self.field('spin_harmonic_number'))
             #
             conv_type = self.setter_getter['rf']['rf_voltages']
             conv = partial(self.converters[conv_type]['get'], 'rf_voltages')
