@@ -349,6 +349,31 @@ class Lattice():
 
         return prop
 
+    def modify_elem_def(self, original_elem_def, modified_prop_dict):
+        """"""
+
+        elem_name, elem_type, elem_prop_str = original_elem_def
+
+        elem_prop_d = self.parse_elem_properties(elem_prop_str)
+        elem_prop_d.update(modified_prop_dict)
+
+        new_elem_prop_str_list = []
+        for k, v in elem_prop_d.items():
+            if isinstance(v, float):
+                val_str = f'{v:.16g}'
+            elif isinstance(v, int):
+                val_str = f'{v:d}'
+            elif isinstance(v, str):
+                val_str = v
+            else:
+                raise NotImplementedError
+
+            new_elem_prop_str_list.append(f'{k}={val_str}')
+
+        new_elem_prop_str = ', '.join(new_elem_prop_str_list)
+
+        return (elem_name, elem_type, new_elem_prop_str)
+
     def get_unhandled_element_types(self, elem_def_list):
         """"""
 
