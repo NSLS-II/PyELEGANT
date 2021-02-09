@@ -284,8 +284,12 @@ class ClosedOrbitCalculator:
         n_turns: int = 0, use_beamline: Optional[str] = None,
         N_KICKS: Optional[dict] = None, transmute_elements: Optional[dict] = None,
         ele_filepath: Optional[str] = None, tempdir_path: Optional[str] = None,
-        ) -> None:
-        """Constructor"""
+        fixed_lattice: bool = False) -> None:
+        """Constructor
+        If "fixed_lattice" is False, this object is meant to compute the closed
+        orbit with the lattice defined in the LTE file "as is", without altering
+        any corrector strengths.
+        """
 
         assert n_turns >= 0
         assert iteration_fraction <= 1.0
@@ -326,20 +330,23 @@ class ClosedOrbitCalculator:
 
         ed.add_newline()
 
-        load_parameters = dict(
-            change_defined_values=True, allow_missing_elements=True,
-            allow_missing_parameters=True)
-        tmp = tempfile.NamedTemporaryFile(
-            dir=self.tempdir.name, delete=False, prefix=f'tmpCorrSetpoints_',
-            suffix='.sdds')
-        load_parameters['filename'] = os.path.abspath(tmp.name)
-        tmp.close()
+        self.fixed_lattice = fixed_lattice
 
-        self.corrector_params_filepath = load_parameters['filename']
+        if not fixed_lattice:
+            load_parameters = dict(
+                change_defined_values=True, allow_missing_elements=True,
+                allow_missing_parameters=True)
+            tmp = tempfile.NamedTemporaryFile(
+                dir=self.tempdir.name, delete=False, prefix=f'tmpCorrSetpoints_',
+                suffix='.sdds')
+            load_parameters['filename'] = os.path.abspath(tmp.name)
+            tmp.close()
 
-        ed.add_block('load_parameters', **load_parameters)
+            self.corrector_params_filepath = load_parameters['filename']
 
-        ed.add_newline()
+            ed.add_block('load_parameters', **load_parameters)
+
+            ed.add_newline()
 
         ed.add_block('run_control', n_passes=1)
 
@@ -407,6 +414,11 @@ class ClosedOrbitCalculator:
     def select_kickers(self, plane: str, cor_names: Iterable[str]) -> None:
         """"""
 
+        if self.fixed_lattice:
+            raise RuntimeError(
+                'This object was created with "fixed_lattice" set to True. So, '
+                'this function is disabled.')
+
         if plane.lower() == 'h':
 
             self.hcors['kick_prop_names'] = []
@@ -466,6 +478,11 @@ class ClosedOrbitCalculator:
     def set_kick_angles(self, hkick_rads, vkick_rads) -> None:
         """"""
 
+        if self.fixed_lattice:
+            raise RuntimeError(
+                'This object was created with "fixed_lattice" set to True. So, '
+                'this function is disabled.')
+
         assert len(hkick_rads) == len(self.hcors['names'])
         self.hcors['rads'] = hkick_rads
 
@@ -492,6 +509,11 @@ class ClosedOrbitCalculator:
 
     def set_elem_properties(self, elem_names, elem_prop_names, elem_prop_vals):
         """"""
+
+        if self.fixed_lattice:
+            raise RuntimeError(
+                'This object was created with "fixed_lattice" set to True. So, '
+                'this function is disabled.')
 
         assert len(elem_names) == len(elem_prop_names) == len(elem_prop_vals)
 
