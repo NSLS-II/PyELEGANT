@@ -1,5 +1,5 @@
 program_name = 'pyelegant'
-version = '0.8.0'
+version = '0.9.0'
 
 from setuptools import setup, find_packages
 from setuptools.command.install import install
@@ -58,7 +58,7 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
 
     facility_name = facility_name_opt[0][len(f'--{facility_name_arg}='):]
 
-    available_facility_names = ['local', 'nsls2apcluster', 'nsls2cr']
+    available_facility_names = ['local', 'nsls2apcluster', 'nsls2cr', 'nsls2pluto']
     if facility_name not in available_facility_names:
         print('* Only the following facility names are available:')
         print('      ' + ', '.join(available_facility_names))
@@ -70,14 +70,16 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
     facility_json_filepath = os.path.join(
         this_folder, 'src', 'pyelegant', facility_json_filename)
     with open(facility_json_filepath, 'w') as f:
+        fac_info = {'name': facility_name}
         if facility_name == 'nsls2apcluster':
-            json.dump({
-                'name': facility_name,
-                'MODULE_LOAD_CMD_STR': 'elegant-latest', # 'elegant-latest elegant/2020.2.0',
-                'MPI_COMPILER_OPT_STR': '', # '--mpi=pmi2',
-                }, f)
+            fac_info['MODULE_LOAD_CMD_STR'] = 'elegant-latest', # 'elegant-latest elegant/2020.2.0',
+            fac_info['MPI_COMPILER_OPT_STR'] = '', # '--mpi=pmi2',
+        elif facility_name == 'nsls2pluto':
+            fac_info['MODULE_LOAD_CMD_STR'] = 'accelerator'
         else:
-            json.dump({'name': facility_name}, f)
+            assert facility_name in ('local', 'nsls2cr')
+
+        json.dump(fac_info, f)
 
     sys.argv.remove(facility_name_opt[0])
 
@@ -90,7 +92,7 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
         json.dump(version, f)
 
     req_pakcages = []
-    if facility_name == 'nsls2apcluster':
+    if facility_name in ('nsls2apcluster', 'nsls2pluto'):
         req_pakcages += ['mpi4py>=3', 'dill']
 
     entry_points = dict(
@@ -103,11 +105,26 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
 
     if facility_name == 'nsls2apcluster':
         gui_folderpath = 'pyelegant.guis.nsls2apcluster'
+        script_folderpath = 'pyelegant.scripts.nsls2apcluster'
         entry_points['console_scripts'].extend([
             'pyele_report = pyelegant.scripts.genreport:main',
-            'pyele_slurm_print_queue = pyelegant.scripts.nsls2apcluster.slurmutil:print_queue',
-            'pyele_slurm_print_load = pyelegant.scripts.nsls2apcluster.slurmutil:print_load',
-            'pyele_slurm_scancel_regex_jobname = pyelegant.scripts.nsls2apcluster.slurmutil:scancel_by_regex_jobname',
+            f'pyele_slurm_print_queue = {script_folderpath}.slurmutil:print_queue',
+            f'pyele_slurm_print_load = {script_folderpath}.slurmutil:print_load',
+            f'pyele_slurm_scancel_regex_jobname = {script_folderpath}.slurmutil:scancel_by_regex_jobname',
+        ])
+        entry_points['gui_scripts'].extend([
+            # GUI
+            f'pyele_gui_slurm = {gui_folderpath}.cluster_status.main:main',
+            f'pyele_gui_report_wiz = {gui_folderpath}.genreport_wizard.main:main',
+        ])
+    elif facility_name == 'nsls2pluto':
+        gui_folderpath = 'pyelegant.guis.nsls2pluto'
+        script_folderpath = 'pyelegant.scripts.nsls2pluto'
+        entry_points['console_scripts'].extend([
+            'pyele_report = pyelegant.scripts.genreport:main',
+            f'pyele_slurm_print_queue = {script_folderpath}.slurmutil:print_queue',
+            f'pyele_slurm_print_load = {script_folderpath}.slurmutil:print_load',
+            f'pyele_slurm_scancel_regex_jobname = {script_folderpath}.slurmutil:scancel_by_regex_jobname',
         ])
         entry_points['gui_scripts'].extend([
             # GUI
@@ -115,7 +132,7 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
             f'pyele_gui_report_wiz = {gui_folderpath}.genreport_wizard.main:main',
         ])
 
-    if facility_name == 'nsls2apcluster':
+    if facility_name in ('nsls2apcluster', 'nsls2pluto'):
         package_data[f'{gui_folderpath}.cluster_status'] = ['*.ui']
         package_data[f'{gui_folderpath}.genreport_wizard'] = ['*.ui']
 
