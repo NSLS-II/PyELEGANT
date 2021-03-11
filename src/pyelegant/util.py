@@ -171,9 +171,9 @@ def load_sdds_hdf5_file(hdf5_filepath):
             version[k[len('_version_'):]] = f[k][()]
             continue
         elif k == 'input':
-            d2 = d[k] = {}
-            for k2, v2 in f[k].items():
-                d2[k2] = v2[()]
+            d[k] = {}
+            for k2, g in f[k].items():
+                _load_nested_dict_from_hdf5(g, k2, d[k])
             continue
         else:
             sdds_file_type = k
@@ -534,22 +534,33 @@ def save_input_to_hdf5(output_filepath: Union[str, Path], input_dict: dict) -> N
 
     f = h5py.File(output_filepath, 'w')
     g = f.create_group('input')
-    for k, v in input_dict.items():
+    _save_nested_dict_to_hdf5(g, input_dict)
+    f.close()
+
+
+def _save_nested_dict_to_hdf5(g_parent, d):
+    """"""
+
+    for k, v in d.items():
         if v is None:
             continue
         elif isinstance(v, dict):
-            g2 = g.create_group(k)
-            for k2, v2 in v.items():
-                try:
-                    g2[k2] = v2
-                except:
-                    g2[k2] = np.array(v2, dtype='S')
+            g2 = g_parent.create_group(k)
+            _save_nested_dict_to_hdf5(g2, v)
         else:
             try:
-                g[k] = v
+                g_parent[k] = v
             except:
-                g[k] = np.array(v, dtype='S')
-    f.close()
+                g_parent[k] = np.array(v, dtype='S')
+
+def _load_nested_dict_from_hdf5(g_parent, key_parent, d):
+
+    if isinstance(g_parent, h5py.Group):
+        d[key_parent] = {}
+        for k, g2 in g_parent.items():
+            _load_nested_dict_from_hdf5(g2, k, d[key_parent])
+    else:
+        d[key_parent] = g_parent[()]
 
 def run_cmd_w_realtime_print(cmd_list, return_stdout=False, return_stderr=False):
     """
