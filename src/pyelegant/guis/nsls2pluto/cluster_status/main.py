@@ -156,8 +156,8 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
         self.q_output_format_delimiter = q_output_format_delimiter
 
         q_output_format_list = [
-            '%A', '%i','%P', '%j','%u','%t','%M','%L','%D','%C','%R', '%S',
-            '%V', '%Q']
+            '%A','%i','%P','%q','%j','%u','%t','%M','%L','%D','%C','%R','%S',
+            '%V','%Q']
         self.q_output_format = q_output_format_delimiter.join(q_output_format_list)
 
         self.model_q = TableModelQueue(q_output_format_list)
