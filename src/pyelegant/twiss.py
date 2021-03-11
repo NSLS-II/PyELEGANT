@@ -188,7 +188,7 @@ def _calc_twiss(
             print_stderr=std_print_enabled['err'])
     else:
         if remote_opts is None:
-            remote_opts = dict(use_sbatch=False)
+            remote_opts = dict(sbatch={'use': False})
 
         if ('pelegant' in remote_opts) and (remote_opts['pelegant'] is not False):
             print('"pelegant" option in `remote_opts` must be False for Twiss calculation')

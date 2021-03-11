@@ -379,6 +379,10 @@ def extract_slurm_opts(remote_opts):
         elif k in ('use_sbatch', 'exit_right_after_sbatch', 'pelegant',
                    'sbatch_err_check_tree', 'diag_mode'):
             pass
+        elif k == 'sbatch': # For forward-compatibility
+            remote_opts['use_sbatch'] = v.get('use', False)
+            remote_opts['exit_right_after_sbatch'] = not (v.get('wait'), True)
+            del remote_opts['sbatch']
         else:
             raise ValueError(f'Unknown slurm option keyword: {k}')
 
