@@ -330,6 +330,8 @@ def extract_slurm_opts(remote_opts):
 
     need_mail_user = False
 
+    forward_comp_opts = {}
+
     for k, v in remote_opts.items():
 
         if k in ('output', 'error', 'partition', 'time'):
@@ -380,11 +382,15 @@ def extract_slurm_opts(remote_opts):
                    'sbatch_err_check_tree', 'diag_mode'):
             pass
         elif k == 'sbatch': # For forward-compatibility
-            remote_opts['use_sbatch'] = v.get('use', False)
-            remote_opts['exit_right_after_sbatch'] = not (v.get('wait'), True)
-            del remote_opts['sbatch']
+            forward_comp_opts['use_sbatch'] = v.get('use', False)
+            forward_comp_opts['exit_right_after_sbatch'] = not (v.get('wait'), True)
         else:
             raise ValueError(f'Unknown slurm option keyword: {k}')
+
+    if forward_comp_opts != {}:
+        del remote_opts['sbatch']
+        for k, v in forward_comp_opts.items():
+            remote_opts[k] = v
 
     if need_mail_user:
         if len([s for s in list(slurm_opts) if s == 'mail_user']) != 1:
