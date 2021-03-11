@@ -72,8 +72,8 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
     with open(facility_json_filepath, 'w') as f:
         fac_info = {'name': facility_name}
         if facility_name == 'nsls2apcluster':
-            fac_info['MODULE_LOAD_CMD_STR'] = 'elegant-latest', # 'elegant-latest elegant/2020.2.0',
-            fac_info['MPI_COMPILER_OPT_STR'] = '', # '--mpi=pmi2',
+            fac_info['MODULE_LOAD_CMD_STR'] = 'elegant-latest' # 'elegant-latest elegant/2020.2.0',
+            fac_info['MPI_COMPILER_OPT_STR'] = '' # '--mpi=pmi2',
         elif facility_name == 'nsls2pluto':
             fac_info['MODULE_LOAD_CMD_STR'] = 'accelerator'
         else:
