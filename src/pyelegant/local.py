@@ -1,7 +1,7 @@
 import os
 from subprocess import Popen, PIPE, STDOUT
 
-from . import std_print_enabled
+from . import std_print_enabled, sbatch_std_print_enabled
 
 def enable_stdout():
     """"""
@@ -22,6 +22,27 @@ def disable_stderr():
     """"""
 
     std_print_enabled['err'] = False
+
+def enable_sbatch_stdout():
+    """"""
+
+    sbatch_std_print_enabled['out'] = True
+
+def disable_sbatch_stdout():
+    """"""
+
+    sbatch_std_print_enabled['out'] = False
+
+def enable_sbatch_stderr():
+    """"""
+
+    sbatch_std_print_enabled['err'] = True
+
+def disable_sbatch_stderr():
+    """"""
+
+    sbatch_std_print_enabled['err'] = False
+
 
 def run(ele_filepath, macros=None, print_cmd=False,
         print_stdout=True, print_stderr=True, tee_to=None, tee_stderr=True):

@@ -73,8 +73,7 @@ etayp0=0.0
 
 job_name = 'test'
 remote_opts = dict(
-    #use_sbatch=False,
-    use_sbatch=True,
+    sbatch={'use': True, 'wait': True},
     pelegant=False,
     job_name=job_name, output=job_name+'.%J.out', error=job_name+'.%J.err',
     ntasks=1, partition='normal', time='10:00',

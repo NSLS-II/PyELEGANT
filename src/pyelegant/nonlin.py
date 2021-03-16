@@ -197,7 +197,7 @@ def _calc_cmap(
     else:
         if remote_opts is None:
             remote_opts = dict(
-                use_sbatch=True, pelegant=True, job_name='cmap',
+                sbatch={'use': True, 'wait': True}, pelegant=True, job_name='cmap',
                 output='cmap.%J.out', error='cmap.%J.err',
                 partition='normal', ntasks=50)
 
@@ -439,7 +439,8 @@ def _plot_cmap(
 
         plt.figure()
         ax = plt.subplot(111)
-        plt.pcolor(V1*v1unitconv, V2*v2unitconv, D, cmap='jet', vmin=LB, vmax=UB)
+        plt.pcolor(V1*v1unitconv, V2*v2unitconv, D, cmap='jet', vmin=LB, vmax=UB,
+                   shading='auto')
         plt.xlabel(fr'${v1name}\, [{v1unitsymb}]$', size=font_sz)
         plt.ylabel(fr'${v2name}\, [{v2unitsymb}]$', size=font_sz)
         if v1lim is not None:
@@ -613,7 +614,7 @@ def _calc_fma(
     else:
         if remote_opts is None:
             remote_opts = dict(
-                use_sbatch=True, pelegant=True, job_name='fma',
+                sbatch={'use': True, 'wait': True}, pelegant=True, job_name='fma',
                 output='fma.%J.out', error='fma.%J.err',
                 partition='normal', ntasks=50)
 
@@ -865,7 +866,8 @@ def _plot_fma(
 
         plt.figure()
         ax = plt.subplot(111)
-        plt.pcolor(V1*v1unitconv, V2*v2unitconv, D, cmap='jet', vmin=LB, vmax=UB)
+        plt.pcolor(V1*v1unitconv, V2*v2unitconv, D, cmap='jet', vmin=LB, vmax=UB,
+                   shading='auto')
         plt.xlabel(fr'${v1name}\, [{v1unitsymb}]$', size=font_sz)
         plt.ylabel(fr'${v2name}\, [{v2unitsymb}]$', size=font_sz)
         if v1lim is not None:
@@ -972,7 +974,7 @@ def calc_find_aper_nlines(
     else:
         if remote_opts is None:
             remote_opts = dict(
-                use_sbatch=True, pelegant=True, job_name='findaper',
+                sbatch={'use': True, 'wait': True}, pelegant=True, job_name='findaper',
                 output='findaper.%J.out', error='findaper.%J.err',
                 partition='normal', ntasks=np.min([50, n_lines]))
 
@@ -1510,7 +1512,7 @@ def calc_mom_aper(
     else:
         if remote_opts is None:
             remote_opts = dict(
-                use_sbatch=True, pelegant=True, job_name='momaper',
+                sbatch={'use': True, 'wait': True}, pelegant=True, job_name='momaper',
                 output='momaper.%J.out', error='momaper.%J.err',
                 partition='normal', ntasks=50)
 
@@ -1706,7 +1708,12 @@ def calc_Touschek_lifetime(
     output_filepath, LTE_filepath, E_MeV, mmap_filepath, charge_C, emit_ratio,
     RFvolt, RFharm, max_mom_aper_percent=None, ignoreMismatch=True,
     use_beamline=None, output_file_type=None, del_tmp_files=True, print_cmd=False):
-    """"""
+    """
+    For this function to work properly, the following must be for the full ring,
+    NOT for one period of the ring:
+        mmap_filepath
+        use_beamline
+    """
 
     with open(LTE_filepath, 'r') as f:
         file_contents = f.read()
@@ -2426,10 +2433,6 @@ def calc_chrom_track(
 
         if remote_opts is None:
             remote_opts = dict(ntasks=20)
-            #remote_opts = dict(
-                #use_sbatch=True, pelegant=False, job_name='chrom',
-                #output='chrom.%J.out', error='chrom.%J.err',
-                #partition='short', ntasks=50)
 
         remote_opts['ntasks'] = min([len(delta_array), remote_opts['ntasks']])
 
@@ -3348,19 +3351,17 @@ def plot_chrom(
     plt.tight_layout()
 
 
-    is_fp_nuxlim_frac = False
-    if footprint_nuxlim is not None:
-        if (0.0 <= footprint_nuxlim[0] <= 1.0) and (0.0 <= footprint_nuxlim[1] <= 1.0):
-            is_fp_nuxlim_frac = True
-    else:
+    if footprint_nuxlim is None:
         footprint_nuxlim = nuxlim.copy()
+    is_fp_nuxlim_frac = False
+    if (0.0 <= footprint_nuxlim[0] <= 1.0) and (0.0 <= footprint_nuxlim[1] <= 1.0):
+        is_fp_nuxlim_frac = True
     #
-    is_fp_nuylim_frac = False
-    if footprint_nuylim is not None:
-        if (0.0 <= footprint_nuylim[0] <= 1.0) and (0.0 <= footprint_nuylim[1] <= 1.0):
-            is_fp_nuylim_frac = True
-    else:
+    if footprint_nuylim is None:
         footprint_nuylim = nuylim.copy()
+    is_fp_nuylim_frac = False
+    if (0.0 <= footprint_nuylim[0] <= 1.0) and (0.0 <= footprint_nuylim[1] <= 1.0):
+        is_fp_nuylim_frac = True
     #
     if is_fp_nuxlim_frac and is_fp_nuylim_frac:
         _plot_fp_nu_frac = True
@@ -3467,9 +3468,9 @@ def plot_chrom(
             V1, V2 = np.meshgrid(v1array, v2array)
 
             if not use_log:
-                plt.pcolor(V1 * 1e2, V2, norm_fft_hAs, cmap='jet')
+                plt.pcolor(V1 * 1e2, V2, norm_fft_hAs, cmap='jet', shading='auto')
             else:
-                plt.pcolor(V1 * 1e2, V2, np.log10(norm_fft_hAs), cmap='jet')
+                plt.pcolor(V1 * 1e2, V2, np.log10(norm_fft_hAs), cmap='jet', shading='auto')
             plt.xlabel(fr'$\delta\, [\%]$', size=font_sz)
             plt.ylabel(fr'$\nu_{_nu_plane}$', size=font_sz)
             ax1.set_ylim(ylim)
@@ -3688,10 +3689,6 @@ def _calc_tswa(
 
         if remote_opts is None:
             remote_opts = dict(ntasks=20)
-            #remote_opts = dict(
-                #use_sbatch=True, pelegant=False, job_name='chrom',
-                #output='chrom.%J.out', error='chrom.%J.err',
-                #partition='short', ntasks=50)
 
         xy0_array = np.vstack((x0_array, y0_array)).T
 
@@ -4394,6 +4391,8 @@ def plot_tswa(
                 '(x_0 < 0)$' '\n'
                 fr'$(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})')
 
+        ret[side] = {}
+
         if plot_xy0:
             coeffs = np.polyfit(Jx0s[fit_roi], nuxs[fit_roi], 1)
             dnux_dJx0 = coeffs[0]
@@ -4464,6 +4463,8 @@ def plot_tswa(
             scan_sign_beta_str = (
                 '(y_0 < 0)$' '\n'
                 fr'$(\beta_x, \beta_y) [\mathrm{{m}}] = ({betax:.2f}, {betay:.2f})')
+
+        ret[side] = {}
 
         if plot_xy0:
             coeffs = np.polyfit(Jy0s[fit_roi], nuxs[fit_roi], 1)
@@ -4876,9 +4877,9 @@ def plot_tswa(
             V1, V2 = np.meshgrid(v1array, v2array)
 
             if not use_log:
-                plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap='jet')
+                plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap='jet', shading='auto')
             else:
-                plt.pcolor(V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap='jet')
+                plt.pcolor(V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap='jet', shading='auto')
             plt.xlabel(fr'${scan_sign_str}{scan_plane}_0\, [\mathrm{{mm}}]$', size=font_sz)
             plt.ylabel(fr'$\nu_{_nu_plane}$', size=font_sz)
             ax1.set_ylim(ylim)
@@ -5720,9 +5721,9 @@ def plot_tswa_both_sides(
             V1, V2 = np.meshgrid(v1array, v2array)
 
             if not use_log:
-                plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap='jet')
+                plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap='jet', shading='auto')
             else:
-                plt.pcolor(V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap='jet')
+                plt.pcolor(V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap='jet', shading='auto')
             plt.xlabel(fr'${scan_plane}_0\, [\mathrm{{mm}}]$', size=font_sz)
             plt.ylabel(fr'$\nu_{_nu_plane}$', size=font_sz)
             ax1.set_ylim(ylim)
@@ -5847,7 +5848,7 @@ def track(
     else:
 
         if remote_opts is None:
-            remote_opts = dict(use_sbatch=True)
+            remote_opts = dict(sbatch={'use': True, 'wait': True})
 
         if ('pelegant' in remote_opts) and (remote_opts['pelegant'] is not False):
             print('"pelegant" option in `remote_opts` must be False for nonlin.track()')

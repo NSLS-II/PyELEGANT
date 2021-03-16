@@ -16,6 +16,7 @@ import dill
 from ruamel import yaml
 
 from . import facility_name
+from .local import sbatch_std_print_enabled
 from . import util
 
 _IMPORT_TIMESTAMP = time.time()
@@ -50,8 +51,7 @@ del p, out, err
 
 if facility_name == 'nsls2apcluster':
     DEFAULT_REMOTE_OPTS = dict(
-        use_sbatch=False,
-        exit_right_after_sbatch=False,
+        sbatch={'use': False, 'wait': True},
         pelegant=False,
         # -------------
         # SLURM options
@@ -296,6 +296,7 @@ SRUN_OPTION_MAP = {
     'job_name': 'job-name',
     'mail_user': 'mail-user',
     'mail_type': 'mail-type',
+    'spread_job': 'spread-job',
     'w': 'nodelist',
     'x': 'exclude',
 }
@@ -307,9 +308,6 @@ def extract_slurm_opts(remote_opts):
     slurm_opts = {}
 
     _make_sure_slurm_excl_nodes_initialized()
-
-    if SLURM_EXCL_NODES != []:
-        slurm_opts['exclude'] = f'--exclude={",".join(SLURM_EXCL_NODES)}'
 
     partition = remote_opts.get('partition', None)
     if partition is None:
@@ -325,6 +323,8 @@ def extract_slurm_opts(remote_opts):
             timelimit = get_constrained_timelimit_str(abs_timelimit, partition)
             if timelimit:
                 slurm_opts['time'] = f'--time={timelimit}'
+                # ^ Obviously this will be overwritten if a user specifies "time".
+                #   If an invalid time limit is specified, it should fail.
 
     need_mail_user = False
 
@@ -334,7 +334,7 @@ def extract_slurm_opts(remote_opts):
         if k in SRUN_OPTION_MAP:
             k = SRUN_OPTION_MAP[k]
 
-        if k in ('output', 'error', 'partition', 'time'):
+        if k in ('output', 'error', 'partition', 'qos', 'time'):
 
             if v is None:
                 slurm_opts[k] = ''
@@ -380,19 +380,50 @@ def extract_slurm_opts(remote_opts):
                     'TIME_LIMIT_80',
                     'TIME_LIMIT_50',
                 ]
+
+                if isinstance(v, str):
+                    v = [v]
+
                 if not all([_type in valid_types for _type in v]):
-                    raise ValueError(f'Invalid "mail-type" input: {valid_types}')
+                    raise ValueError(
+                        f'Invalid "mail-type" input: {v}. Valid types are {valid_types}'
+                    )
                 slurm_opts[k] = f'--mail-type={",".join(v)}'
 
                 need_mail_user = True
 
-        elif k in ('nodelist', 'exclude'):
+        elif k == 'exclude':
+            if v is None:
+                v = SLURM_EXCL_NODES
+            elif isinstance(v, str):
+                v = list(set([v] + SLURM_EXCL_NODES))
+            else:
+                v = list(set(v + SLURM_EXCL_NODES))
+
+            if v == []:
+                slurm_opts[k] = ''
+            else:
+                slurm_opts[k] = '--{}={}'.format(k, ','.join(v))
+
+        elif k == 'nodelist':
             if v is None:
                 slurm_opts[k] = ''
             else:
                 slurm_opts[k] = '--{}={}'.format(k, ','.join(v))
 
-        elif k in ('sbatch', 'pelegant', 'diag_mode', 'abort_filepath'):
+        elif k in ('x11', 'spread-job'):
+            if v:  # True or False
+                slurm_opts[k] = f'--{k}'
+            else:
+                slurm_opts[k] = ''
+
+        elif k in (
+            'sbatch',
+            'pelegant',
+            'diag_mode',
+            'abort_filepath',
+            'status_check_interval',
+        ):
             pass
         else:
             raise ValueError(f'Unknown slurm option keyword: {k}')
@@ -423,6 +454,8 @@ def write_sbatch_shell_file(
         contents += ['#SBATCH ' + v]
 
     contents += [' ']
+
+    # contents += ['env']
 
     contents += [srun_cmd]
 
@@ -584,12 +617,17 @@ def wait_for_completion(
             # Check if err log file size has increased. If not, there is no
             # need to check the contents.
             # print(f'Current directory is "{os.getcwd()}"')
+            _err_log_file_missing = False
             for _ in range(3):
                 try:
                     curr_err_log_file_size = os.stat(err_log_filename).st_size
+                    if _err_log_file_missing:
+                        print(f'File "{err_log_filename}" have appeared.')
                     break
                 except FileNotFoundError:
-                    time.sleep(5.0)
+                    print(f'Waiting for the file "{err_log_filename}" to appear...')
+                    _err_log_file_missing = True
+                    time.sleep(10.0)
             else:
                 raise FileNotFoundError(err_log_filename)
             if curr_err_log_file_size > prev_err_log_file_size:
@@ -652,14 +690,25 @@ def _sbatch(
     err_log_check=None,
     print_stdout=True,
     print_stderr=True,
+    nMaxTry=3,
 ):
     """"""
 
-    nMaxSbatch = 3
-    for iSbatch in range(nMaxSbatch):
+    # Re-try functionality in case of
+    #   "sbatch: error: Slurm controller not responding, sleeping and retrying."
+    for iTry in range(nMaxTry):
         p = Popen(
-            ['sbatch', sbatch_sh_filepath], stdout=PIPE, stderr=PIPE, encoding='utf-8'
+            shlex.split(f'sbatch {sbatch_sh_filepath}'),
+            stdout=PIPE,
+            stderr=PIPE,
+            encoding='utf-8',
         )
+        # ^ In order for this to properly work when launched from Wing IDE, the
+        #   following $PATH modification (or similar, depending on the path to
+        #   the conda env you want to use) is needed in its Project Properties:
+        #     PATH=/nsls2/users/yhidaka/.conda/envs/py38tf/bin:$PATH
+        #   Otheriwse, the srun command will not pick up the correct conda env's
+        #   Python executable.
         out, err = p.communicate()
         if print_stdout:
             print('\n' + out.strip())
@@ -667,8 +716,9 @@ def _sbatch(
             print('\n*** stderr ***')
             print(err)
             print('\n** Encountered error during main job submission.')
-            if iSbatch != nMaxSbatch - 1:
+            if iTry != nMaxTry - 1:
                 print('Will retry sbatch.\n')
+                sys.stdout.flush()
                 time.sleep(20.0)
             else:
                 raise RuntimeError('Encountered error during main job submission')
@@ -677,7 +727,7 @@ def _sbatch(
 
     job_ID_str = out.replace('Submitted batch job', '').strip()
 
-    if print_stdout:
+    if print_stdout or print_stderr:
         sys.stdout.flush()
 
     sbatch_info = None
@@ -744,13 +794,15 @@ def run(
                 '* Using `sbatch` requires "job-name" option to be specified. Using default.'
             )
             slurm_opts['job-name'] = '--job-name={}'.format(
-                DEFAULT_REMOTE_OPTS['job-name']
+                DEFAULT_REMOTE_OPTS['job_name']
             )
 
-        # Make sure output/error log filenames conform to expectations
+        # Make sure output/error log filenames conform to expectations.
+        # If "err_log_check" is not None, it will try to look for the ".err"
+        # file, so "--error" must be defined here.
         job_name = slurm_opts['job-name'].split('=')[-1]
-        slurm_opts['output'] = '--output={}.%J.out'.format(job_name)
-        slurm_opts['error'] = '--error={}.%J.err'.format(job_name)
+        slurm_opts['output'] = f'--output={job_name}.%J.out'
+        slurm_opts['error'] = f'--error={job_name}.%J.err'
 
         tmp = tempfile.NamedTemporaryFile(
             dir=os.getcwd(), delete=False, prefix='tmpSbatch_', suffix='.sh'
@@ -801,8 +853,8 @@ def run(
                 job_name,
                 exit_right_after_submission=(not wait_after_sbatch),
                 err_log_check=err_log_check,
-                print_stdout=print_stdout,
-                print_stderr=print_stderr,
+                print_stdout=sbatch_std_print_enabled['out'],
+                print_stderr=sbatch_std_print_enabled['err'],
             )
 
             if not wait_after_sbatch:
@@ -872,3 +924,496 @@ def run(
             print(err)
 
     return output
+
+
+def gen_mpi_submit_script(remote_opts):
+    """"""
+
+    slurm_opts = extract_slurm_opts(remote_opts)
+
+    tmp = tempfile.NamedTemporaryFile(
+        dir=os.getcwd(), delete=False, prefix='tmpInput_', suffix='.pgz'
+    )
+    input_filepath = os.path.abspath(tmp.name)
+    output_filepath = os.path.abspath(tmp.name.replace('tmpInput_', 'tmpOutput_'))
+    mpi_sub_sh_filepath = os.path.abspath(
+        tmp.name.replace('tmpInput_', 'tmpMpiSub_').replace('.pgz', '.sh')
+    )
+
+    # MPI_COMPILER_OPT_STR = '--mpi=pmi2'
+    MPI_COMPILER_OPT_STR = ''
+
+    main_script_path = f'{__file__[:-3]}_mpi_script.py'
+    srun_cmd_list = [
+        'srun',
+        MPI_COMPILER_OPT_STR,
+        'python -m mpi4py.futures',
+        main_script_path,
+        '_mpi_starmap',
+        input_filepath,
+    ]
+    srun_cmd = ' '.join([s for s in srun_cmd_list if s.strip() != ''])
+
+    if slurm_opts.get('x11', False):
+        srun_cmd = 'export MPLBACKEND="agg"\n' + srun_cmd
+
+    write_sbatch_shell_file(mpi_sub_sh_filepath, slurm_opts, srun_cmd)
+
+    return input_filepath, output_filepath, mpi_sub_sh_filepath
+
+
+def run_mpi_python(
+    remote_opts,
+    module_name,
+    func_name,
+    param_list,
+    args,
+    paths_to_prepend=None,
+    err_log_check=None,
+    ret_slurm_info=False,
+    print_stdout=True,
+    print_stderr=True,
+):
+    """
+    Example:
+        module_name = 'pyelegant.nonlin'
+        func_name = '_calc_chrom_track_get_tbt'
+    """
+
+    d = dict(
+        module_name=module_name, func_name=func_name, param_list=param_list, args=args
+    )
+
+    _min_err_log_check = _get_min_err_log_check()
+    if err_log_check is None:
+        err_log_check = _min_err_log_check
+    else:
+        for _func in _min_err_log_check['funcs']:
+            if _func not in err_log_check['funcs']:
+                err_log_check['funcs'].append(_func)
+
+    if ('job_name' not in remote_opts) and ('job-name' not in remote_opts):
+        remote_opts['job_name'] = DEFAULT_REMOTE_OPTS['job_name']
+    job_name = remote_opts['job_name']
+    #
+    # Must define these, as "err_log_check" will need to read the ".err" file.
+    remote_opts['output'] = f'{job_name}.%J.out'
+    remote_opts['error'] = f'{job_name}.%J.err'
+    #
+    remote_opts['partition'] = remote_opts.get('partition', 'normal')
+    remote_opts['ntasks'] = remote_opts.get('ntasks', 50)
+
+    input_filepath, output_filepath, mpi_sub_sh_filepath = gen_mpi_submit_script(
+        remote_opts
+    )
+
+    d['output_filepath'] = output_filepath
+
+    with open(input_filepath, 'wb') as f:
+
+        if paths_to_prepend is None:
+            paths_to_prepend = []
+        dill.dump(paths_to_prepend, f, protocol=-1)
+
+        dill.dump(d, f, protocol=-1)
+
+    # Add re-try functionality in case of "sbatch: error: Slurm controller not responding
+    # , sleeping and retrying."
+    job_ID_str, slurm_out_filepath, slurm_err_filepath, sbatch_info = _sbatch(
+        mpi_sub_sh_filepath,
+        job_name,
+        exit_right_after_submission=False,
+        status_check_interval=5.0,
+        err_log_check=err_log_check,
+        print_stdout=print_stdout,
+        print_stderr=print_stderr,
+        nMaxTry=3,
+    )
+
+    if not sbatch_info['err_found']:
+        results = util.load_pgz_file(output_filepath)
+    else:
+        results = sbatch_info['err_log']
+
+    if remote_opts.get('del_input_file', True):
+        try:
+            os.remove(input_filepath)
+        except:
+            pass
+    if remote_opts.get('del_sub_sh_file', True):
+        try:
+            os.remove(mpi_sub_sh_filepath)
+        except:
+            pass
+    if remote_opts.get('del_output_file', True):
+        try:
+            os.remove(output_filepath)
+        except:
+            pass
+    if remote_opts.get('del_job_out_file', True):
+        try:
+            os.remove(slurm_out_filepath)
+        except:
+            pass
+    if remote_opts.get('del_job_err_file', True):
+        try:
+            os.remove(slurm_err_filepath)
+        except:
+            pass
+
+    if not ret_slurm_info:
+        return results
+    else:
+        return results, sbatch_info
+
+
+def monitor_simplex_log_progress(job_ID_str, simplex_log_prefix, optimizer_remote_opts):
+    """"""
+
+    ntasks = optimizer_remote_opts['ntasks']
+
+    optimizer_slurm_opts = extract_slurm_opts(optimizer_remote_opts)
+    monitor_slurm_opts = {}
+    for k in ['partition', 'qos', 'time']:
+        if k in optimizer_slurm_opts:
+            monitor_slurm_opts[k] = optimizer_slurm_opts[k]
+
+    tmp = tempfile.NamedTemporaryFile(
+        dir=os.getcwd(), delete=True, prefix='tmpSbatchSddsplot_'
+    )
+    job_name = os.path.basename(tmp.name)
+    tmp.close()
+
+    # Wait until all the ".simlog" files appear. If the sddsplot command is
+    # issued before they appear, it will crash.
+    for _ in range(10):
+        simlog_list = glob.glob(f'{simplex_log_prefix}-*')
+        if len(simlog_list) == ntasks:
+            break
+        else:
+            time.sleep(5.0)
+
+    srun_cmd_prefix = f'srun --x11 --job-name={job_name}'
+    for k, v in monitor_slurm_opts.items():
+        if v is None:
+            continue
+        srun_cmd_prefix += f' {v}'
+    srun_cmd_prefix += ' sddsplot "-device=motif,-movie true -keep 1"'
+    srun_cmd_prefix += ' -repeat -column=Step,best*'
+    srun_cmd_suffix = ' -graph=line,vary -mode=y=autolog'
+
+    # use_shell = True
+    use_shell = False
+
+    if use_shell:
+        if False:
+            srun_cmd = (
+                f'srun --x11 --job-name={job_name} sddsplot "-device=motif,-movie true -keep 1" '
+                f'-repeat -column=Step,best* {simplex_log_prefix}-* -graph=line,vary '
+                '-mode=y=autolog'
+            )
+        else:
+            srun_cmd_mid = f' {simplex_log_prefix}-*'
+            srun_cmd = srun_cmd_prefix + srun_cmd_mid + srun_cmd_suffix
+
+        # Launch sddsplot
+        p_sddsplot = Popen(
+            srun_cmd, shell=True, stdout=PIPE, stderr=PIPE, encoding='utf-8'
+        )
+    else:
+        # If we're not going to use "shell", then the wildcard * must be expanded
+        # by the glob module for the list of file names.
+        if False:
+            srun_cmd = (
+                f'srun --x11 --job-name={job_name} sddsplot "-device=motif,-movie true -keep 1" '
+                f'-repeat -column=Step,best* {" ".join(simlog_list)} -graph=line,vary '
+                '-mode=y=autolog'
+            )
+        else:
+            srun_cmd_mid = f' {" ".join(simlog_list)}'
+            srun_cmd = srun_cmd_prefix + srun_cmd_mid + srun_cmd_suffix
+
+        # Launch sddsplot
+        p_sddsplot = Popen(
+            shlex.split(srun_cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8'
+        )
+
+    # Get the launched job ID
+    for _ in range(10):
+        p = Popen(
+            shlex.split('squeue -o "%.12i %.50j"'),
+            stdout=PIPE,
+            stderr=PIPE,
+            encoding='utf-8',
+        )
+        out, err = p.communicate()
+
+        if err:
+            err_counter += 1
+
+            if err_counter >= 10:
+                print(err)
+                raise RuntimeError('Encountered error while waiting for job completion')
+            else:
+                print(err)
+                sys.stdout.flush()
+                time.sleep(10.0)
+                continue
+
+        else:
+            err_counter = 0
+
+        job_ID_res_list = [L.split() for L in out.split('\n')[1:] if L.strip() != '']
+        job_ID_list, job_name_list = zip(*job_ID_res_list)
+
+        if job_name not in job_name_list:
+            time.sleep(5.0)
+            continue
+
+        index = job_name_list.index(job_name)
+        sddsplot_job_ID_str = job_ID_list[index]
+
+        break
+
+    if p_sddsplot.poll() is not None:
+        out, err = p_sddsplot.communicate()
+        print(f'$ {srun_cmd}')
+        print('** stdout **')
+        print(out)
+        print('** stderr **')
+        print(err)
+        raise RuntimeError('The process for sddsplot appeared to have failed.')
+
+    status_check_interval = 5.0
+    wait_for_completion(job_ID_str, status_check_interval)
+
+    # Kill the sddsplot job
+    try:
+        p = Popen(
+            shlex.split(f'scancel {sddsplot_job_ID_str}'),
+            stdout=PIPE,
+            stderr=PIPE,
+            encoding='utf-8',
+        )
+        out, err = p.communicate()
+    except:
+        pass
+
+
+def start_hybrid_simplex_optimizer(
+    elebuilder_obj, remote_opts, show_progress_plot=True
+):
+    """"""
+
+    ed = elebuilder_obj
+
+    req_remote_opts = dict(
+        sbatch={'use': True},
+        pelegant=True,
+    )
+    for k, v in req_remote_opts.items():
+        if k in remote_opts:
+            print(f'WARNING: `remote_opts["{k}"]` will be ignored.')
+        remote_opts[k] = v
+    default_remote_opts = dict(job_name='hybrid_simplex', ntasks=20)
+    for k, v in default_remote_opts.items():
+        if k not in remote_opts:
+            remote_opts[k] = v
+
+    if (
+        not show_progress_plot
+    ):  # If you don't care to see the progress of the optimization
+
+        remote_opts['sbatch']['wait'] = True
+
+        # Run Pelegant
+        run(remote_opts, ed.ele_filepath)
+        # ^ This will block until the optimization is completed.
+
+    else:  # If you want to see the progress of the optimization
+
+        _fp_list = [
+            _v for _v in ed.actual_output_filepath_list if _v.endswith('.simlog')
+        ]
+        if len(_fp_list) == 0:
+            raise RuntimeError(
+                'simplex_log is NOT specified. Cannot monitor simplex progress.'
+            )
+        elif len(_fp_list) == 1:
+            simlog_filepath = _fp_list[0]
+        else:
+            raise RuntimeError('More than one simplex_log file found.')
+
+        remote_opts['sbatch']['wait'] = False
+
+        # Run Pelegant
+        job_info = run(remote_opts, ed.ele_filepath)
+
+        # Start plotting simplex optimization progress
+        monitor_simplex_log_progress(
+            job_info['job_ID_str'], simlog_filepath, remote_opts
+        )
+
+        try:
+            os.remove(job_info['sbatch_sh_filepath'])
+        except IOError:
+            print(
+                '* Failed to delete temporary sbatch shell file "{}"'.format(
+                    job_info['sbatch_sh_filepath']
+                )
+            )
+
+
+def _tmp_glob(pattern, sort_order='mtime'):
+    """
+    This function is NOT meant to be directly run. The contents of this function
+    is inspected and copied into a temporary Python file, which will be
+    executed on a worker node.
+    """
+
+    import os
+    import datetime
+    from pathlib import Path
+
+    if sort_order == 'mtime':
+        sort_key = os.path.getmtime
+    elif sort_order == 'size':
+        sort_key = os.path.getsize
+    else:
+        raise ValueError(f'Invalid "sort_order": {sort_order}')
+
+    for f in sorted(Path('/tmp').glob(pattern), key=sort_key):
+        stat = f.stat()
+        if stat.st_size < int(1024):
+            size_str = f'{stat.st_size:>4.0f}'
+        elif stat.st_size < int(1024 ** 2):
+            size = stat.st_size / 1024
+            size_str = f'{size:>3.0f}K'
+        elif stat.st_size < int(1024 ** 3):
+            size = stat.st_size / 1024 / 1024
+            size_str = f'{size:>3.0f}M'
+        elif stat.st_size < int(1024 ** 4):
+            size = stat.st_size / 1024 / 1024 / 1024
+            size_str = f'{size:>3.0f}G'
+        elif stat.st_size < int(1024 ** 5):
+            size = stat.st_size / 1024 / 1024 / 1024 / 1024
+            size_str = f'{size:>3.0f}T'
+        else:
+            size = stat.st_size / 1024 / 1024 / 1024 / 1024
+            size_str = f'{size:>3.0f}T'
+
+        time_str = datetime.datetime.fromtimestamp(stat.st_mtime).strftime(
+            '%Y-%m-%d %H:%M:%S'
+        )
+
+        try:
+            group = f.group()
+        except KeyError:
+            group = f.stat().st_gid
+
+        print(f'{f.owner()} {group} {size_str} {time_str} {f.name}')
+
+
+def tmp_glob(node_name, pattern, sort_order='mtime'):
+    """"""
+
+    tmp = tempfile.NamedTemporaryFile(
+        dir=Path.cwd(), delete=False, prefix='tmpGlob_', suffix='.py'
+    )
+    temp_py = Path(tmp.name)
+    tmp.close()
+
+    import inspect
+
+    func_lines = inspect.getsource(_tmp_glob).split('\n')
+    for i, line in enumerate(func_lines):
+        if line.strip().startswith(('import ', 'from ')):
+            func_body_start_index = i
+            break
+
+    py_contents = [
+        'if __name__ == "__main__":',
+        f'    pattern = "{pattern}"',
+        f'    sort_order = "{sort_order}"',
+    ] + func_lines[func_body_start_index:]
+
+    temp_py.write_text('\n'.join(py_contents))
+
+    cmd = (
+        f'srun --nodelist={node_name} --partition=normal --qos=debug '
+        f'--time=0:30 python {str(temp_py)}'
+    )
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+
+    print(out.strip())
+
+    if err.strip():
+        print('\n*** stderr ***')
+        print(err.strip())
+
+    # Remove temp Python file
+    temp_py.unlink()
+
+
+def _tmp_rm(pattern):
+    """
+    This function is NOT meant to be directly run. The contents of this function
+    is inspected and copied into a temporary Python file, which will be
+    executed on a worker node.
+    """
+
+    from pathlib import Path
+    import shutil
+
+    for f in sorted(Path('/tmp').glob(pattern)):
+        try:
+            if not f.is_dir():
+                f.unlink()
+            else:
+                shutil.rmtree(f)
+        except:
+            pass
+
+
+def tmp_rm(node_name, pattern):
+    """
+    Remove files/directories in /tmp on specified node.
+    """
+
+    tmp = tempfile.NamedTemporaryFile(
+        dir=Path.cwd(), delete=False, prefix='tmpRm_', suffix='.py'
+    )
+    temp_py = Path(tmp.name)
+    tmp.close()
+
+    import inspect
+
+    func_lines = inspect.getsource(_tmp_rm).split('\n')
+    for i, line in enumerate(func_lines):
+        if line.strip().startswith(('import ', 'from ')):
+            func_body_start_index = i
+            break
+
+    py_contents = [
+        'if __name__ == "__main__":',
+        f'    pattern = "{pattern}"',
+    ] + func_lines[func_body_start_index:]
+
+    temp_py.write_text('\n'.join(py_contents))
+
+    cmd = (
+        f'srun --nodelist={node_name} --partition=normal --qos=debug '
+        f'--time=0:30 python {str(temp_py)}'
+    )
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+
+    print(out.strip())
+
+    if err.strip():
+        print('\n*** stderr ***')
+        print(err.strip())
+
+    # Remove temp Python file
+    temp_py.unlink()

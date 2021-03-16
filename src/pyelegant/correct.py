@@ -64,7 +64,7 @@ def tunes(
             print_stderr=std_print_enabled['err'])
     else:
         if remote_opts is None:
-            remote_opts = dict(use_sbatch=False)
+            remote_opts = dict(sbatch={'use': False})
 
         if ('pelegant' in remote_opts) and (remote_opts['pelegant'] is not False):
             print('"pelegant" option in `remote_opts` must be False.')
@@ -153,7 +153,7 @@ def chroms(corrected_LTE_filepath, init_LTE_filepath, E_MeV, use_beamline=None,
             print_stderr=std_print_enabled['err'])
     else:
         if remote_opts is None:
-            remote_opts = dict(use_sbatch=False)
+            remote_opts = dict(sbatch={'use': False})
 
         if ('pelegant' in remote_opts) and (remote_opts['pelegant'] is not False):
             print('"pelegant" option in `remote_opts` must be False.')

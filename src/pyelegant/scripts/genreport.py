@@ -6942,7 +6942,7 @@ class Report_NSLS2U_Default:
         neg_y_search = calc_opts.get('neg_y_search', False)
 
         remote_opts = dict(
-            use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
+            sbatch={'use': True, 'wait': True}, pelegant=True,
             job_name=calc_type)
         remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
         remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
@@ -6987,7 +6987,7 @@ class Report_NSLS2U_Default:
         ymax = calc_opts['ymax'] + y_offset
 
         remote_opts = dict(
-            use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
+            sbatch={'use': True, 'wait': True}, pelegant=True,
             job_name=calc_type)
         remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
         remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
@@ -7055,7 +7055,7 @@ class Report_NSLS2U_Default:
         xmax = calc_opts['xmax'] + x_offset
 
         remote_opts = dict(
-            use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
+            sbatch={'use': True, 'wait': True}, pelegant=True,
             job_name=calc_type)
         remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
         remote_opts.update(pe.util.deepcopy_dict(calc_opts.get('remote_opts', {})))
@@ -7376,7 +7376,7 @@ class Report_NSLS2U_Default:
             ring_flat_elem_names = LTE_ring.flat_used_elem_names
 
         remote_opts = dict(
-            use_sbatch=True, exit_right_after_sbatch=False, pelegant=True,
+            sbatch={'use': True, 'wait': True}, pelegant=True,
             job_name=calc_type)
         remote_opts.update(pe.util.deepcopy_dict(common_remote_opts))
         remote_opts.update(pe.util.deepcopy_dict(calc_opts.pop('remote_opts', {})))

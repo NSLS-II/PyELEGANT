@@ -113,7 +113,7 @@ srun --mpi=pmi2 Pelegant {ele_filepath}
 '''
 
 DEFAULT_REMOTE_OPTS = dict(
-    use_sbatch=False, exit_right_after_sbatch=False, pelegant=False,
+    sbatch={'use': False, 'wait': True}, pelegant=False,
     # -------------
     # SLURM options
     job_name='job', output='job.%J.out', error='job.%J.err',
@@ -330,8 +330,6 @@ def extract_slurm_opts(remote_opts):
 
     need_mail_user = False
 
-    forward_comp_opts = {}
-
     for k, v in remote_opts.items():
 
         if k in ('output', 'error', 'partition', 'time'):
@@ -378,19 +376,10 @@ def extract_slurm_opts(remote_opts):
             else:
                 slurm_opts[k] = '--{}={}'.format(k, ','.join(v))
 
-        elif k in ('use_sbatch', 'exit_right_after_sbatch', 'pelegant',
-                   'sbatch_err_check_tree', 'diag_mode'):
+        elif k in ('sbatch', 'pelegant', 'sbatch_err_check_tree', 'diag_mode'):
             pass
-        elif k == 'sbatch': # For forward-compatibility
-            forward_comp_opts['use_sbatch'] = v.get('use', False)
-            forward_comp_opts['exit_right_after_sbatch'] = not (v.get('wait'), True)
         else:
             raise ValueError(f'Unknown slurm option keyword: {k}')
-
-    if forward_comp_opts != {}:
-        del remote_opts['sbatch']
-        for k, v in forward_comp_opts.items():
-            remote_opts[k] = v
 
     if need_mail_user:
         if len([s for s in list(slurm_opts) if s == 'mail_user']) != 1:
@@ -437,7 +426,7 @@ def run(
 
     output = None
 
-    if ('use_sbatch' in remote_opts) and (remote_opts['use_sbatch']):
+    if ('sbatch' in remote_opts) and remote_opts['sbatch']['use']:
 
         if 'job_name' not in slurm_opts:
             print('* Using `sbatch` requires "job_name" option to be specified. Using default.')
@@ -489,15 +478,14 @@ def run(
                 print('\n\n*** Immediate abort requested. Aborting now.')
                 raise RuntimeError('Abort requested.')
 
-            exit_right_after_sbatch = remote_opts.get(
-                'exit_right_after_sbatch', False)
+            wait_after_sbatch = remote_opts['sbatch'].get('wait', True)
 
             (job_ID_str, slurm_out_filepath, slurm_err_filepath, sbatch_info
              ) = _sbatch(sbatch_sh_filepath, job_name,
-                         exit_right_after_submission=exit_right_after_sbatch,
+                         exit_right_after_submission=(not wait_after_sbatch),
                          err_log_check=err_log_check)
 
-            if exit_right_after_sbatch:
+            if not wait_after_sbatch:
                 output = dict(
                     sbatch_sh_filepath=sbatch_sh_filepath, job_ID_str=job_ID_str,
                     slurm_out_filepath=slurm_out_filepath,
@@ -1182,14 +1170,14 @@ def start_hybrid_simplex_optimizer(
     # Minimal options
     #    remote_opts = dict(pelegant=True, ntasks=50)
     remote_opts = dict(
-        use_sbatch=True, pelegant=True,
+        sbatch={'use': True}, pelegant=True,
         job_name=job_name, partition=partition, ntasks=ntasks, time=time_limit,
         mail_type_begin=email_beign, mail_type_end=email_end, mail_user=email_address,
     )
 
     if not show_progress_plot: # If you don't care to see the progress of the optimization
 
-        remote_opts['exit_right_after_sbatch'] = False
+        remote_opts['sbatch']['wait'] = True
 
         # Run Pelegant
         run(remote_opts, ed.ele_filepath)
@@ -1205,7 +1193,7 @@ def start_hybrid_simplex_optimizer(
         else:
             raise RuntimeError('More than one simplex_log file found.')
 
-        remote_opts['exit_right_after_sbatch'] = True
+        remote_opts['sbatch']['wait'] = False
 
         # Run Pelegant
         job_info = run(remote_opts, ed.ele_filepath)

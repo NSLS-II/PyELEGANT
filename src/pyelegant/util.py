@@ -109,34 +109,39 @@ def robust_sdds_hdf5_write(
             for sdds_file_type, v1 in output.items():
                 g1 = f.create_group(sdds_file_type)
 
-                if ('params' in v1) and (v1['params'] != {}):
-                    g2 = g1.create_group('scalars')
-                    for k2, v2 in v1['params'].items():
-                        g2[k2] = v2
+                for scalar_key in ['params', 'scalars']:
+                    if (scalar_key in v1) and (v1[scalar_key] != {}):
+                        g2 = g1.create_group('scalars')
+                        for k2, v2 in v1[scalar_key].items():
+                            g2[k2] = v2
 
-                        m_d = meta[sdds_file_type]['params'][k2]
-                        for mk, mv in m_d.items():
-                            g2[k2].attrs[mk] = mv
+                            m_d = meta[sdds_file_type][scalar_key][k2]
+                            for mk, mv in m_d.items():
+                                g2[k2].attrs[mk] = mv
 
-                if ('columns' in v1) and (v1['columns'] != {}):
-                    g2 = g1.create_group('arrays')
-                    for k2, v2 in v1['columns'].items():
-                        if v2.size == 0:
-                            g2[k2] = []
-                        elif isinstance(v2[0], str):
-                            g2.create_dataset(
-                                k2, data=[u.encode('utf-8') for u in v2],
-                                compression='gzip')
-                        else:
-                            try:
-                                g2.create_dataset(k2, data=v2, compression='gzip')
-                            except:
-                                g2[k2] = v2
+                        break
 
-                        m_d = meta[sdds_file_type]['columns'][k2]
-                        for mk, mv in m_d.items():
-                            g2[k2].attrs[mk] = mv
+                for array_key in ['columns', 'arrays']:
+                    if (array_key in v1) and (v1[array_key] != {}):
+                        g2 = g1.create_group('arrays')
+                        for k2, v2 in v1[array_key].items():
+                            if v2.size == 0:
+                                g2[k2] = []
+                            elif isinstance(v2[0], str):
+                                g2.create_dataset(
+                                    k2, data=[u.encode('utf-8') for u in v2],
+                                    compression='gzip')
+                            else:
+                                try:
+                                    g2.create_dataset(k2, data=v2, compression='gzip')
+                                except:
+                                    g2[k2] = v2
 
+                            m_d = meta[sdds_file_type][array_key][k2]
+                            for mk, mv in m_d.items():
+                                g2[k2].attrs[mk] = mv
+
+                        break
 
             f.close()
 

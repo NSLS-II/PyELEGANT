@@ -14,6 +14,9 @@ class Lattice():
     def __init__(self, LTE_filepath='', used_beamline_name=''):
         """Constructor"""
 
+        if used_beamline_name is None:
+            used_beamline_name = ''
+
         self.handled_element_types = [
             'DRIF','EDRIFT','RFCA',
             'CSBEND', 'CSBEN', 'SBEN','SBEND', 'CCBEND',
@@ -44,6 +47,9 @@ class Lattice():
     def load_LTE(self, LTE_filepath, used_beamline_name='',
                  elem_files_root_folderpath=None):
         """"""
+
+        if used_beamline_name is None:
+            used_beamline_name = ''
 
         LTE_file = Path(LTE_filepath)
 
@@ -246,6 +252,9 @@ class Lattice():
 
     def get_used_beamline_element_defs(self, used_beamline_name=''):
         """"""
+
+        if used_beamline_name is None:
+            used_beamline_name = ''
 
         all_elem_defs = self.get_all_elem_defs(self.cleaned_LTE_text)
         all_beamline_defs = self.get_all_beamline_defs(self.cleaned_LTE_text)

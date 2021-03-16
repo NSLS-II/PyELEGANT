@@ -28,7 +28,7 @@ def get_closed_orbit(
     else:
         if remote_opts is None:
             remote_opts = dict(
-                use_sbatch=False, pelegant=False, job_name='clo',
+                sbatch={'use': False}, pelegant=False, job_name='clo',
                 output='clo.%J.out', error='clo.%J.err',
                 partition='normal', ntasks=1)
 
@@ -160,7 +160,7 @@ def calc_closed_orbit(
         else:
             if remote_opts is None:
                 remote_opts = dict(
-                    use_sbatch=False, pelegant=False, job_name='clo',
+                    sbatch={'use': False}, pelegant=False, job_name='clo',
                     output='clo.%J.out', error='clo.%J.err',
                     partition='normal', ntasks=1)
 

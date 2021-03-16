@@ -31,6 +31,7 @@ del this_folder
 
 
 std_print_enabled = dict(out=True, err=True)
+sbatch_std_print_enabled = dict(out=True, err=True)
 
 from . import local
 #from . import remote
@@ -54,7 +55,17 @@ from . import sigproc
 from . import twiss
 from . import util
 
-from .local import run, enable_stdout, enable_stderr, disable_stdout, disable_stderr
+from .local import (
+    run,
+    enable_stdout,
+    enable_stderr,
+    disable_stdout,
+    disable_stderr,
+    enable_sbatch_stdout,
+    enable_sbatch_stderr,
+    disable_sbatch_stdout,
+    disable_sbatch_stderr,
+)
 from .remote import remote
 from .twiss import calc_line_twiss, calc_ring_twiss, plot_twiss
 
