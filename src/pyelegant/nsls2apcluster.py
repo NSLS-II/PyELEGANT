@@ -305,6 +305,26 @@ def save_slurm_abs_time_limit_from_config_file():
     with open(_SLURM_CONFIG_FILEPATH, 'w') as f:
         yml.dump(config, f)
 
+
+SRUN_OPTION_MAP = {
+    'p': 'partition',
+    'q': 'qos',
+    'o': 'output',
+    'e': 'error',
+    't': 'time',
+    'n': 'ntasks',
+    'c': 'cpus-per-task',
+    'cpus_per_task': 'cpus-per-task',
+    'J': 'job-name',
+    'job_name': 'job-name',
+    'mail_user': 'mail-user',
+    'mail_type': 'mail-type',
+    'spread_job': 'spread-job',
+    'w': 'nodelist',
+    'x': 'exclude',
+}
+
+
 def extract_slurm_opts(remote_opts):
     """"""
 
@@ -312,10 +332,9 @@ def extract_slurm_opts(remote_opts):
 
     _make_sure_slurm_excl_nodes_initialized()
 
-    if SLURM_EXCL_NODES != []:
-        slurm_opts['exclude'] = f'--exclude={",".join(SLURM_EXCL_NODES)}'
-
     partition = remote_opts.get('partition', None)
+    if partition is None:
+        partition = remote_opts.get('p', None)
     if partition:
         try:
             abs_timelimit = SLURM_ABS_TIME_LIMIT[partition]
@@ -327,12 +346,18 @@ def extract_slurm_opts(remote_opts):
             timelimit = get_constrained_timelimit_str(abs_timelimit, partition)
             if timelimit:
                 slurm_opts['time'] = f'--time={timelimit}'
+                # ^ Obviously this will be overwritten if a user specifies "time".
+                #   If an invalid time limit is specified, it should fail.
 
     need_mail_user = False
 
     for k, v in remote_opts.items():
 
-        if k in ('output', 'error', 'partition', 'time'):
+        # Retrieve the full option name, if it's a shortcut name or alternative name
+        if k in SRUN_OPTION_MAP:
+            k = SRUN_OPTION_MAP[k]
+
+        if k in ('output', 'error', 'partition', 'qos', 'time'):
 
             if v is None:
                 slurm_opts[k] = ''
@@ -346,45 +371,93 @@ def extract_slurm_opts(remote_opts):
             else:
                 slurm_opts[k] = '--{}={:d}'.format(k, v)
 
-        elif k in ('cpus_per_task',):
+        elif k == 'cpus-per-task':
 
             if v is None:
                 slurm_opts[k] = ''
             else:
                 slurm_opts[k] = '-c {:d}'.format(v)
 
-        elif k in ('job_name', 'mail_user'):
+        elif k in ('job-name', 'mail-user'):
 
             if v is None:
                 slurm_opts[k] = ''
             else:
-                slurm_opts[k] = '--{}={}'.format(k.replace('_', '-'), v)
+                slurm_opts[k] = '--{}={}'.format(k, v)
 
-        elif k in ('mail_type_begin', 'mail_type_end'):
+        elif k == 'mail-type':
 
-            if (v is None) or (not v):
+            if v is None:
                 slurm_opts[k] = ''
             else:
-                _type = k.split('_')[-1]
-                slurm_opts[k] = f'--mail-type={_type}'
+                valid_types = [
+                    'BEGIN',
+                    'END',
+                    'FAIL',
+                    'REQUEUE',
+                    'ALL',
+                    'INVALID_DEPEND',
+                    'STAGE_OUT',
+                    'TIME_LIMIT',
+                    'TIME_LIMIT_90',
+                    'TIME_LIMIT_80',
+                    'TIME_LIMIT_50',
+                ]
+
+                if isinstance(v, str):
+                    v = [v]
+
+                if not all([_type in valid_types for _type in v]):
+                    raise ValueError(
+                        f'Invalid "mail-type" input: {v}. Valid types are {valid_types}'
+                    )
+                slurm_opts[k] = f'--mail-type={",".join(v)}'
 
                 need_mail_user = True
 
-        elif k in ('nodelist', 'exclude'):
+        elif k == 'exclude':
+            if v is None:
+                v = SLURM_EXCL_NODES
+            elif isinstance(v, str):
+                v = list(set([v] + SLURM_EXCL_NODES))
+            else:
+                v = list(set(v + SLURM_EXCL_NODES))
+
+            if v == []:
+                slurm_opts[k] = ''
+            else:
+                slurm_opts[k] = '--{}={}'.format(k, ','.join(v))
+
+        elif k == 'nodelist':
             if v is None:
                 slurm_opts[k] = ''
             else:
                 slurm_opts[k] = '--{}={}'.format(k, ','.join(v))
 
-        elif k in ('sbatch', 'pelegant', 'sbatch_err_check_tree', 'diag_mode'):
+        elif k in ('x11', 'spread-job'):
+            if v:  # True or False
+                slurm_opts[k] = f'--{k}'
+            else:
+                slurm_opts[k] = ''
+
+        elif k in (
+            'sbatch',
+            'pelegant',
+            'diag_mode',
+            'abort_filepath',
+            'status_check_interval',
+            'sbatch_err_check_tree',
+        ):
             pass
         else:
             raise ValueError(f'Unknown slurm option keyword: {k}')
 
     if need_mail_user:
-        if len([s for s in list(slurm_opts) if s == 'mail_user']) != 1:
-            raise ValueError('"mail_user" option must be specified when '
-                             '"mail_type_begin" or "mail_type_end" is True')
+        if len([s for s in list(slurm_opts) if s == 'mail-user']) != 1:
+            raise ValueError(
+                '"mail-user" option must be specified when '
+                '"mail-type" is given as a list.'
+            )
 
     return slurm_opts
 
@@ -428,13 +501,16 @@ def run(
 
     if ('sbatch' in remote_opts) and remote_opts['sbatch']['use']:
 
-        if 'job_name' not in slurm_opts:
-            print('* Using `sbatch` requires "job_name" option to be specified. Using default.')
-            slurm_opts['job_name'] = '--job-name={}'.format(
-                DEFAULT_REMOTE_OPTS['job_name'])
+        if 'job-name' not in slurm_opts:
+            print(
+                '* Using `sbatch` requires "job-name" option to be specified. Using default.'
+            )
+            slurm_opts['job-name'] = '--job-name={}'.format(
+                DEFAULT_REMOTE_OPTS['job_name']
+            )
 
         # Make sure output/error log filenames conform to expectations
-        job_name = slurm_opts['job_name'].split('=')[-1]
+        job_name = slurm_opts['job-name'].split('=')[-1]
         slurm_opts['output'] = '--output={}.%J.out'.format(job_name)
         slurm_opts['error'] = '--error={}.%J.err'.format(job_name)
 
@@ -1080,38 +1156,86 @@ def get_cluster_time_limits():
 
     return timelimit_d
 
-def monitor_simplex_log_progress(job_ID_str, simplex_log_prefix):
+def monitor_simplex_log_progress(job_ID_str, simplex_log_prefix, optimizer_remote_opts):
     """"""
 
+    ntasks = optimizer_remote_opts['ntasks']
+
+    optimizer_slurm_opts = extract_slurm_opts(optimizer_remote_opts)
+    monitor_slurm_opts = {}
+    for k in ['partition', 'qos', 'time']:
+        if k in optimizer_slurm_opts:
+            monitor_slurm_opts[k] = optimizer_slurm_opts[k]
+
     tmp = tempfile.NamedTemporaryFile(
-        dir=os.getcwd(), delete=True, prefix='tmpSbatchSddsplot_')
+        dir=os.getcwd(), delete=True, prefix='tmpSbatchSddsplot_'
+    )
     job_name = os.path.basename(tmp.name)
     tmp.close()
 
-    #'$ srun --x11 sddsplot "-device=motif,-movie true -keep 1" -repeat -column=Step,best* $1.simlog-* -graph=line,vary -mode=y=autolog'
-    srun_cmd = (
-        f'srun --x11 --job-name={job_name} sddsplot "-device=motif,-movie true -keep 1" '
-        f'-repeat -column=Step,best* {simplex_log_prefix}-* -graph=line,vary '
-        '-mode=y=autolog')
-
-    # Wait until first ".simlog" files appear. If the sddsplot command is
-    # issued before any file appears, it will crash.
+    # Wait until all the ".simlog" files appear. If the sddsplot command is
+    # issued before they appear, it will crash.
     for _ in range(10):
         simlog_list = glob.glob(f'{simplex_log_prefix}-*')
-        if len(simlog_list) != 0:
+        if len(simlog_list) == ntasks:
             break
         else:
             time.sleep(5.0)
 
-    # Launch sddsplot
-    p_sddsplot = Popen(srun_cmd, shell=True, stdout=PIPE, stderr=PIPE)
+    srun_cmd_prefix = f'srun --x11 --job-name={job_name}'
+    for k, v in monitor_slurm_opts.items():
+        if v is None:
+            continue
+        srun_cmd_prefix += f' {v}'
+    srun_cmd_prefix += ' sddsplot "-device=motif,-movie true -keep 1"'
+    srun_cmd_prefix += ' -repeat -column=Step,best*'
+    srun_cmd_suffix = ' -graph=line,vary -mode=y=autolog'
+
+    # use_shell = True
+    use_shell = False
+
+    if use_shell:
+        if False:
+            srun_cmd = (
+                f'srun --x11 --job-name={job_name} sddsplot "-device=motif,-movie true -keep 1" '
+                f'-repeat -column=Step,best* {simplex_log_prefix}-* -graph=line,vary '
+                '-mode=y=autolog'
+            )
+        else:
+            srun_cmd_mid = f' {simplex_log_prefix}-*'
+            srun_cmd = srun_cmd_prefix + srun_cmd_mid + srun_cmd_suffix
+
+        # Launch sddsplot
+        p_sddsplot = Popen(
+            srun_cmd, shell=True, stdout=PIPE, stderr=PIPE, encoding='utf-8'
+        )
+    else:
+        # If we're not going to use "shell", then the wildcard * must be expanded
+        # by the glob module for the list of file names.
+        if False:
+            srun_cmd = (
+                f'srun --x11 --job-name={job_name} sddsplot "-device=motif,-movie true -keep 1" '
+                f'-repeat -column=Step,best* {" ".join(simlog_list)} -graph=line,vary '
+                '-mode=y=autolog'
+            )
+        else:
+            srun_cmd_mid = f' {" ".join(simlog_list)}'
+            srun_cmd = srun_cmd_prefix + srun_cmd_mid + srun_cmd_suffix
+
+        # Launch sddsplot
+        p_sddsplot = Popen(
+            shlex.split(srun_cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8'
+        )
 
     # Get the launched job ID
     for _ in range(10):
-        p = Popen('squeue -o "%.12i %.50j"', stdout=PIPE, stderr=PIPE, shell=True)
+        p = Popen(
+            shlex.split('squeue -o "%.12i %.50j"'),
+            stdout=PIPE,
+            stderr=PIPE,
+            encoding='utf-8',
+        )
         out, err = p.communicate()
-        out = out.decode('utf-8')
-        err = err.decode('utf-8')
 
         if err:
             err_counter += 1
@@ -1128,8 +1252,7 @@ def monitor_simplex_log_progress(job_ID_str, simplex_log_prefix):
         else:
             err_counter = 0
 
-        job_ID_res_list = [
-            L.split() for L in out.split('\n')[1:] if L.strip() != '']
+        job_ID_res_list = [L.split() for L in out.split('\n')[1:] if L.strip() != '']
         job_ID_list, job_name_list = zip(*job_ID_res_list)
 
         if job_name not in job_name_list:
@@ -1141,41 +1264,54 @@ def monitor_simplex_log_progress(job_ID_str, simplex_log_prefix):
 
         break
 
+    if p_sddsplot.poll() is not None:
+        out, err = p_sddsplot.communicate()
+        print(f'$ {srun_cmd}')
+        print('** stdout **')
+        print(out)
+        print('** stderr **')
+        print(err)
+        raise RuntimeError('The process for sddsplot appeared to have failed.')
+
     status_check_interval = 5.0
     wait_for_completion(job_ID_str, status_check_interval)
 
     # Kill the sddsplot job
     try:
-        p = Popen(['scancel', sddsplot_job_ID_str], stdout=PIPE, stderr=PIPE)
+        p = Popen(
+            shlex.split(f'scancel {sddsplot_job_ID_str}'),
+            stdout=PIPE,
+            stderr=PIPE,
+            encoding='utf-8',
+        )
         out, err = p.communicate()
-        out = out.decode('utf-8')
-        err = err.decode('utf-8')
     except:
         pass
 
-def start_hybrid_simplex_optimizer(
-    elebuilder_obj, show_progress_plot=True, ntasks=20, partition='normal',
-    job_name='job', time_limit=None, email_end=True, email_beign=False,
-    email_address=''):
-    """"""
 
-    if email_end or email_beign:
-        if not email_address:
-            raise ValueError(
-                ('If either "email_end" or "email_begin" is True, '
-                 'you must provide email address.'))
+def start_hybrid_simplex_optimizer(
+    elebuilder_obj, remote_opts, show_progress_plot=True
+):
+    """"""
 
     ed = elebuilder_obj
 
-    # Minimal options
-    #    remote_opts = dict(pelegant=True, ntasks=50)
-    remote_opts = dict(
-        sbatch={'use': True}, pelegant=True,
-        job_name=job_name, partition=partition, ntasks=ntasks, time=time_limit,
-        mail_type_begin=email_beign, mail_type_end=email_end, mail_user=email_address,
+    req_remote_opts = dict(
+        sbatch={'use': True},
+        pelegant=True,
     )
+    for k, v in req_remote_opts.items():
+        if k in remote_opts:
+            print(f'WARNING: `remote_opts["{k}"]` will be ignored.')
+        remote_opts[k] = v
+    default_remote_opts = dict(job_name='hybrid_simplex', ntasks=20)
+    for k, v in default_remote_opts.items():
+        if k not in remote_opts:
+            remote_opts[k] = v
 
-    if not show_progress_plot: # If you don't care to see the progress of the optimization
+    if (
+        not show_progress_plot
+    ):  # If you don't care to see the progress of the optimization
 
         remote_opts['sbatch']['wait'] = True
 
@@ -1183,11 +1319,15 @@ def start_hybrid_simplex_optimizer(
         run(remote_opts, ed.ele_filepath)
         # ^ This will block until the optimization is completed.
 
-    else: # If you want to see the progress of the optimization
+    else:  # If you want to see the progress of the optimization
 
-        _fp_list = [_v for _v in ed.actual_output_filepath_list if _v.endswith('.simlog')]
+        _fp_list = [
+            _v for _v in ed.actual_output_filepath_list if _v.endswith('.simlog')
+        ]
         if len(_fp_list) == 0:
-            raise RuntimeError('simplex_log is NOT specified. Cannot monitor simplex progress.')
+            raise RuntimeError(
+                'simplex_log is NOT specified. Cannot monitor simplex progress.'
+            )
         elif len(_fp_list) == 1:
             simlog_filepath = _fp_list[0]
         else:
@@ -1199,13 +1339,18 @@ def start_hybrid_simplex_optimizer(
         job_info = run(remote_opts, ed.ele_filepath)
 
         # Start plotting simplex optimization progress
-        monitor_simplex_log_progress(job_info['job_ID_str'], simlog_filepath)
+        monitor_simplex_log_progress(
+            job_info['job_ID_str'], simlog_filepath, remote_opts
+        )
 
         try:
             os.remove(job_info['sbatch_sh_filepath'])
         except IOError:
-            print('* Failed to delete temporary sbatch shell file "{}"'.format(
-                job_info['sbatch_sh_filepath']))
+            print(
+                '* Failed to delete temporary sbatch shell file "{}"'.format(
+                    job_info['sbatch_sh_filepath']
+                )
+            )
 
 
 def write_geneticOptimizer_dot_local(remote_opts=None):
