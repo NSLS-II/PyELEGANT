@@ -423,6 +423,8 @@ def extract_slurm_opts(remote_opts):
             'diag_mode',
             'abort_filepath',
             'status_check_interval',
+            'del_input_file',
+            'del_output_file',
         ):
             pass
         else:
@@ -622,12 +624,24 @@ def wait_for_completion(
                 try:
                     curr_err_log_file_size = os.stat(err_log_filename).st_size
                     if _err_log_file_missing:
-                        print(f'File "{err_log_filename}" have appeared.')
+                        print(f'File "{err_log_filename}" has appeared.')
                     break
                 except FileNotFoundError:
                     print(f'Waiting for the file "{err_log_filename}" to appear...')
                     _err_log_file_missing = True
-                    time.sleep(10.0)
+                    if False:
+                        time.sleep(10.0)
+                    else:
+                        time.sleep(1.0)
+                        ls_cmd = f'ls {Path(err_log_filename).resolve().parent} > /dev/null 2>&1'
+                        print('$ '+ls_cmd)
+                        _p = Popen(ls_cmd, shell=True)
+                        # ^ Needed for NFS cache flushing (https://stackoverflow.com/questions/3112546/os-path-exists-lies)
+                        # If the code is run on GPFS or Lustre, this caching problem
+                        # does not occur.
+                        _tStart = time.time()
+                        _p.communicate()
+                        print(f'ls took {time.time()-_tStart:.3f} [s]')
             else:
                 raise FileNotFoundError(err_log_filename)
             if curr_err_log_file_size > prev_err_log_file_size:
@@ -1417,3 +1431,131 @@ def tmp_rm(node_name, pattern):
 
     # Remove temp Python file
     temp_py.unlink()
+
+
+def srun_python_func(
+    remote_opts, module_name, func_name, func_args, func_kwargs, paths_to_prepend=None
+):
+    """
+    Example:
+        module_name = 'pyelegant.nonlin'
+        func_name = '_calc_chrom_track_get_tbt'
+    """
+
+    d = dict(
+        module_name=module_name,
+        func_name=func_name,
+        func_args=func_args,
+        func_kwargs=func_kwargs,
+    )
+
+    tmp = tempfile.NamedTemporaryFile(
+        dir=Path.cwd(), delete=False, prefix='tmpInput_', suffix='.pgz'
+    )
+    input_filepath = Path(tmp.name).resolve()
+    output_filepath = Path(tmp.name.replace('tmpInput_', 'tmpOutput_')).resolve()
+    tmp.close()
+
+    d['output_filepath'] = str(output_filepath)
+
+    slurm_opts = extract_slurm_opts(remote_opts)
+    if 'job-name' not in slurm_opts:
+        slurm_opts['job-name'] = '--job-name=srun_py_func'
+    if 'partition' not in slurm_opts:
+        slurm_opts['partition'] = '--partition=normal'
+    if 'qos' not in slurm_opts:
+        slurm_opts['qos'] = '--qos=normal'
+    if 'cpus-per-task' not in slurm_opts:
+        slurm_opts['cpus-per-task'] = '--cpus-per-task=1'
+        # ^ This is not the case for nsls2pluto, which doesn't use hyper-threading,
+        # but if the cluster uses hyper-threading (i.e., 2 logical cores for 1
+        # physical core), then don't use "-c 1". If you do, it will still uses 2
+        # logical cores, but runs 2 process of the same simultaneously (you can
+        # tell from the print statements.) With "-c 2", there will be only one
+        # process but can utilize 2 cores.
+    if 'x11' in slurm_opts:
+        raise NotImplementedError('x11 needs `export MPLBACKEND="agg"`')
+
+    with open(input_filepath, 'wb') as f:
+
+        if paths_to_prepend is None:
+            paths_to_prepend = []
+        dill.dump(paths_to_prepend, f, protocol=-1)
+
+        dill.dump(d, f, protocol=-1)
+
+    main_script_path = __file__[:-3] + '_srun_py_func_script.py'
+    slurm_opts_str = ' '.join([v for v in slurm_opts.values()])
+    srun_cmd = f'srun {slurm_opts_str} python {main_script_path} {input_filepath}'
+    print(f'$ {srun_cmd}')
+    p = Popen(shlex.split(srun_cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+
+    print(out.strip())
+
+    if err.strip():
+        print('\n*** stderr ***')
+        print(err.strip())
+
+    tFileWait = time.time()
+    for _ in range(30):
+        if not output_filepath.exists():
+            if False:
+                p = Popen(
+                    #shlex.split(f'ls {output_filepath}'), # <= This will NOT refresh NFS cache
+                    shlex.split('ls'), # <= This WILL refresh NFS cache
+                    stdout=PIPE,
+                    stderr=PIPE,
+                    encoding='utf-8',
+                )
+                out, err = p.communicate()
+                print(out)
+                if err.strip():
+                    print('## stderr ##')
+                    print(err.strip())
+            else:
+                p = Popen('ls > /dev/null 2>&1', shell=True)
+                # ^ Needed for NFS cache flushing (https://stackoverflow.com/questions/3112546/os-path-exists-lies)
+                # If the code is run on GPFS or Lustre, this caching problem
+                # does not occur.
+                p.communicate()
+            continue
+
+        print(f'Output file existence wait for {time.time()-tFileWait:.3f} [s]')
+        results = util.load_pgz_file(output_filepath)
+        break
+    else:
+        print(f'Waited output file to show up for {time.time()-tFileWait:.3f} [s]')
+        raise IOError(f'Expected output file "{output_filepath}" not found.')
+
+    if remote_opts.get('del_input_file', True):
+        try:
+            input_filepath.unlink()
+        except:
+            pass
+    if remote_opts.get('del_output_file', True):
+        try:
+            output_filepath.unlink()
+        except:
+            pass
+
+    return results
+
+
+def sendRunCompleteMail(subject, content):
+    """"""
+
+    import getpass
+    import smtplib
+    from email.message import EmailMessage
+
+    username = getpass.getuser()
+
+    s = smtplib.SMTP('localhost')
+    msg = EmailMessage()
+    msg['From'] = f'{username}@{s.local_hostname}'
+    msg['To'] = f'{username}@bnl.gov'
+    msg['Subject'] = subject
+    msg.set_content(content)
+    s.send_message(msg)
+    s.quit()
