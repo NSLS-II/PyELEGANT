@@ -104,37 +104,27 @@ if ('install' in sys.argv) or ('sdist' in sys.argv):
     )
 
     if facility_name == 'nsls2apcluster':
-        gui_folderpath = 'pyelegant.guis.nsls2apcluster'
-        script_folderpath = 'pyelegant.scripts.nsls2apcluster'
-        entry_points['console_scripts'].extend([
-            'pyele_report = pyelegant.scripts.genreport:main',
-            f'pyele_slurm_print_queue = {script_folderpath}.slurmutil:print_queue',
-            f'pyele_slurm_print_load = {script_folderpath}.slurmutil:print_load',
-            f'pyele_slurm_scancel_regex_jobname = {script_folderpath}.slurmutil:scancel_by_regex_jobname',
-        ])
-        entry_points['gui_scripts'].extend([
-            # GUI
-            f'pyele_gui_slurm = {gui_folderpath}.cluster_status.main:main',
-            f'pyele_gui_report_wiz = {gui_folderpath}.genreport_wizard.main:main',
-        ])
+        facility_gui_folderpath = 'src/pyelegant/guis/nsls2apcluster'
+        facility_script_folderpath = 'src/pyelegant/scripts/nsls2apcluster'
     elif facility_name == 'nsls2pluto':
-        gui_folderpath = 'pyelegant.guis.nsls2pluto'
-        script_folderpath = 'pyelegant.scripts.nsls2pluto'
-        entry_points['console_scripts'].extend([
-            'pyele_report = pyelegant.scripts.genreport:main',
-            f'pyele_slurm_print_queue = {script_folderpath}.slurmutil:print_queue',
-            f'pyele_slurm_print_load = {script_folderpath}.slurmutil:print_load',
-            f'pyele_slurm_scancel_regex_jobname = {script_folderpath}.slurmutil:scancel_by_regex_jobname',
-        ])
-        entry_points['gui_scripts'].extend([
-            # GUI
-            f'pyele_gui_slurm = {gui_folderpath}.cluster_status.main:main',
-            f'pyele_gui_report_wiz = {gui_folderpath}.genreport_wizard.main:main',
-        ])
+        facility_gui_folderpath = 'src/pyelegant/guis/nsls2pluto'
+        facility_script_folderpath = 'src/pyelegant/scripts/nsls2pluto'
+
+    entry_points['console_scripts'].extend([
+        'pyele_report = pyelegant.scripts.common.genreport:main',
+        'pyele_slurm_print_queue = pyelegant.scripts.slurmutil:print_queue',
+        'pyele_slurm_print_load = pyelegant.scripts.slurmutil:print_load',
+        'pyele_slurm_scancel_regex_jobname = pyelegant.scripts.slurmutil:scancel_by_regex_jobname',
+    ])
+    entry_points['gui_scripts'].extend([
+        # GUI
+        'pyele_gui_slurm = pyelegant.guis.cluster_status.main:main',
+        'pyele_gui_report_wiz = pyelegant.guis.genreport_wizard.main:main',
+    ])
 
     if facility_name in ('nsls2apcluster', 'nsls2pluto'):
-        package_data[f'{gui_folderpath}.cluster_status'] = ['*.ui']
-        package_data[f'{gui_folderpath}.genreport_wizard'] = ['*.ui']
+        package_data['pyelegant.guis.cluster_status'] = ['*.ui']
+        package_data['pyelegant.guis.genreport_wizard'] = ['*.ui']
 
     other_setup_opts = dict(
         install_requires=req_pakcages,
@@ -147,11 +137,39 @@ elif 'egg_info' in sys.argv:
 else:
     raise RuntimeError()
 
+packages = []
+for pk in find_packages('src'):
+    # Exclude guis/scripts subfolders for other facilities
+    if pk.startswith('pyelegant.guis.'):
+        if pk == f'pyelegant.guis.{facility_name}':
+            pk = 'pyelegant.guis'
+        else:
+            if pk.startswith(f'pyelegant.guis.{facility_name}.'):
+                pk = pk.replace(f'pyelegant.guis.{facility_name}.', 'pyelegant.guis.')
+            else:
+                continue
+    elif pk.startswith('pyelegant.scripts.'):
+        if pk == f'pyelegant.scripts.{facility_name}':
+            pk = 'pyelegant.scripts'
+        elif pk == f'pyelegant.scripts.common':
+            pk = 'pyelegant.scripts.common'
+        else:
+            if pk.startswith(f'pyelegant.scripts.{facility_name}.'):
+                pk = pk.replace(f'pyelegant.scripts.{facility_name}.', 'pyelegant.scripts.')
+            else:
+                continue
+    packages.append(pk)
+packages = list(set(packages))
+
 setup(
     name = program_name,
     version = version,
-    packages=find_packages('src'),
-    package_dir={'': 'src'},
+    packages=packages,
+    package_dir={'': 'src',
+                 'pyelegant.guis': facility_gui_folderpath,
+                 'pyelegant.scripts': facility_script_folderpath,
+                 'pyelegant.scripts.common': 'src/pyelegant/scripts/common',
+                 },
     #include_package_data = True,
     package_data = package_data,
     zip_safe=False,

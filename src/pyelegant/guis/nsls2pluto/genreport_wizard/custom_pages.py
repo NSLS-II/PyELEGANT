@@ -1868,7 +1868,7 @@ class PageLTE(PageStandard):
 
         for k in [
             'report_author', 'orig_LTE_path*', 'LTE_authors*', 'parent_LTE_hash',
-            'E_GeV*', 'use_beamline_cell*', 'use_beamline_ring*',]:
+            'ref_FLR_path*', 'E_GeV*', 'use_beamline_cell*', 'use_beamline_ring*',]:
             k_wo_star = (k[:-1] if k.endswith('*') else k)
             self.registerFieldOnFirstShow(
                 f'edit_{k}',
@@ -1894,8 +1894,11 @@ class PageLTE(PageStandard):
         b = self.safeFindChild(QtWidgets.QPushButton, 'pushButton_browse_LTE')
         b.clicked.connect(self.browse_LTE_file)
 
+        b = self.safeFindChild(QtWidgets.QPushButton, 'pushButton_browse_FLR')
+        b.clicked.connect(self.browse_FLR_file)
+
         for k in [
-            'orig_LTE_path*', 'LTE_authors*', 'E_GeV*',
+            'orig_LTE_path*', 'LTE_authors*', 'ref_FLR_path*', 'E_GeV*',
             'use_beamline_cell*', 'use_beamline_ring*',]:
             k_wo_star = (k[:-1] if k.endswith('*') else k)
             w = self.safeFindChild(QtWidgets.QLineEdit, f'lineEdit_{k_wo_star}')
@@ -1939,6 +1942,14 @@ class PageLTE(PageStandard):
             date = QtCore.QDateTime(datetime.date(year, month, day))
         self.setField('date_LTE_received', date)
 
+        try:
+            ref_FLR_filepath = self.conf['floor_comparison']['ref_flr_filepath']
+        except:
+            ref_FLR_filepath = ''
+        self.setField(
+            'edit_ref_FLR_path',
+            convert_multiline_yaml_str_to_oneline_str(ref_FLR_filepath))
+
         E_MeV = self.conf.get('E_MeV', 3e3)
         if not isinstance(E_MeV, list):
             E_MeV_list = [E_MeV]
@@ -1978,6 +1989,21 @@ class PageLTE(PageStandard):
         if filepath:
             self.setField('edit_orig_LTE_path', filepath)
 
+    def browse_FLR_file(self):
+        """"""
+
+        caption = 'Select reference FLR (floor) file to be compared against'
+        filter_str = 'FLR Files (*.flr);;All Files (*)'
+        extension_dict = {'FLR Files': ['*.flr'],
+                          'All Files': ['*']}
+        filter_str = getFileDialogFilterStr(extension_dict)
+        directory = getFileDialogInitDir(self.field('edit_ref_FLR_path'))
+        filepath = openFileNameDialog(
+            self, caption=caption, directory=directory, filter_str=filter_str)
+
+        if filepath:
+            self.setField('edit_ref_FLR_path', filepath)
+
     def validatePage(self):
         """"""
 
@@ -1999,6 +2025,27 @@ class PageLTE(PageStandard):
         except PermissionError:
             text = 'Permission error'
             info_text = f'Specified LTE file "{orig_LTE_Path}" is not accessible!'
+            showInvalidPageInputDialog(text, info_text)
+            return False
+
+        ref_FLR_filepath = self.field('edit_ref_FLR_path').strip()
+
+        if not ref_FLR_filepath.endswith('.flr'):
+            text = 'Invalid file extension'
+            info_text = 'FLR file name must end with ".flr".'
+            showInvalidPageInputDialog(text, info_text)
+            return False
+
+        ref_FLR_Path = Path(ref_FLR_filepath)
+        try:
+            if not ref_FLR_Path.exists():
+                text = 'Invalid file path'
+                info_text = f'Specified FLR file "{ref_FLR_Path}" does not exist!'
+                showInvalidPageInputDialog(text, info_text)
+                return False
+        except PermissionError:
+            text = 'Permission error'
+            info_text = f'Specified FLR file "{ref_FLR_Path}" is not accessible!'
             showInvalidPageInputDialog(text, info_text)
             return False
 
@@ -2212,6 +2259,9 @@ class PageLTE(PageStandard):
         #
         f(mod_conf, 'lattice_received_date',
           self.field('date_LTE_received').toString('MM/dd/yyyy'))
+        #
+        f(mod_conf['lattice_props']['req_props']['floor_comparison'],
+          'ref_flr_filepath', ref_FLR_filepath)
         #
         E_GeV = self.field('edit_E_GeV')
         try:
@@ -2495,9 +2545,6 @@ class PageStraightCenters(PageStandard):
         #
         f(d['beta']['SS'], 'name', M_SS_name)
         f(d['beta']['SS'], 'occur', 0)
-        #
-        d['floor_comparison']['ref_flr_filepath'] = \
-            '/GPFS/APC/yhidaka/common/nsls2.flr'
         #
         f(d['floor_comparison']['LS']['ref_elem'], 'name', 'MID')
         f(d['floor_comparison']['LS']['ref_elem'], 'occur', 1)

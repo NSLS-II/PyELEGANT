@@ -5714,6 +5714,8 @@ class Report_NSLS2U_Default:
         _d = req_data['floor_comparison'] = {}
         #
         ref_flr_filepath = req_conf['floor_comparison']['ref_flr_filepath']
+        if not Path(ref_flr_filepath).exists():
+            raise FileNotFoundError(f'Specified Floor file "{ref_flr_filepath}" does not exist.')
         flr_data = pe.sdds.sdds2dicts(ref_flr_filepath)[0]
         ref_X_all = flr_data['columns']['X']
         ref_Z_all = flr_data['columns']['Z']
@@ -8183,7 +8185,7 @@ class Report_NSLS2U_Default:
 
             err_log_check = dict(funcs=[self._check_remote_err_log_exit_code])
 
-            module_name = 'pyelegant.scripts.genreport'
+            module_name = 'pyelegant.scripts.common.genreport'
             func_name = 'get_ELE_Touschek_lifetime'
 
             nMaxRemoteRetry = 3
