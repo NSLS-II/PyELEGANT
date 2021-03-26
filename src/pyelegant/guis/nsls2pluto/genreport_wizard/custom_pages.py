@@ -1943,7 +1943,7 @@ class PageLTE(PageStandard):
         self.setField('date_LTE_received', date)
 
         try:
-            ref_FLR_filepath = self.conf['floor_comparison']['ref_flr_filepath']
+            ref_FLR_filepath = self.conf['lattice_props']['req_props']['floor_comparison']['ref_flr_filepath']
         except:
             ref_FLR_filepath = ''
         self.setField(
