@@ -15,7 +15,7 @@ from qtpy import QtCore, QtGui, QtWidgets
 Qt = QtCore.Qt
 from qtpy import uic
 
-from .... import facility_name
+from ... import facility_name
 
 def chained_Popen(cmd_list):
     """"""
