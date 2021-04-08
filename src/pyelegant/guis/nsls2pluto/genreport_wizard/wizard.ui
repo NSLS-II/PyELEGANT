@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>760</width>
-    <height>577</height>
+    <width>763</width>
+    <height>677</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -119,26 +119,26 @@ p, li { white-space: pre-wrap; }
      <layout class="QHBoxLayout" name="horizontalLayout_7">
       <item>
        <widget class="QLabel" name="label_84">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="text">
          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Root Name &lt;span style=&quot; font-size:11pt; color:#ff0000;&quot;&gt;*&lt;/span&gt;:&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QLineEdit" name="lineEdit_rootname"/>
-      </item>
-      <item>
-       <spacer name="horizontalSpacer_91">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+       <widget class="QLineEdit" name="lineEdit_rootname">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
         </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
+       </widget>
       </item>
      </layout>
     </item>
@@ -188,11 +188,17 @@ p, li { white-space: pre-wrap; }
      </layout>
     </item>
     <item>
-     <widget class="QLabel" name="label_full_new_config">
-      <property name="text">
-       <string/>
+     <widget class="QTextEdit" name="textEdit_full_new_config">
+      <property name="enabled">
+       <bool>true</bool>
       </property>
-      <property name="wordWrap">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="readOnly">
        <bool>true</bool>
       </property>
      </widget>
@@ -222,11 +228,17 @@ p, li { white-space: pre-wrap; }
      </layout>
     </item>
     <item>
-     <widget class="QLabel" name="label_full_report_folder">
-      <property name="text">
-       <string/>
+     <widget class="QTextEdit" name="textEdit_full_report_folder">
+      <property name="enabled">
+       <bool>true</bool>
       </property>
-      <property name="wordWrap">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="readOnly">
        <bool>true</bool>
       </property>
      </widget>
@@ -256,11 +268,17 @@ p, li { white-space: pre-wrap; }
      </layout>
     </item>
     <item>
-     <widget class="QLabel" name="label_full_pdf_path">
-      <property name="text">
-       <string/>
+     <widget class="QTextEdit" name="textEdit_full_pdf_path">
+      <property name="enabled">
+       <bool>true</bool>
       </property>
-      <property name="wordWrap">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="readOnly">
        <bool>true</bool>
       </property>
      </widget>
@@ -290,14 +308,33 @@ p, li { white-space: pre-wrap; }
      </layout>
     </item>
     <item>
-     <widget class="QLabel" name="label_full_xlsx_path">
-      <property name="text">
-       <string/>
+     <widget class="QTextEdit" name="textEdit_full_xlsx_path">
+      <property name="enabled">
+       <bool>true</bool>
       </property>
-      <property name="wordWrap">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="readOnly">
        <bool>true</bool>
       </property>
      </widget>
+    </item>
+    <item>
+     <spacer name="verticalSpacer_17">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>20</width>
+        <height>38</height>
+       </size>
+      </property>
+     </spacer>
     </item>
    </layout>
   </widget>
@@ -1964,7 +2001,7 @@ p, li { white-space: pre-wrap; }
            <attribute name="title">
             <string>Test</string>
            </attribute>
-           <layout class="QVBoxLayout" name="verticalLayout_35">
+           <layout class="QVBoxLayout" name="verticalLayout_157">
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_36">
               <item>
@@ -2203,43 +2240,32 @@ p, li { white-space: pre-wrap; }
                 <item>
                  <widget class="QComboBox" name="comboBox_partition_xy_aper_test">
                   <property name="currentIndex">
-                   <number>1</number>
+                   <number>-1</number>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_35">
+                <item>
+                 <widget class="QLabel" name="label_51">
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_xy_aper_test">
+                  <property name="enabled">
+                   <bool>false</bool>
+                  </property>
+                  <property name="currentIndex">
+                   <number>-1</number>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -2334,7 +2360,7 @@ p, li { white-space: pre-wrap; }
            <attribute name="title">
             <string>Production</string>
            </attribute>
-           <layout class="QVBoxLayout" name="verticalLayout_42">
+           <layout class="QVBoxLayout" name="verticalLayout_158">
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_38">
               <item>
@@ -2383,42 +2409,27 @@ p, li { white-space: pre-wrap; }
                  </widget>
                 </item>
                 <item>
-                 <widget class="QComboBox" name="comboBox_partition_xy_aper_prod">
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 <widget class="QComboBox" name="comboBox_partition_xy_aper_prod"/>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_42">
+                <item>
+                 <widget class="QLabel" name="label_62">
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_xy_aper_prod">
+                  <property name="enabled">
+                   <bool>false</bool>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -2659,7 +2670,7 @@ n_lines</string>
            <attribute name="title">
             <string>Test</string>
            </attribute>
-           <layout class="QVBoxLayout" name="verticalLayout_64">
+           <layout class="QVBoxLayout" name="verticalLayout_159">
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_39">
               <item>
@@ -2988,43 +2999,35 @@ n_lines</string>
                    </sizepolicy>
                   </property>
                   <property name="currentIndex">
-                   <number>1</number>
+                   <number>-1</number>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_64">
+                <item>
+                 <widget class="QLabel" name="label_153">
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_fmap_xy_test">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="currentIndex">
+                   <number>-1</number>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -3105,8 +3108,8 @@ n_lines</string>
                 </property>
                 <property name="sizeHint" stdset="0">
                  <size>
-                  <width>40</width>
-                  <height>20</height>
+                  <width>17</width>
+                  <height>51</height>
                  </size>
                 </property>
                </spacer>
@@ -3119,7 +3122,7 @@ n_lines</string>
            <attribute name="title">
             <string>Production</string>
            </attribute>
-           <layout class="QVBoxLayout" name="verticalLayout_68">
+           <layout class="QVBoxLayout" name="verticalLayout_160">
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_41">
               <item>
@@ -3241,41 +3244,30 @@ n_lines</string>
                     <verstretch>0</verstretch>
                    </sizepolicy>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_68">
+                <item>
+                 <widget class="QLabel" name="label_164">
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_fmap_xy_prod">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -3848,43 +3840,35 @@ delta_offset</string>
                    </sizepolicy>
                   </property>
                   <property name="currentIndex">
-                   <number>1</number>
+                   <number>-1</number>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_161">
+                <item>
+                 <widget class="QLabel" name="label_168">
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_fmap_px_test">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="currentIndex">
+                   <number>-1</number>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -3965,8 +3949,8 @@ delta_offset</string>
                 </property>
                 <property name="sizeHint" stdset="0">
                  <size>
-                  <width>40</width>
-                  <height>20</height>
+                  <width>17</width>
+                  <height>51</height>
                  </size>
                 </property>
                </spacer>
@@ -4101,41 +4085,30 @@ delta_offset</string>
                     <verstretch>0</verstretch>
                    </sizepolicy>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_162">
+                <item>
+                 <widget class="QLabel" name="label_169">
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_fmap_px_prod">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -4436,43 +4409,35 @@ delta_offset</string>
                    </sizepolicy>
                   </property>
                   <property name="currentIndex">
-                   <number>1</number>
+                   <number>-1</number>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_163">
+                <item>
+                 <widget class="QLabel" name="label_170">
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_cmap_xy_test">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="currentIndex">
+                   <number>-1</number>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -4636,41 +4601,30 @@ delta_offset</string>
                     <verstretch>0</verstretch>
                    </sizepolicy>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_164">
+                <item>
+                 <widget class="QLabel" name="label_171">
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_cmap_xy_prod">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -4973,43 +4927,35 @@ delta_offset
                    </sizepolicy>
                   </property>
                   <property name="currentIndex">
-                   <number>1</number>
+                   <number>-1</number>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_165">
+                <item>
+                 <widget class="QLabel" name="label_179">
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_cmap_px_test">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="currentIndex">
+                   <number>-1</number>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -5173,41 +5119,30 @@ delta_offset
                     <verstretch>0</verstretch>
                    </sizepolicy>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_166">
+                <item>
+                 <widget class="QLabel" name="label_180">
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_cmap_px_prod">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -5452,7 +5387,7 @@ delta_offset</string>
            <attribute name="title">
             <string>Calculate</string>
            </attribute>
-           <layout class="QVBoxLayout" name="verticalLayout_201">
+           <layout class="QVBoxLayout" name="verticalLayout_167">
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_119">
               <item>
@@ -5672,7 +5607,7 @@ delta_offset</string>
              </layout>
             </item>
             <item>
-             <layout class="QHBoxLayout" name="horizontalLayout_120">
+             <layout class="QHBoxLayout" name="horizontalLayout_97">
               <item>
                <layout class="QGridLayout" name="gridLayout_6">
                 <item row="0" column="0" colspan="3">
@@ -5753,43 +5688,35 @@ delta_offset</string>
                    </sizepolicy>
                   </property>
                   <property name="currentIndex">
-                   <number>1</number>
+                   <number>-1</number>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_222">
+                <item>
+                 <widget class="QLabel" name="label_224">
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_nonlin_chrom_calc">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="currentIndex">
+                   <number>-1</number>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -5864,19 +5791,6 @@ delta_offset</string>
                </layout>
               </item>
               <item>
-               <spacer name="horizontalSpacer_84">
-                <property name="orientation">
-                 <enum>Qt::Horizontal</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>40</width>
-                  <height>20</height>
-                 </size>
-                </property>
-               </spacer>
-              </item>
-              <item>
                <spacer name="horizontalSpacer_85">
                 <property name="orientation">
                  <enum>Qt::Horizontal</enum>
@@ -5891,335 +5805,360 @@ delta_offset</string>
               </item>
              </layout>
             </item>
+            <item>
+             <spacer name="verticalSpacer_15">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>42</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
            </layout>
           </widget>
           <widget class="QWidget" name="tab_60">
            <attribute name="title">
             <string>Plot</string>
            </attribute>
-           <layout class="QGridLayout" name="gridLayout_7">
-            <item row="0" column="0">
-             <layout class="QVBoxLayout" name="verticalLayout_212">
+           <layout class="QVBoxLayout" name="verticalLayout_171">
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_103">
               <item>
-               <widget class="QLabel" name="label_216">
-                <property name="text">
-                 <string>max_chrom_order</string>
-                </property>
-                <property name="alignment">
-                 <set>Qt::AlignCenter</set>
-                </property>
-               </widget>
+               <layout class="QVBoxLayout" name="verticalLayout_169">
+                <item>
+                 <layout class="QVBoxLayout" name="verticalLayout_212">
+                  <item>
+                   <widget class="QLabel" name="label_216">
+                    <property name="text">
+                     <string>max_chrom_order</string>
+                    </property>
+                    <property name="alignment">
+                     <set>Qt::AlignCenter</set>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QSpinBox" name="spinBox_max_chrom_order_nonlin_chrom_plot">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="minimum">
+                     <number>1</number>
+                    </property>
+                    <property name="maximum">
+                     <number>4</number>
+                    </property>
+                    <property name="value">
+                     <number>4</number>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <layout class="QVBoxLayout" name="verticalLayout_218">
+                  <item>
+                   <layout class="QHBoxLayout" name="horizontalLayout_122">
+                    <item>
+                     <spacer name="horizontalSpacer_87">
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>18</width>
+                        <height>20</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="label_221">
+                      <property name="text">
+                       <string>plot_fft</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <spacer name="horizontalSpacer_88">
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>18</width>
+                        <height>20</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                   </layout>
+                  </item>
+                  <item>
+                   <layout class="QHBoxLayout" name="horizontalLayout_123">
+                    <item>
+                     <spacer name="horizontalSpacer_89">
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                      <property name="sizeType">
+                       <enum>QSizePolicy::Preferred</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>13</width>
+                        <height>20</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                    <item>
+                     <widget class="QCheckBox" name="checkBox_plot_fft_nonlin_chrom_plot">
+                      <property name="maximumSize">
+                       <size>
+                        <width>16</width>
+                        <height>16777215</height>
+                       </size>
+                      </property>
+                      <property name="text">
+                       <string/>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <spacer name="horizontalSpacer_90">
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                      <property name="sizeType">
+                       <enum>QSizePolicy::Preferred</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>13</width>
+                        <height>20</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                   </layout>
+                  </item>
+                 </layout>
+                </item>
+               </layout>
               </item>
               <item>
-               <widget class="QSpinBox" name="spinBox_max_chrom_order_nonlin_chrom_plot">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
+               <layout class="QVBoxLayout" name="verticalLayout_213">
+                <item>
+                 <layout class="QVBoxLayout" name="verticalLayout_214">
+                  <item>
+                   <widget class="QLabel" name="label_217">
+                    <property name="text">
+                     <string>fit_delta_min [%]</string>
+                    </property>
+                    <property name="alignment">
+                     <set>Qt::AlignCenter</set>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLineEdit" name="lineEdit_fit_delta_min_nonlin_chrom_plot">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="text">
+                     <string>-1</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <layout class="QVBoxLayout" name="verticalLayout_215">
+                  <item>
+                   <widget class="QLabel" name="label_218">
+                    <property name="text">
+                     <string>fit_delta_max [%]</string>
+                    </property>
+                    <property name="alignment">
+                     <set>Qt::AlignCenter</set>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLineEdit" name="lineEdit_fit_delta_max_nonlin_chrom_plot">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="text">
+                     <string>+1</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_170">
+                <item>
+                 <layout class="QHBoxLayout" name="horizontalLayout_121">
+                  <item>
+                   <layout class="QVBoxLayout" name="verticalLayout_216">
+                    <item>
+                     <widget class="QLabel" name="label_219">
+                      <property name="text">
+                       <string>footprint_nux_min</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLineEdit" name="lineEdit_footprint_nux_min_nonlin_chrom_plot">
+                      <property name="sizePolicy">
+                       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                        <horstretch>0</horstretch>
+                        <verstretch>0</verstretch>
+                       </sizepolicy>
+                      </property>
+                      <property name="text">
+                       <string>0.0</string>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                  <item>
+                   <layout class="QVBoxLayout" name="verticalLayout_217">
+                    <item>
+                     <widget class="QLabel" name="label_220">
+                      <property name="text">
+                       <string>footprint_nux_max</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLineEdit" name="lineEdit_footprint_nux_max_nonlin_chrom_plot">
+                      <property name="sizePolicy">
+                       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                        <horstretch>0</horstretch>
+                        <verstretch>0</verstretch>
+                       </sizepolicy>
+                      </property>
+                      <property name="text">
+                       <string>1.0</string>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <layout class="QHBoxLayout" name="horizontalLayout_124">
+                  <item>
+                   <layout class="QVBoxLayout" name="verticalLayout_219">
+                    <item>
+                     <widget class="QLabel" name="label_222">
+                      <property name="text">
+                       <string>footprint_nuy_min</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLineEdit" name="lineEdit_footprint_nuy_min_nonlin_chrom_plot">
+                      <property name="sizePolicy">
+                       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                        <horstretch>0</horstretch>
+                        <verstretch>0</verstretch>
+                       </sizepolicy>
+                      </property>
+                      <property name="text">
+                       <string>0.0</string>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                  <item>
+                   <layout class="QVBoxLayout" name="verticalLayout_220">
+                    <item>
+                     <widget class="QLabel" name="label_223">
+                      <property name="text">
+                       <string>footprint_nuy_max</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLineEdit" name="lineEdit_footprint_nuy_max_nonlin_chrom_plot">
+                      <property name="sizePolicy">
+                       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                        <horstretch>0</horstretch>
+                        <verstretch>0</verstretch>
+                       </sizepolicy>
+                      </property>
+                      <property name="text">
+                       <string>1.0</string>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                 </layout>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <spacer name="horizontalSpacer_96">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
                 </property>
-                <property name="minimum">
-                 <number>1</number>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>95</width>
+                  <height>20</height>
+                 </size>
                 </property>
-                <property name="maximum">
-                 <number>4</number>
-                </property>
-                <property name="value">
-                 <number>4</number>
-                </property>
-               </widget>
+               </spacer>
               </item>
              </layout>
             </item>
-            <item row="0" column="1" rowspan="2">
-             <layout class="QVBoxLayout" name="verticalLayout_213">
-              <item>
-               <layout class="QVBoxLayout" name="verticalLayout_214">
-                <item>
-                 <widget class="QLabel" name="label_217">
-                  <property name="text">
-                   <string>fit_delta_min [%]</string>
-                  </property>
-                  <property name="alignment">
-                   <set>Qt::AlignCenter</set>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QLineEdit" name="lineEdit_fit_delta_min_nonlin_chrom_plot">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="text">
-                   <string>-1</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-              <item>
-               <layout class="QVBoxLayout" name="verticalLayout_215">
-                <item>
-                 <widget class="QLabel" name="label_218">
-                  <property name="text">
-                   <string>fit_delta_max [%]</string>
-                  </property>
-                  <property name="alignment">
-                   <set>Qt::AlignCenter</set>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QLineEdit" name="lineEdit_fit_delta_max_nonlin_chrom_plot">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="text">
-                   <string>+1</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-             </layout>
-            </item>
-            <item row="0" column="2">
-             <layout class="QHBoxLayout" name="horizontalLayout_121">
-              <item>
-               <layout class="QVBoxLayout" name="verticalLayout_216">
-                <item>
-                 <widget class="QLabel" name="label_219">
-                  <property name="text">
-                   <string>footprint_nux_min</string>
-                  </property>
-                  <property name="alignment">
-                   <set>Qt::AlignCenter</set>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QLineEdit" name="lineEdit_footprint_nux_min_nonlin_chrom_plot">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="text">
-                   <string>0.0</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-              <item>
-               <layout class="QVBoxLayout" name="verticalLayout_217">
-                <item>
-                 <widget class="QLabel" name="label_220">
-                  <property name="text">
-                   <string>footprint_nux_max</string>
-                  </property>
-                  <property name="alignment">
-                   <set>Qt::AlignCenter</set>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QLineEdit" name="lineEdit_footprint_nux_max_nonlin_chrom_plot">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="text">
-                   <string>1.0</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-             </layout>
-            </item>
-            <item row="0" column="3">
-             <spacer name="horizontalSpacer_86">
+            <item>
+             <spacer name="verticalSpacer_16">
               <property name="orientation">
-               <enum>Qt::Horizontal</enum>
+               <enum>Qt::Vertical</enum>
               </property>
               <property name="sizeHint" stdset="0">
                <size>
-                <width>95</width>
-                <height>20</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-            <item row="1" column="0">
-             <layout class="QVBoxLayout" name="verticalLayout_218">
-              <item>
-               <layout class="QHBoxLayout" name="horizontalLayout_122">
-                <item>
-                 <spacer name="horizontalSpacer_87">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>18</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-                <item>
-                 <widget class="QLabel" name="label_221">
-                  <property name="text">
-                   <string>plot_fft</string>
-                  </property>
-                  <property name="alignment">
-                   <set>Qt::AlignCenter</set>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <spacer name="horizontalSpacer_88">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>18</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-               </layout>
-              </item>
-              <item>
-               <layout class="QHBoxLayout" name="horizontalLayout_123">
-                <item>
-                 <spacer name="horizontalSpacer_89">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeType">
-                   <enum>QSizePolicy::Preferred</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>13</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-                <item>
-                 <widget class="QCheckBox" name="checkBox_plot_fft_nonlin_chrom_plot">
-                  <property name="maximumSize">
-                   <size>
-                    <width>16</width>
-                    <height>16777215</height>
-                   </size>
-                  </property>
-                  <property name="text">
-                   <string/>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <spacer name="horizontalSpacer_90">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeType">
-                   <enum>QSizePolicy::Preferred</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>13</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-               </layout>
-              </item>
-             </layout>
-            </item>
-            <item row="1" column="2">
-             <layout class="QHBoxLayout" name="horizontalLayout_124">
-              <item>
-               <layout class="QVBoxLayout" name="verticalLayout_219">
-                <item>
-                 <widget class="QLabel" name="label_222">
-                  <property name="text">
-                   <string>footprint_nuy_min</string>
-                  </property>
-                  <property name="alignment">
-                   <set>Qt::AlignCenter</set>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QLineEdit" name="lineEdit_footprint_nuy_min_nonlin_chrom_plot">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="text">
-                   <string>0.0</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-              <item>
-               <layout class="QVBoxLayout" name="verticalLayout_220">
-                <item>
-                 <widget class="QLabel" name="label_223">
-                  <property name="text">
-                   <string>footprint_nuy_max</string>
-                  </property>
-                  <property name="alignment">
-                   <set>Qt::AlignCenter</set>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QLineEdit" name="lineEdit_footprint_nuy_max_nonlin_chrom_plot">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="text">
-                   <string>1.0</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-             </layout>
-            </item>
-            <item row="1" column="3">
-             <spacer name="horizontalSpacer_96">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>95</width>
-                <height>20</height>
+                <width>20</width>
+                <height>37</height>
                </size>
               </property>
              </spacer>
@@ -6969,7 +6908,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
              </layout>
             </item>
             <item>
-             <layout class="QHBoxLayout" name="horizontalLayout_74">
+             <layout class="QHBoxLayout" name="horizontalLayout_99">
               <item>
                <layout class="QHBoxLayout" name="horizontalLayout_61">
                 <item>
@@ -6991,43 +6930,35 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                    </sizepolicy>
                   </property>
                   <property name="currentIndex">
-                   <number>1</number>
+                   <number>-1</number>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_98">
+                <item>
+                 <widget class="QLabel" name="label_181">
+                  <property name="text">
+                   <string>QoS:</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_mom_aper_test">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="currentIndex">
+                   <number>-1</number>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -7051,12 +6982,6 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                     <horstretch>0</horstretch>
                     <verstretch>0</verstretch>
                    </sizepolicy>
-                  </property>
-                  <property name="maximumSize">
-                   <size>
-                    <width>52</width>
-                    <height>16777215</height>
-                   </size>
                   </property>
                   <property name="specialValueText">
                    <string/>
@@ -7097,12 +7022,6 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                     <verstretch>0</verstretch>
                    </sizepolicy>
                   </property>
-                  <property name="maximumSize">
-                   <size>
-                    <width>100</width>
-                    <height>16777215</height>
-                   </size>
-                  </property>
                   <property name="toolTip">
                    <string>days-hours:minutes:seconds (&quot;days&quot; and &quot;hours&quot; are optional. For example, use &quot;5:00&quot; if you want 5 minutes.) Leave empty if you want to run up to the queue time limit.</string>
                   </property>
@@ -7126,6 +7045,10 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                 </property>
                </spacer>
               </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_74">
               <item>
                <widget class="QLabel" name="label_145">
                 <property name="text">
@@ -7144,18 +7067,6 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                   <verstretch>0</verstretch>
                  </sizepolicy>
                 </property>
-                <property name="minimumSize">
-                 <size>
-                  <width>115</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>115</width>
-                  <height>16777215</height>
-                 </size>
-                </property>
                 <property name="currentIndex">
                  <number>0</number>
                 </property>
@@ -7166,7 +7077,7 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                 </item>
                 <item>
                  <property name="text">
-                  <string>undefind_tunes</string>
+                  <string>undefined_tunes</string>
                  </property>
                 </item>
                 <item>
@@ -7195,6 +7106,19 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                  </sizepolicy>
                 </property>
                </widget>
+              </item>
+              <item>
+               <spacer name="horizontalSpacer_63">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
               </item>
              </layout>
             </item>
@@ -7496,43 +7420,41 @@ save_fft := False (It will takes long time to save/plot data if True, but can be
                    </sizepolicy>
                   </property>
                   <property name="currentIndex">
-                   <number>0</number>
+                   <number>-1</number>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_102">
+                <item>
+                 <widget class="QLabel" name="label_182">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="text">
+                   <string>QoS:</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_mom_aper_prod">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="currentIndex">
+                   <number>-1</number>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -7798,7 +7720,7 @@ soft_failure</string>
            <attribute name="title">
             <string>Calculate</string>
            </attribute>
-           <layout class="QVBoxLayout" name="verticalLayout_151">
+           <layout class="QVBoxLayout" name="verticalLayout_168">
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_86">
               <item>
@@ -8094,43 +8016,41 @@ soft_failure</string>
                    </sizepolicy>
                   </property>
                   <property name="currentIndex">
-                   <number>1</number>
+                   <number>-1</number>
                   </property>
-                  <item>
-                   <property name="text">
-                    <string>normal</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>short</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>debug</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>long</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>longlong</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>low</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>high</string>
-                   </property>
-                  </item>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_151">
+                <item>
+                 <widget class="QLabel" name="label_183">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="text">
+                   <string>QoS</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_qos_tswa_calc">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="currentIndex">
+                   <number>-1</number>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -8230,6 +8150,19 @@ soft_failure</string>
                </spacer>
               </item>
              </layout>
+            </item>
+            <item>
+             <spacer name="verticalSpacer_13">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>42</height>
+               </size>
+              </property>
+             </spacer>
             </item>
            </layout>
           </widget>
@@ -8551,6 +8484,19 @@ soft_failure</string>
                </spacer>
               </item>
              </layout>
+            </item>
+            <item>
+             <spacer name="verticalSpacer_14">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
             </item>
            </layout>
           </widget>
@@ -9561,7 +9507,7 @@ nx, ny:= 50</string>
            <string/>
           </property>
           <property name="currentIndex">
-           <number>2</number>
+           <number>0</number>
           </property>
           <widget class="QWidget" name="tab_53">
            <attribute name="title">
@@ -9633,19 +9579,6 @@ nx, ny:= 50</string>
                  <string>1.5, 2, 2.5, 3</string>
                 </property>
                </widget>
-              </item>
-              <item>
-               <spacer name="horizontalSpacer_60">
-                <property name="orientation">
-                 <enum>Qt::Horizontal</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>40</width>
-                  <height>20</height>
-                 </size>
-                </property>
-               </spacer>
               </item>
              </layout>
             </item>

@@ -15,6 +15,7 @@ import errno
 from subprocess import Popen, PIPE
 from copy import deepcopy
 import re
+import getpass
 
 from qtpy import QtCore, QtGui, QtWidgets
 from qtpy import uic
@@ -31,6 +32,152 @@ import pyelegant as pe
 from pyelegant.scripts.common import genreport
 
 TEST_MODE = False
+
+def get_slurm_partitions():
+    cmd = 'scontrol show partition'
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+
+    parsed = {}
+    for k, v in re.findall('([\w\d]+)=([^\s]+)', out):
+        if k == 'PartitionName':
+            d = parsed[v] = {}
+        else:
+            d[k] = v
+
+    return parsed
+
+def get_slurm_qos_info():
+
+    p = Popen(shlex.split('sacctmgr show qos -P'), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+
+    lines = [line.strip() for line in out.split('\n') if line.strip() != '']
+
+    header = lines[0].split('|')
+    ncol = len(header)
+    qos_d = {}
+    for L in lines[1:]:
+        vals = L.split('|')
+        assert len(vals) == ncol
+        name = vals[0]
+        qos_d[name] = {}
+        for k, v in zip(header[1:], vals[1:]):
+            qos_d[name][k] = v
+
+    return qos_d
+
+def get_slurm_allowed_qos_list():
+
+    username = getpass.getuser()
+
+    if pe.facility_name == 'nsls2apcluster':
+        allowed_qos_list = ['default']
+
+    elif pe.facility_name == 'nsls2pluto':
+        cmd = f'sacctmgr show assoc user={username} format=qos -P --noheader'
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+        out, err = p.communicate()
+        allowed_qos_list = out.strip().split(',')
+
+        allowed_qos_list = ['default'] + sorted(allowed_qos_list)
+    else:
+        raise ValueError(f'Invalid facility name: {pe.facility_name}')
+
+    return allowed_qos_list
+
+def _convert_slurm_time_duration_str_to_seconds(slurm_time_duration_str):
+    """"""
+
+    s_list = slurm_time_duration_str.split(':')
+    if len(s_list) == 1:
+        s_list = ['00', '00'] + s_list
+    elif len(s_list) == 2:
+        s_list = ['00'] + s_list
+    elif (len(s_list) >= 4) or (len(s_list) == 0):
+        raise RuntimeError('Unexpected number of splits')
+
+    if '-' in s_list[0]:
+        days_str, hrs_str = s_list[0].split('-')
+        s_list[0] = hrs_str
+
+        days_in_secs = int(days_str) * 60.0 * 60.0 * 24.0
+    else:
+        days_in_secs = 0.0
+
+    d = time.strptime(':'.join(s_list), '%H:%M:%S')
+
+    duration_in_sec = (
+        days_in_secs
+        + datetime.timedelta(
+            hours=d.tm_hour, minutes=d.tm_min, seconds=d.tm_sec
+        ).total_seconds()
+    )
+
+    return duration_in_sec
+
+
+def get_slurm_time_limits():
+
+    part_d = get_slurm_partitions()
+
+    partition_default_qos_list = [_pd['QoS'] for _pd in part_d.values()]
+
+    qos_d = get_slurm_qos_info()
+
+    allowed_qos_list = get_slurm_allowed_qos_list()
+
+    max_time_limits = {partition_name: {} for partition_name in list(part_d)}
+
+    for part_name, _pd in part_d.items():
+        default_qos_name = _pd['QoS']
+
+        if default_qos_name == 'N/A':
+            max_wall = part_d[part_name]['MaxTime']
+        else:
+            max_wall = qos_d[default_qos_name]["MaxWall"]
+            if max_wall.strip() == '':
+                # Use default qos for the partition
+                max_wall = qos_d[_pd['QoS']]["MaxWall"]
+
+        #print(f'{part_name} + (Default QoS): {max_wall}')
+        max_time_limits[part_name]['default'] = max_wall
+
+        for qos_name, d in qos_d.items():
+            if qos_name in partition_default_qos_list:
+                continue
+
+            max_wall = qos_d[qos_name]["MaxWall"]
+            if max_wall.strip() == '':
+                if _pd['QoS'] in qos_d:
+                    # Use default qos for the partition
+                    max_wall = qos_d[_pd['QoS']]["MaxWall"]
+                else:
+                    max_wall = part_d[part_name]['MaxTime']
+
+            if qos_name in allowed_qos_list:
+                #print(f'{part_name} + ({qos_name}): {max_wall}')
+                max_time_limits[part_name][qos_name] = max_wall
+
+    default_time_limits = {partition_name: {} for partition_name in list(part_d)}
+    for part_name, d in part_d.items():
+        def_time_str = d['DefaultTime']
+        def_time = _convert_slurm_time_duration_str_to_seconds(def_time_str)
+        for qos_name, max_time_str in max_time_limits[part_name].items():
+            if def_time_str.upper() == 'NONE':
+                default_time_limits[part_name][qos_name] = max_time_str
+            else:
+                if def_time > _convert_slurm_time_duration_str_to_seconds(max_time_str):
+                    default_time_limits[part_name][qos_name] = 'INVALID'
+                else:
+                    default_time_limits[part_name][qos_name] = def_time_str
+
+    return max_time_limits, default_time_limits
+
+SLURM_MAX_TIME_LIMITS, SLURM_DEF_TIME_LIMITS = get_slurm_time_limits()
+QOS_ENABLED = (
+    set(sum([list(_d) for _d in SLURM_MAX_TIME_LIMITS.values()], [])) !=
+    set(['default']))
 
 def _strip_unquote(s):
     """"""
@@ -793,7 +940,101 @@ class PageGenReport(PageStandard):
             b = buttons[0]
             b.clicked.connect(self.open_global_opts_dialog)
 
+        combos = self.findChildren(QtWidgets.QComboBox,
+                                   QtCore.QRegExp('comboBox_partition_.+'))
+        for w in combos:
+            w.currentTextChanged.connect(self._update_qos_combo_items)
+
+            part_combo_name = w.objectName()
+            w_qos = self._qos_comboBoxes[part_combo_name]
+            w_qos.currentTextChanged.connect(self._update_time_limit_tooltip)
+
         self._connections_established = True
+
+    def _setup_partition_qos_objects(self):
+        """"""
+
+        combos = self.findChildren(QtWidgets.QComboBox,
+                                   QtCore.QRegExp('comboBox_partition_.+'))
+        self._qos_comboBoxes = {}
+        self._time_lineEdits = {}
+        for w in combos:
+            part_combo_name = w.objectName()
+
+            qos_combo = self.findChild(
+                QtWidgets.QComboBox, part_combo_name.replace('_partition_', '_qos_'))
+            assert qos_combo is not None
+            self._qos_comboBoxes[part_combo_name] = qos_combo
+
+            time_edit = self.findChild(
+                QtWidgets.QLineEdit, part_combo_name.replace(
+                    'comboBox_partition_', 'lineEdit_time_'))
+            assert time_edit is not None
+            self._time_lineEdits[part_combo_name] = time_edit
+
+    def _update_qos_combo_items(self, current_partition, sender=None):
+        """"""
+
+        if sender is None:
+            sender = self.sender()
+        sender_name = sender.objectName()
+        qos_combo = self._qos_comboBoxes[sender_name]
+
+        current_qos = qos_combo.currentText()
+
+        new_qos_names = list(SLURM_MAX_TIME_LIMITS[current_partition])
+
+        qos_combo.clear()
+        qos_combo.insertItems(0, new_qos_names)
+
+        if current_qos in new_qos_names:
+            i = new_qos_names.index(current_qos)
+        else:
+            i = 0
+
+        qos_combo.setCurrentIndex(i)
+
+    def _update_time_limit_tooltip(self, current_qos, sender=None):
+        """"""
+
+        if sender is None:
+            sender = self.sender()
+
+        for partition_combo_name, qos_combo in self._qos_comboBoxes.items():
+            if qos_combo is sender:
+                w = self.findChild(QtWidgets.QComboBox, partition_combo_name)
+                current_partition = w.currentText()
+
+                time_edit = self._time_lineEdits[partition_combo_name]
+
+                break
+        else:
+            raise RuntimeError('Current partition name could not be found')
+
+        try:
+            max_time_limit = SLURM_MAX_TIME_LIMITS[current_partition][current_qos]
+        except:
+            return
+
+        def_time_limit = SLURM_DEF_TIME_LIMITS[current_partition][current_qos]
+        if def_time_limit == 'INVALID':
+            def_time_sentence = (
+                'You MUST specify "time" (less than max allowed) for this case, '
+                'as the default time limit exceeds the max allowed limit.')
+        else:
+            def_time_sentence = (
+                'If "time" is not specified, the time limit will be:'
+                f'<br><br>{def_time_limit}')
+
+        time_edit.setToolTip((
+            '<html><head/><body><p>days-hours:minutes:seconds ("days" and "hours" '
+            'are optional. For example, use "5:00" if you want 5 minutes.)<br>'
+            'Leave empty if you want to run up to the max time limit for the '
+            f'selected partition "{current_partition}" & qos "{current_qos}":<br><br>'
+            f'{max_time_limit}<br><br>'
+            f'{def_time_sentence}</p></body></html>'))
+        # ^ "<br>" are line breaks for rich texts. Here, a rich text is used to
+        #   automatically wrap to multi-lines.
 
     def generate_report(
         self, view_stdout=None, view_stderr=None, recalc_replot=None):
@@ -929,6 +1170,9 @@ class PageNonlinCalcTest(PageGenReport):
         spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
                                     QtWidgets.QCheckBox, QtWidgets.QComboBox)
 
+        self._partition_fieldnames_comboBoxes = {}
+        self._qos_fieldnames_comboBoxes = {}
+
         for mode, k_wtype_list in [
             ('test', self.test_list), ('production', self.prod_list)]:
 
@@ -950,11 +1194,25 @@ class PageNonlinCalcTest(PageGenReport):
                     w = self.safeFindChild(combo, f'comboBox_{w_suffix}')
                     self.registerFieldOnFirstShow(f'combo_{f_suffix}', w,
                                                   property='currentText')
+
+                    if k == 'partition':
+                        w.insertItems(0, list(SLURM_MAX_TIME_LIMITS))
+                        self._partition_fieldnames_comboBoxes[f'combo_{f_suffix}'] = w
+                    elif k == 'qos':
+                        self._qos_fieldnames_comboBoxes[f'combo_{f_suffix}'] = w
+                        if QOS_ENABLED:
+                            w.setEnabled(True)
                 else:
                     raise ValueError()
 
     def set_test_prod_option_fields(self):
         """"""
+
+        try:
+            common_remote_opts = self.conf['nonlin']['common_remote_opts']
+        except:
+            self.conf['nonlin']['common_remote_opts'] = {}
+            common_remote_opts = self.conf['nonlin']['common_remote_opts']
 
         for mode in ['test', 'production']:
             try:
@@ -971,16 +1229,58 @@ class PageNonlinCalcTest(PageGenReport):
                         wtype = conv_type.split('_')[0]
                         self.setField(f'{wtype}_{k}_{self.calc_type}_{mode}', conv(v))
                     else:
-                        for k2, v2 in v.items():
-                            concat_k = f'{k}___{k2}'
-                            if concat_k not in self.setter_getter[mode]:
-                                continue
-                            conv_type = self.setter_getter[mode][concat_k]
-                            conv = self.converters[conv_type]['set']
-                            wtype = conv_type.split('_')[0]
-                            self.setField(
-                                f'{wtype}_{concat_k}_{self.calc_type}_{mode}',
-                                conv(v2))
+                        if k == 'remote_opts':
+                            if 'partition' not in v:
+                                if 'partition' in common_remote_opts:
+                                    v['partition'] = str(common_remote_opts['partition'])
+                            # Make sure "partition" comes before "qos". Otherwise,
+                            # their comboBox initializations will not work as expected.
+                            key_list = sorted(list(v))
+                            #
+                            for k2 in key_list:
+                                v2 = v[k2]
+                                #concat_k = f'{k}___{k2}'
+                                #if concat_k not in self.setter_getter[mode]:
+                                    #continue
+                                if k2 not in self.setter_getter[mode]:
+                                    continue
+                                #conv_type = self.setter_getter[mode][concat_k]
+                                conv_type = self.setter_getter[mode][k2]
+                                conv = self.converters[conv_type]['set']
+                                wtype = conv_type.split('_')[0]
+                                #self.setField(
+                                    #f'{wtype}_{concat_k}_{self.calc_type}_{mode}',
+                                    #conv(v2))
+                                fieldname = f'{wtype}_{k2}_{self.calc_type}_{mode}'
+                                self.setField(fieldname, conv(v2))
+                        else:
+                            for k2, v2 in v.items():
+                                concat_k = f'{k}___{k2}'
+                                if concat_k not in self.setter_getter[mode]:
+                                    continue
+                                conv_type = self.setter_getter[mode][concat_k]
+                                conv = self.converters[conv_type]['set']
+                                wtype = conv_type.split('_')[0]
+                                self.setField(
+                                    f'{wtype}_{concat_k}_{self.calc_type}_{mode}',
+                                    conv(v2))
+
+            # Set up the QoS comboBox items based on the
+            # selected "partition". This needs to be done
+            # manually at this point, as self._update_qos_combo_items()
+            # is not yet connected to the "partition" change
+            for fieldname, sender in self._partition_fieldnames_comboBoxes.items():
+                self._update_qos_combo_items(
+                    self.field(fieldname), sender=sender)
+
+            # Update the tooltip for the time lineEdit item
+            # based on the selected "partition"/"qos". This
+            # needs to be done manually at this point, as
+            # self._update_time_limit_tooltip()
+            # is not yet connected to the "qos" change
+            for fieldname, sender in self._qos_fieldnames_comboBoxes.items():
+                self._update_time_limit_tooltip(
+                    self.field(fieldname), sender=sender)
 
     def validatePage(self):
         """"""
@@ -1051,7 +1351,7 @@ class PageNonlinCalcTest(PageGenReport):
                 conv = self.converters[conv_type]['get']
                 wtype = conv_type.split('_')[0]
                 v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
-                if k in ('partition', 'ntasks', 'time'):
+                if k in ('partition', 'qos', 'ntasks', 'time'):
                     if k in common_remote_opts:
                         indiv_remote_opts = calc_opts.get('remote_opts', {})
                         if common_remote_opts[k] == v:
@@ -1067,15 +1367,23 @@ class PageNonlinCalcTest(PageGenReport):
                                 yaml_append_map(
                                     new_calc_opts[mode], 'remote_opts',
                                     CommentedMap({}))
-                            yaml_append_map(
-                                new_calc_opts[mode]['remote_opts'], k, v)
+                            if (k == 'qos') and (v in ('', 'default')):
+                                if k in new_calc_opts[mode]['remote_opts']:
+                                    del new_calc_opts[mode]['remote_opts'][k]
+                            else:
+                                yaml_append_map(
+                                    new_calc_opts[mode]['remote_opts'], k, v)
                     else:
                         if 'remote_opts' not in new_calc_opts[mode]:
                             yaml_append_map(
                                 new_calc_opts[mode], 'remote_opts',
                                 CommentedMap({}))
-                        yaml_append_map(
-                            new_calc_opts[mode]['remote_opts'], k, v)
+                        if (k == 'qos') and (v in ('', 'default')):
+                            if k in new_calc_opts[mode]['remote_opts']:
+                                del new_calc_opts[mode]['remote_opts'][k]
+                        else:
+                            yaml_append_map(
+                                new_calc_opts[mode]['remote_opts'], k, v)
                 elif '___' in k:
                     k1, k2 = k.split('___')
                     if k1 not in new_calc_opts[mode]:
@@ -1143,6 +1451,9 @@ class PageNonlinCalcPlot(PageGenReport):
         spin, edit, check, combo = (QtWidgets.QSpinBox, QtWidgets.QLineEdit,
                                     QtWidgets.QCheckBox, QtWidgets.QComboBox)
 
+        self._partition_fieldnames_comboBoxes = {}
+        self._qos_fieldnames_comboBoxes = {}
+
         for mode, k_wtype_list in [
             ('calc', self.calc_list), ('plot', self.plot_list)]:
 
@@ -1161,6 +1472,14 @@ class PageNonlinCalcPlot(PageGenReport):
                     w = self.safeFindChild(combo, f'comboBox_{w_suffix}')
                     self.registerFieldOnFirstShow(f'combo_{f_suffix}', w,
                                                   property='currentText')
+
+                    if k == 'partition':
+                        w.insertItems(0, list(SLURM_MAX_TIME_LIMITS))
+                        self._partition_fieldnames_comboBoxes[f'combo_{f_suffix}'] = w
+                    elif k == 'qos':
+                        self._qos_fieldnames_comboBoxes[f'combo_{f_suffix}'] = w
+                        if QOS_ENABLED:
+                            w.setEnabled(True)
                 else:
                     raise ValueError()
 
@@ -1170,6 +1489,12 @@ class PageNonlinCalcPlot(PageGenReport):
         assert self.calc_type in ('tswa', 'nonlin_chrom')
 
         ncf = self.conf['nonlin']
+
+        try:
+            common_remote_opts = ncf['common_remote_opts']
+        except:
+            ncf['common_remote_opts'] = {}
+            common_remote_opts = ncf['common_remote_opts']
 
         for mode in ['calc', 'plot']:
             try:
@@ -1183,12 +1508,50 @@ class PageNonlinCalcPlot(PageGenReport):
                 opts = None
             if opts is not None:
                 for k, v in opts.items():
-                    if k not in self.setter_getter[mode]:
-                        continue
-                    conv_type = self.setter_getter[mode][k]
-                    conv = self.converters[conv_type]['set']
-                    wtype = conv_type.split('_')[0]
-                    self.setField(f'{wtype}_{k}_{self.calc_type}_{mode}', conv(v))
+                    if not isinstance(v, dict):
+                        if k not in self.setter_getter[mode]:
+                            continue
+                        conv_type = self.setter_getter[mode][k]
+                        conv = self.converters[conv_type]['set']
+                        wtype = conv_type.split('_')[0]
+                        self.setField(f'{wtype}_{k}_{self.calc_type}_{mode}', conv(v))
+                    else:
+                        if k == 'remote_opts':
+                            if 'partition' not in v:
+                                if 'partition' in common_remote_opts:
+                                    v['partition'] = str(common_remote_opts['partition'])
+                            # Make sure "partition" comes before "qos". Otherwise,
+                            # their comboBox initializations will not work as expected.
+                            key_list = sorted(list(v))
+                            for k2 in key_list:
+                                v2 = v[k2]
+                                if k2 not in self.setter_getter[mode]:
+                                    continue
+                                conv_type = self.setter_getter[mode][k2]
+                                conv = self.converters[conv_type]['set']
+                                wtype = conv_type.split('_')[0]
+                                fieldname = f'{wtype}_{k2}_{self.calc_type}_{mode}'
+                                self.setField(fieldname, conv(v2))
+                        else:
+                            raise NotImplementedError
+
+            if mode == 'calc':
+                # Set up the QoS comboBox items based on the
+                # selected "partition". This needs to be done
+                # manually at this point, as self._update_qos_combo_items()
+                # is not yet connected to the "partition" change
+                for fieldname, sender in self._partition_fieldnames_comboBoxes.items():
+                    self._update_qos_combo_items(
+                        self.field(fieldname), sender=sender)
+
+                # Update the tooltip for the time lineEdit item
+                # based on the selected "partition"/"qos". This
+                # needs to be done manually at this point, as
+                # self._update_time_limit_tooltip()
+                # is not yet connected to the "qos" change
+                for fieldname, sender in self._qos_fieldnames_comboBoxes.items():
+                    self._update_time_limit_tooltip(
+                        self.field(fieldname), sender=sender)
 
     def validatePage(self):
         """"""
@@ -1315,7 +1678,7 @@ class PageNonlinCalcPlot(PageGenReport):
                 conv = self.converters[conv_type]['get']
                 wtype = conv_type.split('_')[0]
                 v = conv(self.field(f'{wtype}_{k}_{self.calc_type}_{mode}'))
-                if k in ('partition', 'ntasks', 'time'):
+                if k in ('partition', 'qos', 'ntasks', 'time'):
                     if k in common_remote_opts:
                         indiv_remote_opts = calc_opts.get('remote_opts', {})
                         if common_remote_opts[k] == v:
@@ -1328,12 +1691,25 @@ class PageNonlinCalcPlot(PageGenReport):
                                 continue
                         else:
                             if 'remote_opts' not in calc_opts:
-                                calc_opts['remote_opts'] = CommentedMap({})
-                            f(calc_opts['remote_opts'], k, v)
+                                #calc_opts['remote_opts'] = CommentedMap({})
+                                yaml_append_map(calc_opts, 'remote_opts',
+                                                CommentedMap({}))
+                            #f(calc_opts['remote_opts'], k, v)
+                            if (k == 'qos') and (v in ('', 'default')):
+                                if k in calc_opts['remote_opts']:
+                                    del calc_opts['remote_opts'][k]
+                            else:
+                                yaml_append_map(calc_opts['remote_opts'], k, v)
                     else:
                         if 'remote_opts' not in calc_opts:
-                            calc_opts['remote_opts'] = CommentedMap({})
-                        f(calc_opts['remote_opts'], k, v)
+                            #calc_opts['remote_opts'] = CommentedMap({})
+                            yaml_append_map(calc_opts, 'remote_opts', CommentedMap({}))
+                        #f(calc_opts['remote_opts'], k, v)
+                        if (k == 'qos') and (v in ('', 'default')):
+                            if k in calc_opts['remote_opts']:
+                                del calc_opts['remote_opts'][k]
+                        else:
+                            yaml_append_map(calc_opts['remote_opts'], k, v)
                 else:
                     f(calc_opts, k, v)
 
@@ -1666,12 +2042,13 @@ class PageNewSetup(QtWidgets.QWizardPage):
             'edit_new_config_folder*',
             self.findChild(QtWidgets.QLineEdit, 'lineEdit_new_config_folder'))
 
-        for obj_name in [
-            'label_full_new_config', 'label_full_report_folder',
-            'label_full_pdf_path', 'label_full_xlsx_path',]:
-            self.registerFieldOnFirstShow(
-                obj_name,
-                self.findChild(QtWidgets.QLabel, obj_name), property='text')
+        for obj_name in ['textEdit_full_new_config',
+                         'textEdit_full_report_folder',
+                         'textEdit_full_pdf_path',
+                         'textEdit_full_xlsx_path']:
+            w = self.findChild(QtWidgets.QTextEdit, obj_name)
+            w.setAutoFillBackground(False)
+            self.registerFieldOnFirstShow(obj_name, w, property='plainText')
 
         # Set fields
 
@@ -1771,14 +2148,14 @@ class PageNewSetup(QtWidgets.QWizardPage):
             pdf_filename))
 
         self.setField(
-            'label_full_new_config', '=> {}'.format(
+            'textEdit_full_new_config', '=> {}'.format(
                 self.wizardObj.config_filepath))
         self.setField(
-            'label_full_report_folder', f'=> {report_folderpath}')
+            'textEdit_full_report_folder', f'=> {report_folderpath}')
         self.setField(
-            'label_full_pdf_path', '=> {}'.format(self.wizardObj.pdf_filepath))
+            'textEdit_full_pdf_path', '=> {}'.format(self.wizardObj.pdf_filepath))
         self.setField(
-            'label_full_xlsx_path', '=> {}'.format(
+            'textEdit_full_xlsx_path', '=> {}'.format(
                 Path(report_folderpath).joinpath(xlsx_filename)))
 
     def browse_new_config_folder(self):
@@ -3455,24 +3832,27 @@ class PageXYAperTest(PageNonlinCalcTest):
         self.test_list = [
             ('n_turns', spin), ('abs_xmax', edit), ('abs_ymax', edit),
             ('ini_ndiv', spin), ('n_lines', spin), ('neg_y_search', check),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.prod_list = [
             ('n_turns', spin),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.setter_getter = {
             'test': dict(
                 n_turns='spin', abs_xmax='edit_float', abs_ymax='edit_float',
                 ini_ndiv='spin', n_lines='spin', neg_y_search='check',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
             'production': dict(
                 n_turns='spin',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
         }
 
         self.calc_type = 'xy_aper'
         self.register_test_prod_option_widgets()
+
+        self._setup_partition_qos_objects()
+        # ^ This must come before self.set_test_prod_option_fields().
 
         # Set fields
         self.set_test_prod_option_fields()
@@ -3509,11 +3889,11 @@ class PageFmapXYTest(PageNonlinCalcTest):
             ('n_turns', spin), ('xmin', edit), ('xmax', edit),
             ('ymin', edit), ('ymax', edit), ('nx', spin), ('ny', spin),
             ('x_offset', edit), ('y_offset', edit), ('delta_offset', edit),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.prod_list = [
             ('n_turns', spin), ('nx', spin), ('ny', spin),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.setter_getter = {
             'test': dict(
@@ -3521,14 +3901,17 @@ class PageFmapXYTest(PageNonlinCalcTest):
                 ymin='edit_float', ymax='edit_float', nx='spin', ny='spin',
                 x_offset='edit_float', y_offset='edit_float',
                 delta_offset='edit_%',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
             'production': dict(
                 n_turns='spin', nx='spin', ny='spin',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
         }
 
         self.calc_type = 'fmap_xy'
         self.register_test_prod_option_widgets()
+
+        self._setup_partition_qos_objects()
+        # ^ This must come before self.set_test_prod_option_fields().
 
         # Set fields
         self.set_test_prod_option_fields()
@@ -3566,11 +3949,11 @@ class PageFmapPXTest(PageNonlinCalcTest):
             ('delta_min', edit), ('delta_max', edit),
             ('nx', spin), ('ndelta', spin),
             ('x_offset', edit), ('y_offset', edit), ('delta_offset', edit),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.prod_list = [
             ('n_turns', spin), ('nx', spin), ('ndelta', spin),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.setter_getter = {
             'test': dict(
@@ -3579,14 +3962,17 @@ class PageFmapPXTest(PageNonlinCalcTest):
                 nx='spin', ndelta='spin',
                 x_offset='edit_float', y_offset='edit_float',
                 delta_offset='edit_%',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
             'production': dict(
                 n_turns='spin', nx='spin', ndelta='spin',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
         }
 
         self.calc_type = 'fmap_px'
         self.register_test_prod_option_widgets()
+
+        self._setup_partition_qos_objects()
+        # ^ This must come before self.set_test_prod_option_fields().
 
         # Set fields
         self.set_test_prod_option_fields()
@@ -3621,23 +4007,26 @@ class PageCmapXYTest(PageNonlinCalcTest):
                                     QtWidgets.QCheckBox, QtWidgets.QComboBox)
         self.test_list = [
             ('n_turns', spin),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.prod_list = [
             ('n_turns', spin),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.setter_getter = {
             'test': dict(
                 n_turns='spin',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
             'production': dict(
                 n_turns='spin',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
         }
 
         self.calc_type = 'cmap_xy'
         self.register_test_prod_option_widgets()
+
+        self._setup_partition_qos_objects()
+        # ^ This must come before self.set_test_prod_option_fields().
 
         # Set fields
         self.set_test_prod_option_fields()
@@ -3672,23 +4061,26 @@ class PageCmapPXTest(PageNonlinCalcTest):
                                     QtWidgets.QCheckBox, QtWidgets.QComboBox)
         self.test_list = [
             ('n_turns', spin),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.prod_list = [
             ('n_turns', spin),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.setter_getter = {
             'test': dict(
                 n_turns='spin',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
             'production': dict(
                 n_turns='spin',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
         }
 
         self.calc_type = 'cmap_px'
         self.register_test_prod_option_widgets()
+
+        self._setup_partition_qos_objects()
+        # ^ This must come before self.set_test_prod_option_fields().
 
         # Set fields
         self.set_test_prod_option_fields()
@@ -3731,13 +4123,13 @@ class PageMomAperTest(PageNonlinCalcTest):
             ('rf_cavity___on', check), ('radiation_on', check),
             #('rf_cavity___auto_voltage_from_nonlin_chrom', combo),
             #('rf_cavity___manual', edit),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.prod_list = [
             ('n_turns', spin),
             ('init_delta_step_size', edit), ('include_name_pattern', edit),
             ('steps_back', spin), ('splits', spin), ('split_step_divisor', spin),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.setter_getter = {
             'test': dict(
@@ -3750,12 +4142,12 @@ class PageMomAperTest(PageNonlinCalcTest):
                 rf_cavity___on='check', radiation_on='check',
                 #rf_cavity___auto_voltage_from_nonlin_chrom='combo',
                 #rf_cavity___manual='edit_float',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
             'production': dict(
                 n_turns='spin',
                 init_delta_step_size='edit_%', include_name_pattern='edit_str',
                 steps_back='spin', splits='spin', split_step_divisor='spin',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
         }
 
         self.calc_type = 'mom_aper'
@@ -3766,6 +4158,9 @@ class PageMomAperTest(PageNonlinCalcTest):
         self.registerFieldOnFirstShow('combo_auto_voltage', w)
         w = self.safeFindChild(edit, 'lineEdit_manual_rf_mom_aper_test')
         self.registerFieldOnFirstShow('edit_manual_voltage', w)
+
+        self._setup_partition_qos_objects()
+        # ^ This must come before self.set_test_prod_option_fields().
 
         # Set fields
         self.set_test_prod_option_fields()
@@ -3892,7 +4287,7 @@ class PageTswa(PageNonlinCalcPlot):
         self.calc_list = [
             ('n_turns', spin), ('abs_xmax', edit), ('abs_ymax', edit),
             ('nx', spin), ('ny', spin), ('x_offset', edit), ('y_offset', edit),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.plot_list = [
             ('fit_xmin', edit), ('fit_ymin', edit),
@@ -3904,7 +4299,7 @@ class PageTswa(PageNonlinCalcPlot):
             'calc': dict(
                 n_turns='spin', abs_xmax='edit_float', abs_ymax='edit_float',
                 nx='spin', ny='spin', x_offset='edit_float', y_offset='edit_float',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
             'plot': dict(
                 fit_xmin='edit_float', fit_ymin='edit_float',
                 fit_xmax='edit_float', fit_ymax='edit_float',
@@ -3914,6 +4309,9 @@ class PageTswa(PageNonlinCalcPlot):
 
         self.calc_type = 'tswa'
         self.register_calc_plot_option_widgets()
+
+        self._setup_partition_qos_objects()
+        # ^ This must come before self.set_calc_plot_option_fields().
 
         # Set fields
         self.set_calc_plot_option_fields()
@@ -3950,7 +4348,7 @@ class PageNonlinChrom(PageNonlinCalcPlot):
             ('n_turns', spin), ('delta_min', edit), ('delta_max', edit),
             ('ndelta', spin), ('x_offset', edit), ('y_offset', edit),
             ('delta_offset', edit), ('save_fft', check),
-            ('partition', combo), ('ntasks', spin), ('time', edit)
+            ('partition', combo), ('qos', combo), ('ntasks', spin), ('time', edit)
         ]
         self.plot_list = [
             ('max_chrom_order', spin), ('plot_fft', check),
@@ -3963,7 +4361,7 @@ class PageNonlinChrom(PageNonlinCalcPlot):
                 n_turns='spin', delta_min='edit_%', delta_max='edit_%',
                 ndelta='spin', x_offset='edit_float', y_offset='edit_float',
                 delta_offset='edit_%', save_fft='check',
-                partition='combo', ntasks='spin', time='edit_str_None'),
+                partition='combo', qos='combo', ntasks='spin', time='edit_str_None'),
             'plot': dict(
                 max_chrom_order='spin', plot_fft='check',
                 fit_delta_min='edit_%', fit_delta_max='edit_%',
@@ -3973,6 +4371,9 @@ class PageNonlinChrom(PageNonlinCalcPlot):
 
         self.calc_type = 'nonlin_chrom'
         self.register_calc_plot_option_widgets()
+
+        self._setup_partition_qos_objects()
+        # ^ This must come before self.set_calc_plot_option_fields().
 
         # Set fields
         self.set_calc_plot_option_fields()

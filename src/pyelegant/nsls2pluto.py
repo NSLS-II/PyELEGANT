@@ -887,6 +887,18 @@ def run(
             print('*** ERROR: Max number of sbatch runs exceeded.')
             return output
 
+        if not remote_opts.get('diag_mode', False):
+            try:
+                os.remove(sbatch_sh_filepath)
+            except IOError:
+                print(f'* Failed to delete temporary sbatch shell file "{sbatch_sh_filepath}"')
+
+            for fp in [slurm_out_filepath, slurm_err_filepath]:
+                try:
+                    os.remove(fp)
+                except IOError:
+                    print(f'* Failed to delete SLURM file "{fp}"')
+
     else:
         # "Elegant" module must be already loaded.
 
