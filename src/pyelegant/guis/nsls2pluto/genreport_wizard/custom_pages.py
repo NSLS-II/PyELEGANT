@@ -162,11 +162,11 @@ def get_slurm_time_limits():
     default_time_limits = {partition_name: {} for partition_name in list(part_d)}
     for part_name, d in part_d.items():
         def_time_str = d['DefaultTime']
-        def_time = _convert_slurm_time_duration_str_to_seconds(def_time_str)
         for qos_name, max_time_str in max_time_limits[part_name].items():
             if def_time_str.upper() == 'NONE':
                 default_time_limits[part_name][qos_name] = max_time_str
             else:
+                def_time = _convert_slurm_time_duration_str_to_seconds(def_time_str)
                 if def_time > _convert_slurm_time_duration_str_to_seconds(max_time_str):
                     default_time_limits[part_name][qos_name] = 'INVALID'
                 else:
