@@ -3,6 +3,7 @@ from pathlib import Path
 import collections
 import gzip
 import json
+import tempfile
 
 import numpy as np
 
@@ -724,3 +725,83 @@ class Lattice():
         lines.append('RETURN')
 
         Path(new_LTE_filepath).write_text('\n'.join(lines))
+
+
+def write_temp_modified_LTE(
+    mod_prop_dict_list, base_LTE_filepstr='', base_used_beamline_name='', LTE_obj=None
+):
+    """
+    A valid example of "mod_prop_dict_list":
+        [
+        {'elem_name': 'Q1', 'prop_name': 'K1', 'prop_val': 1.5},
+        {'elem_name': 'S1', 'prop_name': 'K2', 'prop_val': 2.0},
+        ]
+    """
+
+    tmp = tempfile.NamedTemporaryFile(
+        prefix=f'tmpLteMod_', suffix='.lte', dir=Path.cwd().resolve(), delete=False
+    )
+    # ^ CRITICAL: must create this temp LTE file in cwd. If you create this
+    #   LTE in /tmp, this file cannot be accessible from other nodes
+    #   when Pelegant is used.
+    temp_LTE_filepstr = str(Path(tmp.name).resolve())
+    tmp.close()
+
+    write_modified_LTE(
+        temp_LTE_filepstr,
+        mod_prop_dict_list,
+        base_LTE_filepstr=base_LTE_filepstr,
+        base_used_beamline_name=base_used_beamline_name,
+        LTE_obj=LTE_obj,
+    )
+
+    return temp_LTE_filepstr
+
+
+def write_modified_LTE(
+    new_LTE_filepstr,
+    mod_prop_dict_list,
+    base_LTE_filepstr='',
+    base_used_beamline_name='',
+    LTE_obj=None,
+):
+    """
+    A valid example of "mod_prop_dict_list":
+        [
+        {'elem_name': 'Q1', 'prop_name': 'K1', 'prop_val': 1.5},
+        {'elem_name': 'S1', 'prop_name': 'K2', 'prop_val': 2.0},
+        ]
+    """
+
+    if LTE_obj is None:
+        LTE = Lattice(
+            LTE_filepath=base_LTE_filepstr, used_beamline_name=base_used_beamline_name
+        )
+    else:
+        if base_LTE_filepstr != '':
+            print(f'WARNING: Ignored: base_LTE_filepstr = "{base_LTE_filepstr}"')
+        if base_used_beamline_name != '':
+            print(
+                f'WARNING: Ignored: base_used_beamline_name = "{base_used_beamline_name}"'
+            )
+        LTE = LTE_obj
+    LTE_d = LTE.get_used_beamline_element_defs()
+    elem_defs = LTE_d['elem_defs']
+    elem_names = [v[0] for v in elem_defs]
+
+    for mod in mod_prop_dict_list:
+        elem_ind = elem_names.index(mod['elem_name'].upper())
+        orig_elem_def = LTE_d['elem_defs'][elem_ind]
+        assert mod['elem_name'].upper() == orig_elem_def[0]
+
+        new_elem_def = LTE.modify_elem_def(
+            orig_elem_def, {mod['prop_name']: mod['prop_val']}
+        )
+        LTE_d['elem_defs'][elem_ind] = new_elem_def
+
+    LTE.write_LTE(
+        new_LTE_filepstr,
+        LTE.used_beamline_name,
+        LTE_d['elem_defs'],
+        LTE_d['beamline_defs'],
+    )
