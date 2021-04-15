@@ -37,6 +37,8 @@ class Lattice():
         if LTE_filepath != '':
             self.load_LTE(LTE_filepath, used_beamline_name=used_beamline_name)
 
+        self._persistent_LTE_d = None
+
     def _clean_up_LTE_text(self):
         """"""
 
@@ -252,7 +254,13 @@ class Lattice():
                 yield el
 
     def get_used_beamline_element_defs(self, used_beamline_name=''):
-        """"""
+        """
+        This function returns a new dictionary of the beamline/element definitions
+        constructed from scratch based on the LTE file contents.
+
+        If you want to use modified element definitions, use instead:
+            get_persistent_used_beamline_element_defs()
+        """
 
         if used_beamline_name is None:
             used_beamline_name = ''
@@ -342,6 +350,36 @@ class Lattice():
                     elem_defs=used_elem_defs,
                     flat_used_elem_names=flat_used_elem_name_list)
 
+    def get_persistent_used_beamline_element_defs(self, used_beamline_name=''):
+        """"""
+
+        if used_beamline_name is None:
+            used_beamline_name = ''
+
+        if self._persistent_LTE_d is None:
+
+            d = self.get_used_beamline_element_defs(
+                used_beamline_name=used_beamline_name)
+
+            self._persistent_LTE_d = {d['used_beamline_name']: d}
+
+            # Add the default beamline name case
+            if used_beamline_name == '':
+                self._persistent_LTE_d[''] = d['used_beamline_name']
+
+        else:
+
+            if used_beamline_name in self._persistent_LTE_d:
+                pass
+            else:
+                d = self.get_used_beamline_element_defs(
+                    used_beamline_name=used_beamline_name)
+
+                self._persistent_LTE_d[d['used_beamline_name']] = d
+
+        return self._persistent_LTE_d[used_beamline_name]
+
+
     def parse_elem_properties(self, prop_str: str):
         """"""
 
@@ -359,7 +397,7 @@ class Lattice():
 
         return prop
 
-    def modify_elem_def(self, original_elem_def, modified_prop_dict):
+    def _modify_elem_def(self, original_elem_def, modified_prop_dict):
         """"""
 
         elem_name, elem_type, elem_prop_str = original_elem_def
@@ -383,6 +421,32 @@ class Lattice():
         new_elem_prop_str = ', '.join(new_elem_prop_str_list)
 
         return (elem_name, elem_type, new_elem_prop_str)
+
+    def modify_elem_properties(self, mod_prop_dict_list):
+        """
+        A valid example of "mod_prop_dict_list":
+            mod_prop_dict_list = [
+                {"elem_name": "Qh1G2c30a", "prop_name": "K1", "prop_val": 1.5},
+                {"elem_name": "sH1g2C30A", "prop_name": "K2", "prop_val": 0.0},
+            ]
+
+        Note that the values of "elem_name" are case-insensitive.
+        """
+
+        LTE_d = self.get_persistent_used_beamline_element_defs(
+            used_beamline_name=self.used_beamline_name)
+
+        elem_defs = LTE_d["elem_defs"]
+        elem_names = [v[0] for v in elem_defs]
+        for mod in mod_prop_dict_list:
+            elem_ind = elem_names.index(mod["elem_name"].upper())
+            orig_elem_def = LTE_d["elem_defs"][elem_ind]
+            assert mod["elem_name"].upper() == orig_elem_def[0]
+            new_elem_def = self._modify_elem_def(
+                orig_elem_def, {mod["prop_name"]: mod["prop_val"]}
+            )
+            LTE_d["elem_defs"][elem_ind] = new_elem_def
+
 
     def get_unhandled_element_types(self, elem_def_list):
         """"""
@@ -681,8 +745,6 @@ class Lattice():
         new_LTE_filepath, used_beamline_name, elem_defs, beamline_defs):
         """"""
 
-        #d = self.get_used_beamline_element_defs(used_beamline_name=used_beamline_name)
-
         used_beamline_name = used_beamline_name.upper()
         assert used_beamline_name in [beamline_name for (beamline_name, _)
                                       in beamline_defs]
@@ -767,10 +829,12 @@ def write_modified_LTE(
 ):
     """
     A valid example of "mod_prop_dict_list":
-        [
-        {'elem_name': 'Q1', 'prop_name': 'K1', 'prop_val': 1.5},
-        {'elem_name': 'S1', 'prop_name': 'K2', 'prop_val': 2.0},
+        mod_prop_dict_list = [
+            {"elem_name": "Qh1G2c30a", "prop_name": "K1", "prop_val": 1.5},
+            {"elem_name": "sH1g2C30A", "prop_name": "K2", "prop_val": 0.0},
         ]
+
+    Note that the values of "elem_name" are case-insensitive.
     """
 
     if LTE_obj is None:
@@ -785,19 +849,10 @@ def write_modified_LTE(
                 f'WARNING: Ignored: base_used_beamline_name = "{base_used_beamline_name}"'
             )
         LTE = LTE_obj
-    LTE_d = LTE.get_used_beamline_element_defs()
-    elem_defs = LTE_d['elem_defs']
-    elem_names = [v[0] for v in elem_defs]
 
-    for mod in mod_prop_dict_list:
-        elem_ind = elem_names.index(mod['elem_name'].upper())
-        orig_elem_def = LTE_d['elem_defs'][elem_ind]
-        assert mod['elem_name'].upper() == orig_elem_def[0]
-
-        new_elem_def = LTE.modify_elem_def(
-            orig_elem_def, {mod['prop_name']: mod['prop_val']}
-        )
-        LTE_d['elem_defs'][elem_ind] = new_elem_def
+    LTE.modify_elem_properties(mod_prop_dict_list)
+    LTE_d = LTE.get_persistent_used_beamline_element_defs(
+        used_beamline_name=LTE.used_beamline_name)
 
     LTE.write_LTE(
         new_LTE_filepstr,
