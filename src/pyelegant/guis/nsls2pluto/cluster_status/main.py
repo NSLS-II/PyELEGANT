@@ -82,7 +82,10 @@ class TableModelQueue(QtCore.QAbstractTableModel):
                 return val
             else:
                 if val:
-                    return convert_slurm_time_duration_seconds_to_str(val)
+                    if val in ('UNLIMITED', 'INVALID'):
+                        return val
+                    else:
+                        return convert_slurm_time_duration_seconds_to_str(val)
                 else:
                     return val
 
@@ -127,7 +130,8 @@ class TableModelQueue(QtCore.QAbstractTableModel):
 
             for row in table:
                 for iCol in self._time_duration_column_inds:
-                    row[iCol] = convert_slurm_time_duration_str_to_seconds(row[iCol])
+                    if row[iCol] not in ('UNLIMITED', 'INVALID'):
+                        row[iCol] = convert_slurm_time_duration_str_to_seconds(row[iCol])
 
             self._data.extend(table)
         else:
