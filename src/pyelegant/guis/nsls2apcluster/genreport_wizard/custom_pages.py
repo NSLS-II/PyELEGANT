@@ -2667,6 +2667,8 @@ class PageLTE(PageStandard):
         f(mod_conf, 'use_beamline_cell', use_beamline_cell)
         f(mod_conf, 'use_beamline_ring', use_beamline_ring)
         #
+        f(mod_conf, 'ring_is_a_simple_multiple_of_cells', ring_is_simple_mult_cells)
+        #
         f(mod_conf, 'enable_pyelegant_stdout', self.field('check_pyele_stdout'))
 
         self.wizardObj.update_conf_on_all_pages(mod_conf)
