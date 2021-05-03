@@ -159,6 +159,11 @@ def get_slurm_time_limits():
                 #print(f'{part_name} + ({qos_name}): {max_wall}')
                 max_time_limits[part_name][qos_name] = max_wall
 
+    for part_name, d in max_time_limits.items():
+        for qos_name, max_time_str in d.items():
+            if max_time_str.strip() == '':
+                max_time_limits[part_name][qos_name] = 'UNLIMITED'
+
     default_time_limits = {partition_name: {} for partition_name in list(part_d)}
     for part_name, d in part_d.items():
         def_time_str = d['DefaultTime']
@@ -167,7 +172,9 @@ def get_slurm_time_limits():
                 default_time_limits[part_name][qos_name] = max_time_str
             else:
                 def_time = _convert_slurm_time_duration_str_to_seconds(def_time_str)
-                if def_time > _convert_slurm_time_duration_str_to_seconds(max_time_str):
+                if max_time_str == 'UNLIMITED':
+                    default_time_limits[part_name][qos_name] = def_time_str
+                elif def_time > _convert_slurm_time_duration_str_to_seconds(max_time_str):
                     default_time_limits[part_name][qos_name] = 'INVALID'
                 else:
                     default_time_limits[part_name][qos_name] = def_time_str
