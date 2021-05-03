@@ -1387,7 +1387,7 @@ def calc_mom_aper(
     if rf_cavity_on:
         # First find existing RFCA elements and convert to DRIF
         if 'RFCA' in [v[1] for v in d_LTE['elem_defs']]:
-            for i, (elem_name, elem_type, prop_str) in d_LTE['elem_defs']:
+            for i, (elem_name, elem_type, prop_str) in enumerate(d_LTE['elem_defs']):
                 if elem_type == 'RFCA':
                     L = LTE.parse_elem_properties(prop_str).get('L', 0.0)
                     d_LTE['elem_defs'][i] = (elem_name, 'DRIF',
