@@ -8181,7 +8181,8 @@ class Report_NSLS2U_Default:
                                 time=timelimit_str, job_name='lifetime')
             if remote_opts is not None:
                 for k, v in remote_opts.items():
-                    _remote_opts[k] = v
+                    if k != 'ntasks':
+                        _remote_opts[k] = v
 
             err_log_check = dict(funcs=[self._check_remote_err_log_exit_code])
 
