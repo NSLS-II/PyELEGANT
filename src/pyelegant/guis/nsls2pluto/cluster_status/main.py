@@ -155,6 +155,8 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
 
         self.partition_info = None
 
+        self._unexpected_node_prefixes = []
+
         q_output_format_delimiter = '#' # Cannot use "|" here, as this will
         # conflict with piping in custom commands.
         self.q_output_format_delimiter = q_output_format_delimiter
@@ -405,10 +407,10 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
 
     def _sinfo_parsing_nsls2pluto(self, parsed, partition, state, nodes_str):
 
-        nodes_tuple = tuple(re.findall('\w+[\d\-\[\],]+(?<!,)', nodes_str))
+        nodes_tuple = tuple(re.findall('[\w\-]+[\d\-\[\],]+(?<!,)', nodes_str))
 
         nMaxNodeIndex = 100
-        avail_prefixes = ['gpu', 'hpc']
+        avail_prefixes = ['gpu', 'hpc'] + self._unexpected_node_prefixes
 
         for nodes_str in nodes_tuple:
             if '[' not in nodes_str:
@@ -416,7 +418,10 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
                     if nodes_str.startswith(prefix):
                         break
                 else:
-                    raise ValueError(f'Unexpected prefix: {nodes_str}')
+                    #raise ValueError(f'Unexpected prefix: {nodes_str}')
+                    print(f'Unexpected node str: {nodes_str}')
+                    prefix = self._get_unexpected_prefix(nodes_str)
+                    self._unexpected_node_prefixes.append(prefix)
             else:
                 prefix = nodes_str.split('[')[0]
                 assert prefix in avail_prefixes
@@ -436,6 +441,28 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             #print(nodes_str)
             #print(prefix, node_list)
             parsed[partition][state].extend(node_list)
+
+
+    def _get_unexpected_prefix(self, nodes_str):
+
+        try:
+            int(nodes_str)
+            raise ValueError('All numbers')
+        except:
+            pass
+
+        last_i = -1
+        while True:
+            try:
+                int(nodes_str[last_i:])
+                last_i -= 1
+            except:
+                last_i += 1
+                prefix = nodes_str[:last_i]
+                print(f'Adding unexpected prefix: {prefix}')
+                break
+
+        return prefix
 
 
     def _expand_node_range_pattern(self, index_str):
@@ -535,7 +562,7 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
         for p in list(self.partition_info):
             preempt_mode = self.partition_info[p]['PreemptMode']
             nodes_str = self.partition_info[p]['Nodes']
-            nodes_tuple = tuple(re.findall('\w+[\d\-\[\],]+(?<!,)', nodes_str))
+            nodes_tuple = tuple(re.findall('[\w\-]+[\d\-\[\],]+(?<!,)', nodes_str))
             #print((p, preempt_mode, nodes_str, nodes_tuple))
             k = (nodes_tuple, preempt_mode)
             if k not in grouped_partition_names:
@@ -544,7 +571,7 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
                 grouped_partition_names[k].append(p)
 
         nMaxNodeIndex = 100
-        avail_prefixes = ['gpu', 'hpc']
+        avail_prefixes = ['gpu', 'hpc'] + self._unexpected_node_prefixes
 
         group_summary = []
         preempted_partitions = []
@@ -564,7 +591,10 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
                         if nodes_str.startswith(prefix):
                             break
                     else:
-                        raise ValueError(f'Unexpected prefix: {nodes_str}')
+                        #raise ValueError(f'Unexpected prefix: {nodes_str}')
+                        print(f'Unexpected node str: {nodes_str}')
+                        prefix = self._get_unexpected_prefix(nodes_str)
+                        self._unexpected_node_prefixes.append(prefix)
                 else:
                     prefix = nodes_str.split('[')[0]
                     assert prefix in avail_prefixes
