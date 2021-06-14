@@ -565,7 +565,10 @@ def _load_nested_dict_from_hdf5(g_parent, key_parent, d):
         for k, g2 in g_parent.items():
             _load_nested_dict_from_hdf5(g2, k, d[key_parent])
     else:
-        d[key_parent] = g_parent[()]
+        temp = g_parent[()]
+        if hasattr(temp, 'decode'): # required for h5py >3.0
+            temp = temp.decode()
+        d[key_parent] = temp
 
 def run_cmd_w_realtime_print(cmd_list, return_stdout=False, return_stderr=False):
     """
