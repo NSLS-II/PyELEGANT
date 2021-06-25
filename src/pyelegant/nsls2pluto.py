@@ -200,7 +200,7 @@ def _init_SLURM_ABS_TIME_LIMIT():
 def load_misc_from_config_file(force=False):
     """"""
 
-    if (not force) and (
+    if (MISC_CONFIG != {}) and (not force) and (
         not util.is_file_updated(_MISC_CONFIG_FILEPATH, _IMPORT_TIMESTAMP)
     ):
         return
