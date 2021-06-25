@@ -200,8 +200,10 @@ def _init_SLURM_ABS_TIME_LIMIT():
 def load_misc_from_config_file(force=False):
     """"""
 
-    if (MISC_CONFIG != {}) and (not force) and (
-        not util.is_file_updated(_MISC_CONFIG_FILEPATH, _IMPORT_TIMESTAMP)
+    if (
+        (MISC_CONFIG != {})
+        and (not force)
+        and (not util.is_file_updated(_MISC_CONFIG_FILEPATH, _IMPORT_TIMESTAMP))
     ):
         return
 
@@ -668,7 +670,7 @@ def wait_for_completion(
                     else:
                         time.sleep(optsErrLogAppearCheck.get('interval', 1.0))
                         ls_cmd = f'ls {Path(err_log_filename).resolve().parent} > /dev/null 2>&1'
-                        print('$ '+ls_cmd)
+                        print('$ ' + ls_cmd)
                         _p = Popen(ls_cmd, shell=True)
                         # ^ Needed for NFS cache flushing (https://stackoverflow.com/questions/3112546/os-path-exists-lies)
                         # If the code is run on GPFS or Lustre, this caching problem
@@ -925,7 +927,9 @@ def run(
             try:
                 os.remove(sbatch_sh_filepath)
             except IOError:
-                print(f'* Failed to delete temporary sbatch shell file "{sbatch_sh_filepath}"')
+                print(
+                    f'* Failed to delete temporary sbatch shell file "{sbatch_sh_filepath}"'
+                )
 
             for fp in [slurm_out_filepath, slurm_err_filepath]:
                 try:
@@ -1551,8 +1555,8 @@ def srun_python_func(
         if not output_filepath.exists():
             if False:
                 p = Popen(
-                    #shlex.split(f'ls {output_filepath}'), # <= This will NOT refresh NFS cache
-                    shlex.split('ls'), # <= This WILL refresh NFS cache
+                    # shlex.split(f'ls {output_filepath}'), # <= This will NOT refresh NFS cache
+                    shlex.split('ls'),  # <= This WILL refresh NFS cache
                     stdout=PIPE,
                     stderr=PIPE,
                     encoding='utf-8',
