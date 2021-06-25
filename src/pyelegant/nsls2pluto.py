@@ -35,6 +35,20 @@ SLURM_PARTITIONS = {}
 SLURM_EXCL_NODES = None
 SLURM_ABS_TIME_LIMIT = {}
 
+_MISC_CONFIG_FILEPATH = Path.home().joinpath('.pyelegant', 'misc.yaml')
+if not _MISC_CONFIG_FILEPATH.exists():
+    _MISC_CONFIG_FILEPATH.write_text(
+        '''\
+functions:
+  wait_for_completion:
+    ErrLogAppearCheck:
+      nMaxTry: 10
+      interval: 1.0
+'''
+    )
+#
+MISC_CONFIG = {}
+
 p = Popen(shlex.split('which elegant'), stdout=PIPE, stderr=PIPE, encoding='utf-8')
 out, err = p.communicate()
 if out.strip():
@@ -181,6 +195,22 @@ def _init_SLURM_ABS_TIME_LIMIT():
 
     for _partition in list(SLURM_PARTITIONS):
         SLURM_ABS_TIME_LIMIT[_partition] = None
+
+
+def load_misc_from_config_file(force=False):
+    """"""
+
+    if (not force) and (
+        not util.is_file_updated(_MISC_CONFIG_FILEPATH, _IMPORT_TIMESTAMP)
+    ):
+        return
+
+    yml = yaml.YAML()
+    config = yml.load(_MISC_CONFIG_FILEPATH.read_text())
+
+    MISC_CONFIG.clear()
+    for k, v in config.items():
+        MISC_CONFIG[k] = v
 
 
 def convertLocalTimeStrToSecFromUTCEpoch(time_str, frac_sec=False, time_format=None):
@@ -529,6 +559,10 @@ def wait_for_completion(
 ):
     """"""
 
+    load_misc_from_config_file(force=False)
+    func_opts = MISC_CONFIG['functions'].get('wait_for_completion', {})
+    optsErrLogAppearCheck = func_opts.get('ErrLogAppearCheck', {})
+
     t0 = time.time()
 
     dt_not_running = 0.0
@@ -620,7 +654,7 @@ def wait_for_completion(
             # need to check the contents.
             # print(f'Current directory is "{os.getcwd()}"')
             _err_log_file_missing = False
-            for _ in range(3):
+            for _ in range(optsErrLogAppearCheck.get('nMaxTry', 3)):
                 try:
                     curr_err_log_file_size = os.stat(err_log_filename).st_size
                     if _err_log_file_missing:
@@ -632,7 +666,7 @@ def wait_for_completion(
                     if False:
                         time.sleep(10.0)
                     else:
-                        time.sleep(1.0)
+                        time.sleep(optsErrLogAppearCheck.get('interval', 1.0))
                         ls_cmd = f'ls {Path(err_log_filename).resolve().parent} > /dev/null 2>&1'
                         print('$ '+ls_cmd)
                         _p = Popen(ls_cmd, shell=True)
