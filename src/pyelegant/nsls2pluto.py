@@ -373,6 +373,15 @@ def extract_slurm_opts(remote_opts):
             else:
                 slurm_opts[k] = '--{}={}'.format(k, v)
 
+        elif k == 'gres':
+
+            if v is None:
+                slurm_opts[k] = ''
+            else:
+                if v not in ('gpu', 'gpu:2'):
+                    raise ValueError('--gres must be "gpu" for 1 GPU or "gpu:2" for 2 GPUs')
+                slurm_opts[k] = '--{}={}'.format(k, v)
+
         elif k in ('ntasks',):
 
             if v is None:
