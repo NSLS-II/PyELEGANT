@@ -275,6 +275,11 @@ class ClosedOrbitCalculator:
     If you observe too large closed orbit distortion (particularly horizontally)
     without any orbit kicks even after "closed_orbit_accuracy" is reduced, it is
     recommended to increase N_KICKS for CSBEND elements (e.g., 40).
+
+    Also, "closed_orbit_iterations" being too small may generate an error message
+    like the following:
+      error: closed orbit did not converge to better than 4.494233e+307 after 40 iteration
+    In this case, try to raise this value to a larger one like 200.
     """
 
     def __init__(
@@ -325,7 +330,9 @@ class ClosedOrbitCalculator:
             ed.add_newline()
 
         ed.add_block('run_setup',
-            lattice=LTE_filepath, p_central_mev=E_MeV, use_beamline=use_beamline,
+            lattice=Path(LTE_filepath).resolve(),
+            p_central_mev=E_MeV,
+            use_beamline=use_beamline,
             parameters=self.param_filepath)
 
         ed.add_newline()
@@ -431,12 +438,12 @@ class ClosedOrbitCalculator:
 
                 if elem_type in ('HKICK', 'EHKICK'):
                     self.hcors['kick_prop_names'].append('KICK')
-                elif elem_type in ('KICKER', 'EKICKER'):
+                elif elem_type in ('KICK', 'KICKER', 'EKICKER'):
                     self.hcors['kick_prop_names'].append('HKICK')
                 else:
                     raise ValueError(
                         (f'Element "{elem_name}" is of type "{elem_type}". '
-                        'Must be one of "HKICK", "EHKICK", "KICKER", "EKICKER".'))
+                        'Must be one of "KICK", "HKICK", "EHKICK", "KICKER", "EKICKER".'))
 
             self.hcors['names'] = np.array(cor_names)
             self.hcors['rads'] = np.zeros(len(cor_names))
@@ -453,12 +460,12 @@ class ClosedOrbitCalculator:
 
                 if elem_type in ('VKICK', 'EVKICK'):
                     self.vcors['kick_prop_names'].append('KICK')
-                elif elem_type in ('KICKER', 'EKICKER'):
+                elif elem_type in ('KICK', 'KICKER', 'EKICKER'):
                     self.vcors['kick_prop_names'].append('VKICK')
                 else:
                     raise ValueError(
                         (f'Element "{elem_name}" is of type "{elem_type}". '
-                        'Must be one of "VKICK", "EVKICK", "KICKER", "EKICKER".'))
+                        'Must be one of "KICK", "VKICK", "EVKICK", "KICKER", "EKICKER".'))
 
             self.vcors['names'] = np.array(cor_names)
             self.vcors['rads'] = np.zeros(len(cor_names))

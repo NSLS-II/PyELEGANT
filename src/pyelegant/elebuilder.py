@@ -2793,11 +2793,11 @@ class EleDesigner():
 
         kickers['h'] = [
             (name, elem_type) for name, elem_type, _ in self._LTE.elem_defs
-            if elem_type in ('HKICK', 'EHKICK', 'KICKER', 'EKICKER')]
+            if elem_type in ('KICK', 'HKICK', 'EHKICK', 'KICKER', 'EKICKER')]
 
         kickers['v'] = [
             (name, elem_type) for name, elem_type, _ in self._LTE.elem_defs
-            if elem_type in ('VKICK', 'EVKICK', 'KICKER', 'EKICKER')]
+            if elem_type in ('KICK', 'VKICK', 'EVKICK', 'KICKER', 'EKICKER')]
 
         if spos_sorted:
 
