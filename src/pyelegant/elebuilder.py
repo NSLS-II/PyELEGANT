@@ -2374,7 +2374,7 @@ class EleDesigner():
         for sdds_fp in self.actual_output_filepath_list:
             if sdds_fp.startswith('/dev/'):
                 continue
-            print(f'Processing "{sdds_fp}"...')
+            #print(f'Processing "{sdds_fp}"...')
             ext = sdds_fp.split('.')[-1]
             try:
                 output[ext], meta[ext] = sdds.sdds2dicts(sdds_fp)
