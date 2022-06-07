@@ -10,6 +10,7 @@ import glob
 from pathlib import Path
 import json
 import re
+from collections import defaultdict
 
 import numpy as np
 import dill
@@ -263,6 +264,169 @@ def _convert_slurm_time_duration_str_to_seconds(slurm_time_duration_str):
     )
 
     return duration_in_sec
+
+def _expand_node_range_pattern(index_str):
+    """
+    Examples for "index_str":
+        '[019-025]'
+    """
+
+    tokens = index_str[1:-1].split(',')
+    pat_list = []
+    for tok in tokens:
+        if '-' in tok:
+            iStart, iEnd = tok.split('-')
+            pat_list.extend([f'{i:03d}' for i in range(
+                int(iStart), int(iEnd)+1)])
+        else:
+            pat_list.append(tok)
+    pat = '|'.join(pat_list)
+
+    return pat
+
+
+def _get_unexpected_prefix(nodes_str):
+
+    try:
+        int(nodes_str)
+        raise ValueError('All numbers')
+    except:
+        pass
+
+    last_i = -1
+    while True:
+        try:
+            int(nodes_str[last_i:])
+            last_i -= 1
+        except:
+            last_i += 1
+            prefix = nodes_str[:last_i]
+            #print(f'Adding unexpected prefix: {prefix}')
+            break
+
+    return prefix
+
+
+def _sinfo_parsing(parsed, partition, state, nodes_str, _unexpected_node_prefixes):
+
+    nodes_tuple = tuple(re.findall('[\w\-]+[\d\-\[\],]+(?<!,)', nodes_str))
+
+    nMaxNodeIndex = 100
+    avail_prefixes = ['gpu', 'hpc'] + _unexpected_node_prefixes
+
+    for nodes_str in nodes_tuple:
+        if '[' not in nodes_str:
+            for prefix in avail_prefixes:
+                if nodes_str.startswith(prefix):
+                    break
+            else:
+                #print(f'Unexpected node str: {nodes_str}')
+                prefix = _get_unexpected_prefix(nodes_str)
+                _unexpected_node_prefixes.append(prefix)
+        else:
+            prefix = nodes_str.split('[')[0]
+            assert prefix in avail_prefixes
+        index_str = nodes_str[len(prefix):]
+        #print((prefix, index_str))
+        if ',' in index_str:
+            assert index_str.startswith('[') and index_str.endswith(']')
+            pat = _expand_node_range_pattern(index_str)
+        elif index_str.startswith('[') and index_str.endswith(']'):
+            pat = _expand_node_range_pattern(index_str)
+        else:
+            pat = index_str
+        matched_indexes = re.findall(pat, ','.join(
+            [f'{i:03d}' for i in range(nMaxNodeIndex)]))
+        #print(matched_indexes)
+        node_list = [f'{prefix}{s}' for s in matched_indexes]
+        #print(nodes_str)
+        #print(prefix, node_list)
+        parsed[partition][state].extend(node_list)
+        
+def get_n_free_cores(partition='normal'):
+
+    # update partition info
+    cmd = 'scontrol show partition'
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+
+    parsed = {}
+    for k, v in re.findall('([\w\d]+)=([^\s]+)', out):
+        if k == 'PartitionName':
+            d = parsed[v] = {}
+        else:
+            d[k] = v
+
+    # update sinfo
+    cmd = 'sinfo -h -o "%P#%a#%l#%D#%T#%N"'
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+
+    _unexpected_node_prefixes = []
+
+    parsed = defaultdict(dict)
+    for line in out.strip().split('\n'):
+        _partition, avail, tlim, n_nodes, state, nodes_str = line.split('#')
+        if _partition.endswith('*'):
+            _partition = _partition[:-1]
+        if state not in parsed[_partition]:
+            parsed[_partition][state] = []
+
+        _sinfo_parsing(parsed, _partition, state, nodes_str, _unexpected_node_prefixes)
+
+    node_names = np.unique([e for k, v in parsed[partition].items() for e in v])
+
+    cmd = 'scontrol show node'
+    p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    out, err = p.communicate()
+
+    parsed = re.findall(
+        'NodeName=([\w\d\-]+)\s+[\w=\s]+CPUAlloc=(\d+)\s+CPUTot=(\d+)\s+CPULoad=([\d\.N/A]+)',
+        out)
+
+    _nAlloc = _nTot = 0
+    for node_name, nAlloc, nTot, cpu_load in parsed:
+        if node_name not in node_names:
+            continue
+        _nAlloc += int(nAlloc)
+        _nTot += int(nTot)
+    n_free = _nTot - _nAlloc
+
+    return n_free
+
+
+def get_avail_adjusted_ncores(ncores_max, ncores_min, partition=None):
+    
+    assert ncores_max >= ncores_min >= 1
+    
+    if partition is None:
+        _kwargs = {}
+    else:
+        _kwargs = dict(partition=partition)
+
+    for _ in range(3):
+        try:
+            n_free_cores = get_n_free_cores(**_kwargs)
+            break
+        except:
+            time.sleep(5.0)
+    else:
+        print(f'* Failed to obtain # of available cores. Will use max. requested cores ({ncores_max}).')
+        n_free_cores = ncores_max
+
+    if n_free_cores < ncores_max:        
+        msg = f'Only {n_free_cores} cores available. '
+        if n_free_cores >= ncores_min:
+            msg += 'Will use all available cores.'
+            n_final = n_free_cores    
+        else:
+            msg += f'Will use min. requested cores ({ncores_min}).'
+            n_final = ncores_min
+        print(msg)
+    else:
+        n_final = ncores_max
+
+    return n_final
 
 
 def get_cluster_time_limits():
@@ -1034,7 +1198,7 @@ def gen_mpi_submit_script(remote_opts):
 
     return input_filepath, output_filepath, mpi_sub_sh_filepath
 
-
+    
 def run_mpi_python(
     remote_opts,
     module_name,
