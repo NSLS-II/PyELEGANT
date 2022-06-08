@@ -11,6 +11,8 @@ from pathlib import Path
 import json
 import re
 from collections import defaultdict
+import gzip
+import pickle
 
 import numpy as np
 import dill
@@ -411,9 +413,9 @@ def get_avail_adjusted_ncores(ncores_max, ncores_min, partition=None):
         except:
             time.sleep(5.0)
     else:
-        print(f'* Failed to obtain # of available cores. Will use max. requested cores ({ncores_max}).')
+        print(f'* Failed to obtain # of available cores. Will assume max. requested cores ({ncores_max}) available.')
         n_free_cores = ncores_max
-
+        
     if n_free_cores < ncores_max:        
         msg = f'Only {n_free_cores} cores available. '
         if n_free_cores >= ncores_min:
@@ -979,14 +981,14 @@ def _sbatch(
             )
             print(f'Elapsed: Total = {h_dt_total}; Running = {h_dt_running}')
 
-    slurm_out_filepath = '{job_name}.{job_ID_str}.out'.format(
+    slurm_out_filename = '{job_name}.{job_ID_str}.out'.format(
         job_name=job_name, job_ID_str=job_ID_str
     )
-    slurm_err_filepath = '{job_name}.{job_ID_str}.err'.format(
+    slurm_err_filename = '{job_name}.{job_ID_str}.err'.format(
         job_name=job_name, job_ID_str=job_ID_str
     )
 
-    return job_ID_str, slurm_out_filepath, slurm_err_filepath, sbatch_info
+    return job_ID_str, slurm_out_filename, slurm_err_filename, sbatch_info
 
 
 def run(
@@ -1920,6 +1922,374 @@ def starmap_async(
                     pass
 
     return results_list
+
+
+def file_exists_w_nfs_cache_flushing(filepath, nMaxTry=5, interval=3.0):
+    
+    if not isinstance(filepath, Path):
+        filepath = Path(filepath)
+    
+    tFileWait = time.time()
+    for _ in range(nMaxTry):
+        if not filepath.exists():
+            p = Popen('ls > /dev/null 2>&1', shell=True, cwd=filepath.parent)
+            # ^ Needed for NFS cache flushing (https://stackoverflow.com/questions/3112546/os-path-exists-lies)
+            # If the code is run on GPFS or Lustre, this caching problem
+            # does not occur.
+            p.communicate()            
+            print(f'File "{filepath}" hasn\'t appeared. NFS cache flushing attempted.')
+            time.sleep(interval)
+        else:
+            break        
+    else:
+        print(f'Waited file "{filepath}" to show up for {time.time()-tFileWait:.3f} [s]')
+        raise IOError(f'Expected file "{filepath}" not found.')
+    
+
+def get_file_size(filepath):
+
+    file_exists_w_nfs_cache_flushing(filepath)
+    return os.stat(filepath).st_size
+
+
+def _gen_mpi_executor_submit_script(remote_opts, paths=None):
+    """"""
+    
+    slurm_opts = extract_slurm_opts(remote_opts)
+
+    tmp_dir = tempfile.TemporaryDirectory(
+        suffix=f'_{datetime.datetime.now():%Y%m%dT%H%M%S}', 
+        prefix='tmpMpiExec_', 
+        dir=Path.cwd())
+    tmp_dirpath = Path(tmp_dir.name)
+    
+    mpi_sub_sh_filepath = tmp_dirpath.joinpath('submit.sh')
+    paths_filepath = tmp_dirpath.joinpath('paths.dill')
+    
+    with open(paths_filepath, 'wb') as f:
+        dill.dump(paths, f)    
+    
+    # MPI_COMPILER_OPT_STR = '--mpi=pmi2'
+    MPI_COMPILER_OPT_STR = ''
+    
+    main_script_path = f'{__file__[:-3]}_mpi_executor.py'
+    srun_cmd_list = [
+        'srun',
+        MPI_COMPILER_OPT_STR,
+        'python -m mpi4py.futures',
+        main_script_path,
+        f'{paths_filepath}'
+    ]
+    srun_cmd = ' '.join([s for s in srun_cmd_list if s.strip() != ''])
+
+    if slurm_opts.get('x11', False):
+        srun_cmd = 'export MPLBACKEND="agg"\n' + srun_cmd
+
+    write_sbatch_shell_file(mpi_sub_sh_filepath, slurm_opts, srun_cmd)
+    
+    return tmp_dir, mpi_sub_sh_filepath, paths_filepath
+
+
+def launch_mpi_python_executor(
+    remote_opts, paths=None,
+    err_log_check=None,
+    print_stdout=True,
+    print_stderr=True
+    ):
+        
+    _min_err_log_check = _get_min_err_log_check()
+    if err_log_check is None:
+        err_log_check = _min_err_log_check
+    else:
+        for _func in _min_err_log_check['funcs']:
+            if _func not in err_log_check['funcs']:
+                err_log_check['funcs'].append(_func)
+    
+    if remote_opts is None:
+        remote_opts = deepcopy(DEFAULT_REMOTE_OPTS)
+
+    if ('job_name' not in remote_opts) and ('job-name' not in remote_opts):
+        remote_opts['job_name'] = DEFAULT_REMOTE_OPTS['job_name']
+    job_name = remote_opts['job_name']
+    #
+    # Must define these, as "err_log_check" will need to read the ".err" file.
+    remote_opts['output'] = f'{job_name}.%J.out'
+    remote_opts['error'] = f'{job_name}.%J.err'
+    #
+    remote_opts['partition'] = remote_opts.get('partition', 'normal')
+    remote_opts['ntasks'] = remote_opts.get('ntasks', 50)
+    
+    err_log_check['job_name'] = job_name
+    
+    tmp_dir, mpi_sub_sh_filepath, paths_filepath = _gen_mpi_executor_submit_script(
+        remote_opts, paths=paths
+    )
+    
+    # Add re-try functionality in case of "sbatch: error: Slurm controller not responding
+    # , sleeping and retrying."
+    job_ID_str, slurm_out_filename, slurm_err_filename, sbatch_info = _sbatch(
+        mpi_sub_sh_filepath,
+        job_name,
+        exit_right_after_submission=True,
+        print_stdout=print_stdout,
+        print_stderr=print_stderr,
+        nMaxTry=3,
+    )
+    
+    # Must wait until the requested job starts running
+    cmd = (
+        f'squeue --noheader --job={job_ID_str} -o "%.{len(job_ID_str)+1}i %.3t %.4C %R"'
+    )
+    err_counter = 0
+    t0 = time.perf_counter()
+    while True:        
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+        out, err = p.communicate()
+        out, err = out.strip(), err.strip()
+
+        if err:
+            err_counter += 1
+    
+            if err == 'slurm_load_jobs error: Invalid job id specified':
+                # The job has not been registered yet.
+                time.sleep(3.0)
+                continue
+
+            if err_counter >= 10:
+                print(err)
+                msg = 'Encountered error while waiting for MPI executor job startup'
+                raise RuntimeError(msg)
+            else:
+                print(err)
+                sys.stdout.flush()
+                time.sleep(10.0)
+                continue
+
+        else:
+            err_counter = 0
+            
+        L = out.splitlines()
+        assert len(L) == 1
+        tokens = L[0].split()
+        state = tokens[1]
+        
+        if state == 'R':
+            # The job started running. Ready to exit this function.
+            dt_pending = time.perf_counter() - t0
+            break
+        elif state == 'PD':
+            time.sleep(5.0)
+        else:
+            raise RuntimeError(f'Unexpected job state: {state}')
+    
+    return dict(
+        tmp_dir=tmp_dir, err_log_check=err_log_check,
+        job_ID_str=job_ID_str, 
+        slurm_out_filepath=Path(slurm_out_filename),
+        slurm_err_filepath=Path(slurm_err_filename),
+        dt_pending=dt_pending,
+        job_counter=0)
+
+    
+def stop_mpi_executor(executor_d):
+        
+    tmp_dir = executor_d['tmp_dir']
+    tmp_dirpath = Path(tmp_dir.name)
+    
+    tmp_dirpath.joinpath('stop_requested').write_text('')
+
+    stopped_fp = tmp_dirpath.joinpath('stopped')
+
+    t0 = time.time()
+    while True:
+        if stopped_fp.exists():
+            break
+        else:
+            time.sleep(5.0)
+            
+        if time.time() - t0 >= 5 * 60:
+            break
+
+    # Delete the temp folder
+    tmp_dir.cleanup() 
+    
+    # Delete the slurm log files
+    for fp in [executor_d['slurm_out_filepath'],
+               executor_d['slurm_err_filepath']]:
+        try:
+            fp.unlink()
+        except:
+            pass
+
+
+def submit_job_to_mpi_executor(executor_d, module_name, func_name, param_list,
+    args, check_interval=5.0, print_stdout=True, print_stderr=True,
+):
+    """
+    Example:
+        module_name = 'pyelegant.nonlin'
+        func_name = '_calc_chrom_track_get_tbt'
+    """
+    
+    input_d = dict(
+        module_name=module_name, func_name=func_name, param_list=param_list, args=args
+    )
+    
+    prefix = f'job_{executor_d["job_ID_str"]}_{executor_d["job_counter"]:d}'
+
+    tmp_dir = executor_d['tmp_dir']
+    tmp_dirpath = Path(tmp_dir.name)
+
+    input_filepath = tmp_dirpath.joinpath(f'{prefix}_input.dill')
+    input_d['output_filepath'] = tmp_dirpath.joinpath(f'{prefix}_output.pgz')
+    input_ready_filepath = tmp_dirpath.joinpath(f'{prefix}.ready')
+
+    with open(input_filepath, 'wb') as f:
+        dill.dump(input_d, f)
+
+    file_exists_w_nfs_cache_flushing(input_filepath)
+    
+    input_ready_filepath.write_text('')
+    file_exists_w_nfs_cache_flushing(input_ready_filepath)
+
+    # Wait for the job to finish
+    output_ready_filepath = _wait_for_mpi_exec_job_completion(
+        executor_d, input_d['output_filepath'], check_interval=check_interval,
+        print_stdout=print_stdout, print_stderr=print_stderr)
+    
+    with gzip.GzipFile(input_d['output_filepath'], 'rb') as f:
+        results, dt = pickle.load(f)
+
+    if print_stdout:
+        h_dt_setup = get_human_friendly_time_duration_str(
+            dt['setup'], fmt='.3f'
+        )
+        h_dt_run = get_human_friendly_time_duration_str(
+            dt['run'], fmt='.3f'
+        )
+        print(f'Elapsed: Setup = {h_dt_setup}; Run = {h_dt_run}')
+
+    if print_stdout or print_stderr:
+        sys.stdout.flush()
+
+    for fp in [input_filepath, input_ready_filepath, output_ready_filepath, 
+               input_d['output_filepath']]:
+        try:
+            fp.unlink()
+        except:
+            pass
+    
+    executor_d["job_counter"] += 1
+
+    return results, dt
+    
+    
+def _wait_for_mpi_exec_job_completion(
+    executor_d, 
+    output_filepath, 
+    check_interval=5.0, 
+    print_stdout=True, 
+    print_stderr=True):
+
+    job_ID_str = executor_d['job_ID_str']
+    err_log_check = executor_d['err_log_check']
+    tmp_dir = executor_d['tmp_dir']
+
+    tmp_dirpath = Path(tmp_dir.name)
+    
+    output_ready_filename = f'{output_filepath.name}.done'
+
+    sq_cmd = (
+        f'squeue --noheader --job={job_ID_str} -o "%.{len(job_ID_str)+1}i %.3t %.4C %R"'
+    )
+    err_log = ''
+    err_found = False
+    if err_log_check is not None:
+        err_log_filename = f"{err_log_check['job_name']}.{job_ID_str}.err"
+        err_log_filepath = Path(err_log_filename)
+        prev_err_log_file_size = 0
+
+    finished = False
+    err_counter = 0
+
+    while not finished:
+        for fp in tmp_dirpath.glob(output_ready_filename):
+            finished = True
+            output_ready_filepath = fp
+            break
+        else:
+            # Check the status of the job running the executor for any sign of errors
+            p = Popen(shlex.split(sq_cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
+            out, err = p.communicate()
+            out, err = out.strip(), err.strip()
+            
+            if err:
+                err_counter += 1
+    
+                if err == 'slurm_load_jobs error: Invalid job id specified':
+                    msg = 'Error while waiting for job completion: Invalid job id'
+                    raise RuntimeError(msg)
+    
+                if err_counter >= 10:
+                    print(err)
+                    raise RuntimeError('squeue error while waiting for job completion')
+                else:
+                    print(err)
+                    sys.stdout.flush()
+                    time.sleep(10.0)
+                    continue
+            else: # Reset counter since there was no error.
+                err_counter = 0
+                
+            if out.strip() == '':
+                raise RuntimeError('MPI executor job apparently stopped.')
+
+            L = out.splitlines()
+            assert len(L) == 1
+            tokens = L[0].split()
+            state = tokens[1]
+            if state != 'R':
+                raise RuntimeError(f'MPI executor job NOT in the running state: {state}')
+            
+            if err_log_check is not None:
+                # Check if err log file size has increased. If not, there is no
+                # need to check the contents.
+                curr_err_log_file_size = get_file_size(err_log_filepath)
+                
+                if curr_err_log_file_size > prev_err_log_file_size:
+    
+                    prev_err_log_file_size = curr_err_log_file_size
+    
+                    err_log = err_log_filepath.read_text()
+    
+                    err_found = False
+                    for _check_func in err_log_check['funcs']:
+                        # print(_check_func)
+                        # print(_check_func(err_log))
+                        # sys.stdout.flush()
+                        if _check_func(err_log):
+    
+                            err_found = True
+    
+                            # Cancel the job
+                            cmd = f'scancel {job_ID_str}'
+                            p = Popen(
+                                shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8'
+                            )
+                            out, err = p.communicate()
+                            if err:
+                                print(f'Tried cancelling Job {job_ID_str}')
+                                print(f'\n*** stderr: command: {cmd}')
+                                print(err)
+    
+                            break
+    
+                    if err_found:
+                        break
+            
+            time.sleep(check_interval)    
+
+    return output_ready_filepath
 
 
 def sendRunCompleteMail(subject, content):
