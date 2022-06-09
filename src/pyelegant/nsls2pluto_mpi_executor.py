@@ -42,8 +42,8 @@ def _start_mpi_python_executor_loop(tmp_dir, paths_to_prepend, check_interval=5.
         
     if paths_to_prepend is not None:
         
-        # pathlib.Path object is acceptable for sys.path, but the keyword arg
-        # "path" for MPIPoolExecutor() must be strings.
+        # pathlib.Path object not acceptable for sys.path and the keyword arg
+        # "path" for MPIPoolExecutor(). Must be strings.
         path_list = [str(_path) for _path in paths_to_prepend]
 
         executor = MPIPoolExecutor(path=path_list)
@@ -56,6 +56,7 @@ def _start_mpi_python_executor_loop(tmp_dir, paths_to_prepend, check_interval=5.
     tmp_dirpath = Path(tmp_dir.name)
 
     stop_requested = False
+    job_counter = 0
 
     while not stop_requested:
         
@@ -74,9 +75,9 @@ def _start_mpi_python_executor_loop(tmp_dir, paths_to_prepend, check_interval=5.
                                 
                 break
             
-            elif fp.name.endswith('.ready'):
-                pass
-            
+            elif fp.name.endswith(f'_{job_counter:d}.ready'):
+                job_counter += 1
+                # Proceed to run the requested job
             else:
                 continue 
             

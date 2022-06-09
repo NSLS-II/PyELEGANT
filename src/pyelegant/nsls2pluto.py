@@ -2024,7 +2024,7 @@ def launch_mpi_python_executor(
     tmp_dir, mpi_sub_sh_filepath, paths_filepath = _gen_mpi_executor_submit_script(
         remote_opts, paths=paths
     )
-    
+        
     # Add re-try functionality in case of "sbatch: error: Slurm controller not responding
     # , sleeping and retrying."
     job_ID_str, slurm_out_filename, slurm_err_filename, sbatch_info = _sbatch(
@@ -2084,6 +2084,7 @@ def launch_mpi_python_executor(
     
     return dict(
         tmp_dir=tmp_dir, err_log_check=err_log_check,
+        remote_opts=remote_opts,
         job_ID_str=job_ID_str, 
         slurm_out_filepath=Path(slurm_out_filename),
         slurm_err_filepath=Path(slurm_err_filename),
