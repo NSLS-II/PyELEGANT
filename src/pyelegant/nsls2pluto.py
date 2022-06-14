@@ -376,7 +376,20 @@ def get_n_free_cores(partition='normal'):
 
         _sinfo_parsing(parsed, _partition, state, nodes_str, _unexpected_node_prefixes)
 
-    node_names = np.unique([e for k, v in parsed[partition].items() for e in v])
+    sinfo = parsed
+    
+    ok_states = ['allocated', 'completing', 'idle', 'mixed']
+
+    non_ok_nodes = defaultdict(list)
+    for k, v in sinfo.items():
+        for st in list(v):
+            if st not in ok_states:
+                for node_name in v[st]:
+                    non_ok_nodes[node_name].append(st)
+
+    node_names = np.unique([e for k, v in sinfo[partition].items()
+                            for e in v
+                            if e not in non_ok_nodes])
 
     cmd = 'scontrol show node'
     p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding='utf-8')
