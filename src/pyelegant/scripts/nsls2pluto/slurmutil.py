@@ -4,7 +4,7 @@ import re
 import argparse
 import getpass
 
-from ... import facility_name
+from .. import facility_name
 
 if facility_name == 'nsls2apcluster':
     #                 (combined_node_name) (_template)   (node_num_range)
