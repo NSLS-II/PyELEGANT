@@ -36,5 +36,5 @@ if __name__ == '__main__':
     print(results)
     print(dt)
     
-    pe.remote.stop_mpi_executor(exec_d)
+    pe.remote.stop_mpi_executor(exec_d, del_log_files=True)
 

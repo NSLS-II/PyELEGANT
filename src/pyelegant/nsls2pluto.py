@@ -2105,7 +2105,7 @@ def launch_mpi_python_executor(
         job_counter=0)
 
     
-def stop_mpi_executor(executor_d):
+def stop_mpi_executor(executor_d, del_log_files=True):
         
     tmp_dir = executor_d['tmp_dir']
     tmp_dirpath = Path(tmp_dir.name)
@@ -2127,13 +2127,14 @@ def stop_mpi_executor(executor_d):
     # Delete the temp folder
     tmp_dir.cleanup() 
     
-    # Delete the slurm log files
-    for fp in [executor_d['slurm_out_filepath'],
-               executor_d['slurm_err_filepath']]:
-        try:
-            fp.unlink()
-        except:
-            pass
+    if del_log_files:
+        # Delete the slurm log files
+        for fp in [executor_d['slurm_out_filepath'],
+                   executor_d['slurm_err_filepath']]:
+            try:
+                fp.unlink()
+            except:
+                pass
 
 
 def submit_job_to_mpi_executor(executor_d, module_name, func_name, param_list,
