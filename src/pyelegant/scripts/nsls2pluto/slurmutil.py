@@ -3,8 +3,11 @@ from subprocess import Popen, PIPE
 import re
 import argparse
 import getpass
+import time
+from datetime import datetime
 
 from .. import facility_name
+from ..nsls2pluto import get_n_free_cores, sendRunCompleteMail
 
 if facility_name == 'nsls2apcluster':
     #                 (combined_node_name) (_template)   (node_num_range)
@@ -133,3 +136,124 @@ def scancel_by_regex_jobname():
             print('** stderr **')
             print(err)
 
+
+def notify_on_num_free_cores_change():
+
+    parser = argparse.ArgumentParser(
+        prog='pyele_slurm_nfree_notify',
+        description='Send emails upon change in the number of available cores',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('email_address', type=str, help='Full email address')
+    parser.add_argument('-p', '--partition', type=str, default='normal',
+                        help='Partition name to monitor')
+    parser.add_argument('-c', '--check-interval', type=int, default=60,
+                        help='Interval in seconds between each check')
+    parser.add_argument('-n', '--n-min-free', type=int, default=0,
+                        help='Min. number of free cores for sending emails')
+    parser.add_argument('-i', '--sleep-hr-ini', type=int, default=0,
+                        help='Starting hour for dormant period')
+    parser.add_argument('-f', '--sleep-hr-fin', type=int, default=7,
+                        help='Ending hour for dormant period')    
+    
+    args = parser.parse_args()    
+    
+    _notify_on_num_free_cores_change(
+        args.email_address, 
+        partition=args.partition, 
+        check_interval=args.check_interval, 
+        n_min_free=args.n_min_free,
+        sleep_hr_ini=args.sleep_hr_ini, 
+        sleep_hr_fin=args.sleep_hr_fin)
+    
+def _notify_on_num_free_cores_change(
+    email_address, partition='normal', check_interval=60.0, n_min_free=0,
+    sleep_hr_ini=0, sleep_hr_fin=7):
+    """
+    check_interval [s]
+    
+    n_min_free (int): Only sends emails when # of free cores >= this integer.
+    
+    sleep_hr_ini, sleep_hr_fin (int): 0-23
+      During the hours between "sleep_hr_ini" and "sleep_hr_fin", no checking is
+      performed. For example, if you specify sleep_hr_ini=0, sleep_hr_fin=7,
+      no checking is performed between midnight and 7 am.
+    """
+    
+    assert sleep_hr_ini in range(24)
+    assert sleep_hr_fin in range(24)
+
+    print(f'When # of free cores change on the partition "{partition}", '
+          f'emails will be sent to "{email_address}".')
+
+    n_free_prev = get_n_free_cores(partition=partition)
+    timestamp = datetime.now().astimezone().strftime('%Y-%m-%dT%H:%M:%S%z')
+    print(f'{timestamp}: n_free = {n_free_prev}')
+    
+    notified_ts = None
+            
+    while True:
+        n_free_now = get_n_free_cores(partition=partition)
+
+        d = datetime.now().astimezone()
+        timestamp = d.strftime('%Y-%m-%dT%H:%M:%S%z')
+
+        if (n_free_now != n_free_prev) and (n_free_now >= n_min_free):
+            
+            if notified_ts is None:
+                send_email = True
+            else:
+                # If the last notification email was sent less than 1 hour ago,
+                # do not notify to reduce the number of emails.
+                if (d - notified_ts).total_seconds() >= 60 * 60:
+                    send_email = True
+                else:
+                    send_email = False
+            
+            if send_email:
+                email_content = timestamp
+                sendRunCompleteMail(f'"{partition}": # of free cores = {n_free_now}', email_content)
+                n_free_prev = n_free_now
+                notified_ts = d
+        
+        dormant = False
+        
+        if sleep_hr_ini == sleep_hr_fin:
+            # No dormant time
+            actual_interval = check_interval
+        elif sleep_hr_ini < sleep_hr_fin:
+            if sleep_hr_ini <= d.hour < sleep_hr_fin:
+                # Go dormant
+                wakeup_d = datetime.now().astimezone()
+                wakeup_d = wakeup_d.replace(hour=sleep_hr_fin, minute=0, second=0)
+                actual_interval = (wakeup_d - d).total_seconds()
+                dormant = True
+            else:
+                actual_interval = check_interval
+        else: # if sleep_hr_ini > sleep_hr_fin
+            if d.hour >= sleep_hr_ini:
+                # Go dormant
+                wakeup_d = datetime.now().astimezone()
+                wakeup_d = wakeup_d.replace(day=d.day+1, hour=sleep_hr_fin, minute=0, second=0)
+                actual_interval = (wakeup_d - d).total_seconds()
+                dormant = True                
+            elif d.hour < sleep_hr_fin:
+                # Go dormant
+                wakeup_d = datetime.now().astimezone()
+                wakeup_d = wakeup_d.replace(hour=sleep_hr_fin, minute=0, second=0)
+                actual_interval = (wakeup_d - d).total_seconds()
+                dormant = True
+            else:
+                actual_interval = check_interval
+                
+        if dormant:
+            wakeup_timestamp = wakeup_d.strftime('%Y-%m-%dT%H:%M:%S%z')
+            print(
+                f'* Going dormant @ {timestamp} until {wakeup_timestamp}. '
+                f'Next check in {actual_interval:.1f} [s]')
+                    
+        #print(actual_interval)
+        
+        time.sleep(actual_interval)
+        if dormant:
+            timestamp = datetime.now().astimezone().strftime('%Y-%m-%dT%H:%M:%S%z')
+            print(f'** Came out of dormancy @ {timestamp}.')

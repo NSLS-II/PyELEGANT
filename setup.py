@@ -450,6 +450,7 @@ entry_points['console_scripts'].extend(
         'pyele_slurm_print_queue = pyelegant.scripts.slurmutil:print_queue',
         'pyele_slurm_print_load = pyelegant.scripts.slurmutil:print_load',
         'pyele_slurm_scancel_regex_jobname = pyelegant.scripts.slurmutil:scancel_by_regex_jobname',
+        'pyele_slurm_nfree_change = pyelegant.scripts.slurmutil:notify_on_num_free_cores_change',
     ]
 )
 entry_points['gui_scripts'].extend(
