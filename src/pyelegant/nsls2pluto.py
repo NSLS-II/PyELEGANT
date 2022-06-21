@@ -1,6 +1,7 @@
 from collections import defaultdict
 from copy import deepcopy
 import datetime
+import getpass
 import glob
 import gzip
 import json
@@ -215,6 +216,116 @@ def load_misc_from_config_file(force=False):
     MISC_CONFIG.clear()
     for k, v in config.items():
         MISC_CONFIG[k] = v
+
+
+def get_slurm_qos_info():
+
+    p = Popen(
+        shlex.split("sacctmgr show qos -P"), stdout=PIPE, stderr=PIPE, encoding="utf-8"
+    )
+    out, err = p.communicate()
+
+    lines = [line.strip() for line in out.split("\n") if line.strip() != ""]
+
+    header = lines[0].split("|")
+    ncol = len(header)
+    qos_d = {}
+    for L in lines[1:]:
+        vals = L.split("|")
+        assert len(vals) == ncol
+        name = vals[0]
+        qos_d[name] = {}
+        for k, v in zip(header[1:], vals[1:]):
+            qos_d[name][k] = v
+
+    return qos_d
+
+
+def get_slurm_allowed_qos_list():
+
+    username = getpass.getuser()
+
+    if facility_name == "nsls2apcluster":
+        allowed_qos_list = ["default"]
+
+    elif facility_name == "nsls2pluto":
+        cmd = f"sacctmgr show assoc user={username} format=qos -P --noheader"
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding="utf-8")
+        out, err = p.communicate()
+        allowed_qos_list = out.strip().split(",")
+
+        allowed_qos_list = ["default"] + sorted(allowed_qos_list)
+    else:
+        raise ValueError(f"Invalid facility name: {facility_name}")
+
+    return allowed_qos_list
+
+
+def get_slurm_time_limits():
+
+    part_d = _get_slurm_partition_info()
+
+    partition_default_qos_list = [_pd["QoS"] for _pd in part_d.values()]
+
+    qos_d = get_slurm_qos_info()
+
+    allowed_qos_list = get_slurm_allowed_qos_list()
+
+    max_time_limits = {partition_name: {} for partition_name in list(part_d)}
+
+    for part_name, _pd in part_d.items():
+        default_qos_name = _pd["QoS"]
+
+        if default_qos_name == "N/A":
+            max_wall = part_d[part_name]["MaxTime"]
+        else:
+            max_wall = qos_d[default_qos_name]["MaxWall"]
+            if max_wall.strip() == "":
+                # Use default qos for the partition
+                max_wall = qos_d[_pd["QoS"]]["MaxWall"]
+
+        # print(f'{part_name} + (Default QoS): {max_wall}')
+        max_time_limits[part_name]["default"] = max_wall
+
+        for qos_name, d in qos_d.items():
+            if qos_name in partition_default_qos_list:
+                continue
+
+            max_wall = qos_d[qos_name]["MaxWall"]
+            if max_wall.strip() == "":
+                if _pd["QoS"] in qos_d:
+                    # Use default qos for the partition
+                    max_wall = qos_d[_pd["QoS"]]["MaxWall"]
+                else:
+                    max_wall = part_d[part_name]["MaxTime"]
+
+            if qos_name in allowed_qos_list:
+                # print(f'{part_name} + ({qos_name}): {max_wall}')
+                max_time_limits[part_name][qos_name] = max_wall
+
+    for part_name, d in max_time_limits.items():
+        for qos_name, max_time_str in d.items():
+            if max_time_str.strip() == "":
+                max_time_limits[part_name][qos_name] = "UNLIMITED"
+
+    default_time_limits = {partition_name: {} for partition_name in list(part_d)}
+    for part_name, d in part_d.items():
+        def_time_str = d["DefaultTime"]
+        for qos_name, max_time_str in max_time_limits[part_name].items():
+            if def_time_str.upper() == "NONE":
+                default_time_limits[part_name][qos_name] = max_time_str
+            else:
+                def_time = _convert_slurm_time_duration_str_to_seconds(def_time_str)
+                if max_time_str == "UNLIMITED":
+                    default_time_limits[part_name][qos_name] = def_time_str
+                elif def_time > _convert_slurm_time_duration_str_to_seconds(
+                    max_time_str
+                ):
+                    default_time_limits[part_name][qos_name] = "INVALID"
+                else:
+                    default_time_limits[part_name][qos_name] = def_time_str
+
+    return max_time_limits, default_time_limits
 
 
 def convertLocalTimeStrToSecFromUTCEpoch(time_str, frac_sec=False, time_format=None):
@@ -549,7 +660,19 @@ def extract_slurm_opts(remote_opts):
         if k in SRUN_OPTION_MAP:
             k = SRUN_OPTION_MAP[k]
 
-        if k in ("output", "error", "partition", "qos", "time"):
+        if k in (
+            "error",
+            "job-name",
+            "mail-user",
+            "output",
+            "partition",
+            "qos",
+            "signal",
+            "time",
+        ):
+
+            if k == "signal":
+                raise NotImplementedError
 
             if v is None:
                 slurm_opts[k] = ""
@@ -580,13 +703,6 @@ def extract_slurm_opts(remote_opts):
                 slurm_opts[k] = ""
             else:
                 slurm_opts[k] = "-c {:d}".format(v)
-
-        elif k in ("job-name", "mail-user"):
-
-            if v is None:
-                slurm_opts[k] = ""
-            else:
-                slurm_opts[k] = "--{}={}".format(k, v)
 
         elif k == "mail-type":
 
@@ -687,7 +803,7 @@ def write_sbatch_shell_file(
 
     contents += [srun_cmd]
 
-    contents += [" "]
+    contents += ["echo \"Exiting @ $(date +'%Y-%m-%d %H:%M:%S%z')\""]
 
     util.robust_text_file_write(
         sbatch_sh_filepath, "\n".join(contents), nMaxTry=nMaxTry, sleep=sleep
