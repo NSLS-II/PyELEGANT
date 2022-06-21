@@ -2807,12 +2807,15 @@ class EleDesigner:
                             ][0]
                             block[_i] = f"lower_limit={init_val:.12g}"
                         else:
-                            raise ValueError(
-                                (
-                                    f"Initial value ({init_val:{self.double_format}}) cannot be "
-                                    f'smaller than "lower_limit" ({lower_limit:{self.double_format}})'
+                            init_val_str = f"{init_val:{self.double_format}}"
+                            limit_str = f"{lower_limit:{self.double_format}}"
+                            if init_val_str != limit_str:
+                                raise ValueError(
+                                    (
+                                        f"Initial value ({init_val:{self.double_format}}) cannot be "
+                                        f'smaller than "lower_limit" ({lower_limit:{self.double_format}})'
+                                    )
                                 )
-                            )
                     elif init_val > upper_limit:
                         if self._adj_optim_var_limits_to_init:
                             _i = [
@@ -2822,12 +2825,15 @@ class EleDesigner:
                             ][0]
                             block[_i] = f"upper_limit={init_val:.12g}"
                         else:
-                            raise ValueError(
-                                (
-                                    f"Initial value ({init_val:{self.double_format}}) cannot be "
-                                    f'larger than "upper_limit" ({upper_limit:{self.double_format}})'
+                            init_val_str = f"{init_val:{self.double_format}}"
+                            limit_str = f"{upper_limit:{self.double_format}}"
+                            if init_val_str != limit_str:
+                                raise ValueError(
+                                    (
+                                        f"Initial value ({init_val:{self.double_format}}) cannot be "
+                                        f'larger than "upper_limit" ({upper_limit:{self.double_format}})'
+                                    )
                                 )
-                            )
                 else:
                     print(
                         f"{name}.{item} is not defined in LTE. So, initial value check is skipped."
