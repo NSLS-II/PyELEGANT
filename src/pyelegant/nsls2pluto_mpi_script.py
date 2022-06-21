@@ -1,16 +1,16 @@
-import os
-import sys
-import importlib
-import pickle
-import gzip
-import tempfile
-from pathlib import Path
 from functools import partial
+import gzip
+import importlib
+import os
+from pathlib import Path
+import pickle
+import sys
+import tempfile
 import traceback
 
+import dill
 from mpi4py import MPI
 from mpi4py.futures import MPIPoolExecutor
-import dill
 
 # To allow class methods usable in mpi4py
 MPI.pickle.__init__(dill.dumps, dill.loads)  # <= This works for mpi4py v.3.0
@@ -49,7 +49,7 @@ def _wrapper(func, param_list, *args):
     except Exception as err:
 
         tmp = tempfile.NamedTemporaryFile(
-            dir=Path.cwd(), delete=False, prefix='error.', suffix='.txt'
+            dir=Path.cwd(), delete=False, prefix="error.", suffix=".txt"
         )
         Path(tmp.name).write_text(traceback.format_exc())
         tmp.close()
@@ -57,13 +57,13 @@ def _wrapper(func, param_list, *args):
         raise
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     # ## CRITICAL ## You must have this section below
 
-    if (len(sys.argv) == 3) and (sys.argv[1] == '_mpi_starmap'):
+    if (len(sys.argv) == 3) and (sys.argv[1] == "_mpi_starmap"):
         input_filepath = sys.argv[2]
-        with open(input_filepath, 'rb') as f:
+        with open(input_filepath, "rb") as f:
 
             paths_to_prepend = dill.load(f)
             for _path in paths_to_prepend:
@@ -72,17 +72,17 @@ if __name__ == '__main__':
             d = dill.load(f)
 
         # mod = importlib.import_module('pyelegant.nonlin')
-        mod = importlib.import_module(d['module_name'])
+        mod = importlib.import_module(d["module_name"])
         # func = getattr(mod, '_calc_chrom_track_get_tbt')
-        func = getattr(mod, d['func_name'])
+        func = getattr(mod, d["func_name"])
 
         # results = _mpi_starmap(func, d['param_list'], *d['args'])
         results = _mpi_starmap(
-            partial(_wrapper, func), d['param_list'], *d['args'], path=paths_to_prepend
+            partial(_wrapper, func), d["param_list"], *d["args"], path=paths_to_prepend
         )
 
-        if d['output_filepath']:
-            with gzip.GzipFile(d['output_filepath'], 'w') as f:
+        if d["output_filepath"]:
+            with gzip.GzipFile(d["output_filepath"], "w") as f:
                 pickle.dump(results, f, protocol=2)
 
         sys.exit(0)
