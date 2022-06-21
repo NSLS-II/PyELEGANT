@@ -1,3 +1,4 @@
+import concurrent
 from functools import partial
 import gzip
 import importlib
@@ -37,7 +38,11 @@ def _wrapper(func, param_list, *args):
         raise
 
 
-def _start_mpi_python_executor_loop(tmp_dir, paths_to_prepend, check_interval=5.0):
+def _start_mpi_python_executor_loop(
+    tmp_dir, paths_to_prepend, dt_timeout, check_interval=5.0
+):
+
+    tStart = time.time()  # Must be wall time, i.e., don't use time.perf_counter() here
 
     if paths_to_prepend is not None:
 
@@ -105,13 +110,25 @@ def _start_mpi_python_executor_loop(tmp_dir, paths_to_prepend, check_interval=5.
             # func = getattr(mod, '_calc_chrom_track_get_tbt')
             func = getattr(mod, func_name)
 
+            dt_so_far = time.time() - tStart
+            actual_dt_timeout = dt_timeout - dt_so_far
+
             futures = executor.starmap(
                 partial(_wrapper, func),
                 [tuple([param] + list(args)) for param in param_list],
+                timeout=actual_dt_timeout,
             )
 
             t0_run = time.perf_counter()
-            results = list(futures)
+            try:
+                results = list(futures)
+            except concurrent.futures._base.TimeoutError:
+                print(
+                    "* Running a task, but job timeout is imminent. Shutting down MPI executor now..."
+                )
+                executor.shutdown(wait=False, cancel_futures=True)
+                print("* Shutdown complete.")
+                raise
             t_end = time.perf_counter()
 
             dt = dict(setup=t0_run - t0_setup, run=t_end - t0_run)
@@ -128,29 +145,40 @@ def _start_mpi_python_executor_loop(tmp_dir, paths_to_prepend, check_interval=5.
             file_exists_w_nfs_cache_flushing(output_ready_filepath)
 
         else:  # If stop_requested == False
-            time.sleep(check_interval)
+
+            dt_so_far = time.time() - tStart
+            if dt_so_far + check_interval > dt_timeout:
+                print(
+                    "* Waiting for a task, but job timeout is imminent. Shutting down MPI executor now."
+                )
+                stop_requested = True
+                stopped_fp = Path(fp.parent.joinpath("stopped"))
+            else:
+                time.sleep(check_interval)
 
     print("A request to stop MPI executor detected. Shutting down...")
-    executor.shutdown(wait=True)
+    executor.shutdown(wait=False, cancel_futures=True)
+    print("* Shutdown complete.")
 
     # Signal the main script that the executor has been stopped.
     stopped_fp.write_text("")
     file_exists_w_nfs_cache_flushing(stopped_fp)
-    print("Shutdown complte.")
+    print("Shutdown complete.")
 
 
 if __name__ == "__main__":
 
-    if len(sys.argv) == 2:
+    if len(sys.argv) == 3:
 
         paths_filepath = Path(sys.argv[1])
+        dt_timeout = float(sys.argv[2])  # [sec]
 
         tmp_dir = paths_filepath.parent
 
         with open(paths_filepath, "rb") as f:
             paths_to_prepend = dill.load(f)
 
-        _start_mpi_python_executor_loop(tmp_dir, paths_to_prepend)
+        _start_mpi_python_executor_loop(tmp_dir, paths_to_prepend, dt_timeout)
 
     else:
         raise RuntimeError

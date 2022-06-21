@@ -378,6 +378,27 @@ def _convert_slurm_time_duration_str_to_seconds(slurm_time_duration_str):
     return duration_in_sec
 
 
+def _convert_seconds_to_slurm_time_duration_str(dt):
+
+    sec = datetime.timedelta(seconds=dt)
+    dobj = datetime.datetime(1, 1, 1) + sec
+
+    if dobj.day - 1 != 0:
+        timelimit_str = "{:d}-".format(dobj.day - 1)
+        timelimit_str += f"{dobj.hour:02d}:{dobj.minute:02d}:{dobj.second:02d}"
+    else:
+        timelimit_str = ""
+
+        if dobj.hour != 0:
+            timelimit_str += f"{dobj.hour:02d}:{dobj.minute:02d}:{dobj.second:02d}"
+        elif dobj.minute != 0:
+            timelimit_str += f"{dobj.minute:02d}:{dobj.second:02d}"
+        else:
+            timelimit_str += f"{dobj.second:02d}"
+
+    return timelimit_str
+
+
 def _expand_node_range_pattern(index_str):
     """
     Examples for "index_str":
@@ -797,7 +818,7 @@ def write_sbatch_shell_file(
             continue
         contents += ["#SBATCH " + v]
 
-    contents += [" "]
+    contents += ["echo \"Starting @ $(date +'%Y-%m-%d %H:%M:%S%z')\""]
 
     # contents += ['env']
 
@@ -2089,7 +2110,7 @@ def get_file_size(filepath):
     return os.stat(filepath).st_size
 
 
-def _gen_mpi_executor_submit_script(remote_opts, paths=None):
+def _gen_mpi_executor_submit_script(remote_opts, dt_timeout, paths=None):
     """"""
 
     slurm_opts = extract_slurm_opts(remote_opts)
@@ -2117,6 +2138,7 @@ def _gen_mpi_executor_submit_script(remote_opts, paths=None):
         "python -m mpi4py.futures",
         main_script_path,
         f"{paths_filepath}",
+        f"{dt_timeout:.3f}",
     ]
     srun_cmd = " ".join([s for s in srun_cmd_list if s.strip() != ""])
 
@@ -2129,7 +2151,12 @@ def _gen_mpi_executor_submit_script(remote_opts, paths=None):
 
 
 def launch_mpi_python_executor(
-    remote_opts, paths=None, err_log_check=None, print_stdout=True, print_stderr=True
+    remote_opts,
+    paths=None,
+    timeout_margin=120.0,
+    err_log_check=None,
+    print_stdout=True,
+    print_stderr=True,
 ):
 
     _min_err_log_check = _get_min_err_log_check()
@@ -2151,13 +2178,27 @@ def launch_mpi_python_executor(
     remote_opts["output"] = f"{job_name}.%J.out"
     remote_opts["error"] = f"{job_name}.%J.err"
     #
-    remote_opts["partition"] = remote_opts.get("partition", "normal")
+    remote_opts["partition"] = partition = remote_opts.get("partition", "normal")
+    remote_opts["qos"] = qos = remote_opts.get("qos", "normal")
     remote_opts["ntasks"] = remote_opts.get("ntasks", 50)
+
+    max_time_limits, def_time_limits = get_slurm_time_limits()
+    dt_max_limit = _convert_slurm_time_duration_str_to_seconds(
+        max_time_limits[partition][qos]
+    )
+    remote_opts["time"] = remote_opts.get("time", def_time_limits[partition][qos])
+    dt_timeout = _convert_slurm_time_duration_str_to_seconds(remote_opts["time"])
+    # Give specified margin to timeout
+    actual_dt = dt_timeout + timeout_margin
+    if actual_dt > dt_max_limit:
+        actual_dt = dt_max_limit
+        dt_timeout = actual_dt - timeout_margin
+    remote_opts["time"] = _convert_seconds_to_slurm_time_duration_str(actual_dt)
 
     err_log_check["job_name"] = job_name
 
     tmp_dir, mpi_sub_sh_filepath, paths_filepath = _gen_mpi_executor_submit_script(
-        remote_opts, paths=paths
+        remote_opts, dt_timeout, paths=paths
     )
 
     # Add re-try functionality in case of "sbatch: error: Slurm controller not responding
