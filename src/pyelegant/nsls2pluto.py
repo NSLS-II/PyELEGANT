@@ -2279,11 +2279,54 @@ def stop_mpi_executor(executor_d, del_log_files=True):
 
     stopped_fp = tmp_dirpath.joinpath("stopped")
 
+    job_ID_str = executor_d["job_ID_str"]
+
+    sq_cmd = (
+        f'squeue --noheader --job={job_ID_str} -o "%.{len(job_ID_str)+1}i %.3t %.4C %R"'
+    )
+
     t0 = time.time()
+    err_counter = 0
     while True:
         if stopped_fp.exists():
             break
         else:
+            # Check the status of the job running the executor. If the job
+            # is no longer running for whatever reason, there's no need to wait.
+            p = Popen(shlex.split(sq_cmd), stdout=PIPE, stderr=PIPE, encoding="utf-8")
+            out, err = p.communicate()
+            out, err = out.strip(), err.strip()
+
+            if err:
+                err_counter += 1
+
+                if err == "slurm_load_jobs error: Invalid job id specified":
+                    msg = "Error while waiting for job completion: Invalid job id"
+                    raise RuntimeError(msg)
+
+                if err_counter >= 10:
+                    print(err)
+                    raise RuntimeError("squeue error while waiting for job completion")
+                else:
+                    print(err)
+                    sys.stdout.flush()
+                    time.sleep(10.0)
+                    continue
+            else:  # Reset counter since there was no error.
+                err_counter = 0
+
+            if out == "":
+                break
+
+            L = out.splitlines()
+            assert len(L) == 1
+            tokens = L[0].split()
+            state = tokens[1]
+            if state == "R":
+                cancel_job(job_ID_str)
+            else:
+                break
+
             time.sleep(5.0)
 
         if time.time() - t0 >= 5 * 60:
@@ -2310,6 +2353,7 @@ def submit_job_to_mpi_executor(
     check_interval=5.0,
     print_stdout=True,
     print_stderr=True,
+    chunksize=1,
 ):
     """
     Example:
@@ -2318,7 +2362,11 @@ def submit_job_to_mpi_executor(
     """
 
     input_d = dict(
-        module_name=module_name, func_name=func_name, param_list=param_list, args=args
+        module_name=module_name,
+        func_name=func_name,
+        param_list=param_list,
+        args=args,
+        chunksize=chunksize,
     )
 
     prefix = f'job_{executor_d["job_ID_str"]}_{executor_d["job_counter"]:d}'
@@ -2464,19 +2512,7 @@ def _wait_for_mpi_exec_job_completion(
 
                             err_found = True
 
-                            # Cancel the job
-                            cmd = f"scancel {job_ID_str}"
-                            p = Popen(
-                                shlex.split(cmd),
-                                stdout=PIPE,
-                                stderr=PIPE,
-                                encoding="utf-8",
-                            )
-                            out, err = p.communicate()
-                            if err:
-                                print(f"Tried cancelling Job {job_ID_str}")
-                                print(f"\n*** stderr: command: {cmd}")
-                                print(err)
+                            cancel_job(job_ID_str)
 
                             break
 
@@ -2486,6 +2522,32 @@ def _wait_for_mpi_exec_job_completion(
             time.sleep(check_interval)
 
     return output_ready_filepath
+
+
+def cancel_job(job_ID_str):
+
+    cmd = f"scancel {job_ID_str}"
+
+    err_counter = 0
+
+    while err_counter <= 5:
+
+        p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding="utf-8")
+        out, err = p.communicate()
+
+        if err.strip():
+            err_counter += 1
+
+            print(f"Tried cancelling Job {job_ID_str}")
+            print(f"\n*** stderr: command: {cmd}")
+            print(err)
+
+            time.sleep(10.0)
+
+        else:
+            break
+    else:
+        raise RuntimeError("Max # of tries to scancel failed.")
 
 
 def sendRunCompleteMail(subject, content):

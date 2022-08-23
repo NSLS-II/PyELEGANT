@@ -22,7 +22,7 @@ if __name__ == "__main__":
         remote_opts, paths=[Path.cwd()], err_log_check=None, timeout_margin=60.0
     )
 
-    module_name = "test_mpi_exec_cleanup"
+    module_name = Path(__file__).stem
     func_name = "overtime_multiply"
     param_list = list(range(5))
     args = (2,)
