@@ -3100,6 +3100,18 @@ class EleDesigner:
                     ]
                 )
 
+                for fitpoint_name in self._fitpoint_names:
+                    for radinteg_param_name in [
+                        "I1",
+                        "I2",
+                        "I3",
+                        "I4",
+                        "I5",
+                    ]:
+                        new_var_names["optimization_term"].append(
+                            f"{fitpoint_name}.{radinteg_param_name}"
+                        )
+
             if kwargs.get("compute_driving_terms", False):
                 new_var_names["optimization_term"].extend(
                     [
