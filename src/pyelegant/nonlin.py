@@ -957,7 +957,7 @@ def _calc_fma(
     output, meta = {}, {}
     for k, v in tmp_filepaths.items():
         try:
-            output[k], meta[k] = sdds.sdds2dicts(v)
+            output[k], meta[k] = sdds.sdds2dicts(v, str_format="%25.16e")
         except:
             continue
 
@@ -1032,6 +1032,7 @@ def plot_fma_xy(
     is_diffusion=True,
     cmin=-10,
     cmax=-2,
+    correct_diffusion_err=False,
 ):
     """"""
 
@@ -1044,6 +1045,7 @@ def plot_fma_xy(
         is_diffusion=is_diffusion,
         cmin=cmin,
         cmax=cmax,
+        correct_diffusion_err=correct_diffusion_err,
     )
 
 
@@ -1056,6 +1058,7 @@ def plot_fma_px(
     is_diffusion=True,
     cmin=-10,
     cmax=-2,
+    correct_diffusion_err=False,
 ):
     """"""
 
@@ -1068,6 +1071,7 @@ def plot_fma_px(
         is_diffusion=is_diffusion,
         cmin=cmin,
         cmax=cmax,
+        correct_diffusion_err=correct_diffusion_err,
     )
 
 
@@ -1081,6 +1085,7 @@ def _plot_fma(
     is_diffusion=True,
     cmin=-10,
     cmax=-2,
+    correct_diffusion_err=False,
 ):
     """"""
 
@@ -1098,7 +1103,34 @@ def _plot_fma(
             raise ValueError(f'Unexpected "fma_plane" value: {plane}')
 
         if is_diffusion:
-            diffusion = g["diffusion"]
+            if not correct_diffusion_err:
+                diffusion = g["diffusion"]
+            else:
+                # Define "mux1" and "mux2" be the tunes determined by &frequency_map,
+                # which could be correct or incorrect by 1-mux. The following covers
+                # all the potential cases. By picking the minimum dnux, you'll get
+                # the correct dnux. The same is true for the vertical plane.
+                dnu_sq = {}
+                for _plane in ["x", "y"]:
+                    mu1 = g[f"nu{_plane}"]
+                    mu2p = mu1 + g[f"dnu{_plane}"]
+                    mu2m = mu1 - g[f"dnu{_plane}"]
+                    dnu_sq[_plane] = np.min(
+                        np.vstack(
+                            (
+                                (mu2p - mu1) ** 2,
+                                (mu2m - mu1) ** 2,
+                                (mu2p - (1 - mu1)) ** 2,
+                                (mu2m - (1 - mu1)) ** 2,
+                                ((1 - mu2p) - mu1) ** 2,
+                                ((1 - mu2m) - mu1) ** 2,
+                                ((1 - mu2p) - (1 - mu1)) ** 2,
+                                ((1 - mu2m) - (1 - mu1)) ** 2,
+                            )
+                        ),
+                        axis=0,
+                    )
+                diffusion = np.log10(dnu_sq["x"] + dnu_sq["y"])
         else:
             diffusionRate = g["diffusionRate"]
 
@@ -1134,7 +1166,34 @@ def _plot_fma(
             raise ValueError(f'Unexpected "fma_plane" value: {plane}')
 
         if is_diffusion:
-            diffusion = g["diffusion"][()]
+            if not correct_diffusion_err:
+                diffusion = g["diffusion"][()]
+            else:
+                # Define "mux1" and "mux2" be the tunes determined by &frequency_map,
+                # which could be correct or incorrect by 1-mux. The following covers
+                # all the potential cases. By picking the minimum dnux, you'll get
+                # the correct dnux. The same is true for the vertical plane.
+                dnu_sq = {}
+                for _plane in ["x", "y"]:
+                    mu1 = g[f"nu{_plane}"][()]
+                    mu2p = mu1 + g[f"dnu{_plane}"][()]
+                    mu2m = mu1 - g[f"dnu{_plane}"][()]
+                    dnu_sq[_plane] = np.min(
+                        np.vstack(
+                            (
+                                (mu2p - mu1) ** 2,
+                                (mu2m - mu1) ** 2,
+                                (mu2p - (1 - mu1)) ** 2,
+                                (mu2m - (1 - mu1)) ** 2,
+                                ((1 - mu2p) - mu1) ** 2,
+                                ((1 - mu2m) - mu1) ** 2,
+                                ((1 - mu2p) - (1 - mu1)) ** 2,
+                                ((1 - mu2m) - (1 - mu1)) ** 2,
+                            )
+                        ),
+                        axis=0,
+                    )
+                diffusion = np.log10(dnu_sq["x"] + dnu_sq["y"])
         else:
             diffusionRate = g["diffusionRate"][()]
 
