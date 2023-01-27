@@ -256,7 +256,12 @@ class Lattice:
             ]
 
             if reverse:
-                expanded_name_list = expanded_name_list[::-1]
+                expanded_name_list = [
+                    _exp_name[1:] if _exp_name.startswith("-") else f"-{_exp_name}"
+                    for _exp_name in expanded_name_list[::-1]
+                ]
+                # print('Reversed:')
+                # print(expanded_name_list)
 
             for name in expanded_name_list:
                 if "*" in name:
@@ -267,8 +272,11 @@ class Lattice:
                     multiplier = 1
 
                 if name.startswith("-"):
-                    reverse_next = True
                     name = name[1:].strip()
+                    if name in all_beamline_names:
+                        reverse_next = True
+                    else:
+                        reverse_next = False
                 else:
                     reverse_next = False
 
