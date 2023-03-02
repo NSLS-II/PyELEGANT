@@ -740,16 +740,16 @@ class ClosedOrbitCalculator:
             remote_opts=remote_opts,
         )
 
-        if data == {}:
+        self._param_output = data["param"]["columns"]
+
+        if "clo" in data:
+            self.clo_columns = data["clo"]["columns"]
+            self.clo_params = data["clo"]["params"]
+        else:
             # *** Closed orbit file could NOT be found,
             #    'possibly due to closed orbit finding convergence failure. ***
             self.clo_columns = {}
             self.clo_params = {}
-        else:
-            self.clo_columns = data["clo"]["columns"]
-            self.clo_params = data["clo"]["params"]
-
-            self._param_output = data["param"]["columns"]
 
         return dict(columns=self.clo_columns, params=self.clo_params)
 
