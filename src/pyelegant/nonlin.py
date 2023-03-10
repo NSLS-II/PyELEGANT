@@ -4005,12 +4005,12 @@ def plot_chrom(
     ret["aper"] = {}
 
     is_nuxlim_frac = False
-    if nuxlim:
+    if nuxlim is not None:
         if (0.0 <= nuxlim[0] <= 1.0) and (0.0 <= nuxlim[1] <= 1.0):
             is_nuxlim_frac = True
 
     is_nuylim_frac = False
-    if nuylim:
+    if nuylim is not None:
         if (0.0 <= nuylim[0] <= 1.0) and (0.0 <= nuylim[1] <= 1.0):
             is_nuylim_frac = True
 
@@ -4255,7 +4255,7 @@ def plot_chrom(
     else:
         offset = np.zeros(nuxs.shape)
     lines1 = ax1.plot(deltas * 1e2, nuxs - offset, "b.", label=r"$\nu_x$")
-    if nuxlim:
+    if nuxlim is not None:
         ax1.set_ylim(nuxlim)
     else:
         nuxlim = list(ax1.get_ylim())
@@ -4296,7 +4296,7 @@ def plot_chrom(
     else:
         offset = np.zeros(nuys.shape)
     lines2 = ax2.plot(deltas * 1e2, nuys - offset, "r.", label=r"$\nu_y$")
-    if nuylim:
+    if nuylim is not None:
         ax2.set_ylim(nuylim)
     else:
         nuylim = list(ax2.get_ylim())
@@ -5601,12 +5601,12 @@ def plot_tswa(
     ret = {}  # variable to be returned
 
     is_nuxlim_frac = False
-    if nuxlim:
+    if nuxlim is not None:
         if (0.0 <= nuxlim[0] <= 1.0) and (0.0 <= nuxlim[1] <= 1.0):
             is_nuxlim_frac = True
 
     is_nuylim_frac = False
-    if nuylim:
+    if nuylim is not None:
         if (0.0 <= nuylim[0] <= 1.0) and (0.0 <= nuylim[1] <= 1.0):
             is_nuylim_frac = True
 
@@ -5930,7 +5930,7 @@ def plot_tswa(
             lines1 = ax1.plot(
                 scan_sign * x0s * 1e3, nuxs - offset0["nux"], "b.", label=r"$\nu_x$"
             )
-            if nuxlim:
+            if nuxlim is not None:
                 ax1.set_ylim(nuxlim)
             else:
                 nuxlim = np.array(ax1.get_ylim())
@@ -5950,7 +5950,7 @@ def plot_tswa(
             lines2 = ax2.plot(
                 scan_sign * x0s * 1e3, nuys - offset0["nuy"], "r.", label=r"$\nu_y$"
             )
-            if nuylim:
+            if nuylim is not None:
                 ax2.set_ylim(nuylim)
             else:
                 nuylim = np.array(ax2.get_ylim())
@@ -5974,7 +5974,7 @@ def plot_tswa(
             lines1 = ax1.plot(
                 scan_sign * y0s * 1e3, nuxs - offset0["nux"], "b.", label=r"$\nu_x$"
             )
-            if nuxlim:
+            if nuxlim is not None:
                 ax1.set_ylim(nuxlim)
             else:
                 nuxlim = np.array(ax1.get_ylim())
@@ -5994,7 +5994,7 @@ def plot_tswa(
             lines2 = ax2.plot(
                 scan_sign * y0s * 1e3, nuys - offset0["nuy"], "r.", label=r"$\nu_y$"
             )
-            if nuylim:
+            if nuylim is not None:
                 ax2.set_ylim(nuylim)
             else:
                 nuylim = np.array(ax2.get_ylim())
@@ -6050,7 +6050,7 @@ def plot_tswa(
         #
         if scan_plane == "x":
             lines1 = ax1.plot(Axs * 1e3, nuxs - offset["nux"], "b.", label=r"$\nu_x$")
-            if nuxlim:
+            if nuxlim is not None:
                 ax1.set_ylim(nuxlim)
             else:
                 nuxlim = np.array(ax1.get_ylim())
@@ -6068,7 +6068,7 @@ def plot_tswa(
             )
             ax2 = ax1.twinx()
             lines2 = ax2.plot(Axs * 1e3, nuys - offset["nuy"], "r.", label=r"$\nu_y$")
-            if nuylim:
+            if nuylim is not None:
                 ax2.set_ylim(nuylim)
             else:
                 nuylim = np.array(ax2.get_ylim())
@@ -6090,7 +6090,7 @@ def plot_tswa(
                 ax1.set_xlim([v * 1e3 for v in Axlim])
         elif scan_plane == "y":
             lines1 = ax1.plot(Ays * 1e3, nuxs - offset["nux"], "b.", label=r"$\nu_x$")
-            if nuxlim:
+            if nuxlim is not None:
                 ax1.set_ylim(nuxlim)
             else:
                 nuxlim = np.array(ax1.get_ylim())
@@ -6108,7 +6108,7 @@ def plot_tswa(
             )
             ax2 = ax1.twinx()
             lines2 = ax2.plot(Ays * 1e3, nuys - offset["nuy"], "r.", label=r"$\nu_y$")
-            if nuylim:
+            if nuylim is not None:
                 ax2.set_ylim(nuylim)
             else:
                 nuylim = np.array(ax2.get_ylim())
@@ -6341,12 +6341,12 @@ def plot_tswa_both_sides(
     ret["aper"] = {}
 
     is_nuxlim_frac = False
-    if nuxlim:
+    if nuxlim is not None:
         if (0.0 <= nuxlim[0] <= 1.0) and (0.0 <= nuxlim[1] <= 1.0):
             is_nuxlim_frac = True
 
     is_nuylim_frac = False
-    if nuylim:
+    if nuylim is not None:
         if (0.0 <= nuylim[0] <= 1.0) and (0.0 <= nuylim[1] <= 1.0):
             is_nuylim_frac = True
 
@@ -6823,7 +6823,7 @@ def plot_tswa_both_sides(
                 "b.",
                 label=r"$\nu_x$",
             )
-            if nuxlim:
+            if nuxlim is not None:
                 ax1.set_ylim(nuxlim)
             else:
                 nuxlim = np.array(ax1.get_ylim())
@@ -6849,7 +6849,7 @@ def plot_tswa_both_sides(
                 "r.",
                 label=r"$\nu_y$",
             )
-            if nuylim:
+            if nuylim is not None:
                 ax2.set_ylim(nuylim)
             else:
                 nuylim = np.array(ax2.get_ylim())
@@ -6877,7 +6877,7 @@ def plot_tswa_both_sides(
                 "b.",
                 label=r"$\nu_x$",
             )
-            if nuxlim:
+            if nuxlim is not None:
                 ax1.set_ylim(nuxlim)
             else:
                 nuxlim = np.array(ax1.get_ylim())
@@ -6903,7 +6903,7 @@ def plot_tswa_both_sides(
                 "r.",
                 label=r"$\nu_y$",
             )
-            if nuylim:
+            if nuylim is not None:
                 ax2.set_ylim(nuylim)
             else:
                 nuylim = np.array(ax2.get_ylim())
@@ -7028,7 +7028,7 @@ def plot_tswa_both_sides(
                 "b.",
                 label=r"$\nu_x$",
             )
-            if nuxlim:
+            if nuxlim is not None:
                 ax1.set_ylim(nuxlim)
             else:
                 nuxlim = np.array(ax1.get_ylim())
@@ -7054,7 +7054,7 @@ def plot_tswa_both_sides(
                 "r.",
                 label=r"$\nu_y$",
             )
-            if nuylim:
+            if nuylim is not None:
                 ax2.set_ylim(nuylim)
             else:
                 nuylim = np.array(ax2.get_ylim())
@@ -7082,7 +7082,7 @@ def plot_tswa_both_sides(
                 "b.",
                 label=r"$\nu_x$",
             )
-            if nuxlim:
+            if nuxlim is not None:
                 ax1.set_ylim(nuxlim)
             else:
                 nuxlim = np.array(ax1.get_ylim())
@@ -7108,7 +7108,7 @@ def plot_tswa_both_sides(
                 "r.",
                 label=r"$\nu_y$",
             )
-            if nuylim:
+            if nuylim is not None:
                 ax2.set_ylim(nuylim)
             else:
                 nuylim = np.array(ax2.get_ylim())
