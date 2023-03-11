@@ -6,6 +6,7 @@ from subprocess import PIPE, Popen
 import sys
 import tempfile
 import time
+import warnings
 
 import h5py
 import matplotlib.patches as patches
@@ -3076,6 +3077,59 @@ def calc_chrom_twiss(
     return output_filepath
 
 
+def _deprecated_msg_use_sddsnaff(use_sddsnaff, courant_snyder, method, return_fft_spec):
+
+    if use_sddsnaff is not None:
+        warnings.warn(
+            "'use_sddsnaff' is deprecated. Use method='sddsnaff' for use_sddsnaff=True.",
+            DeprecationWarning,
+        )
+
+    if courant_snyder is not None:
+        warnings.warn(
+            "'courant_snyder' is deprecated. Use method='DFT_Courant_Snyder' if courant_snyder=True; If False, use method='DFT_phase_space'.",
+            DeprecationWarning,
+        )
+
+    orig_method = method
+
+    if use_sddsnaff is None:
+        if courant_snyder is None:
+            pass
+        else:
+            # Assume "use_sddsnaff=False"
+            if courant_snyder:
+                method = "DFT_Courant_Snyder"
+            else:
+                method = "DFT_phase_space"
+    else:
+        if courant_snyder is None:
+            # Assume "courant_snyder=True"
+            courant_snyder = True
+
+        if use_sddsnaff:
+            if courant_snyder:
+                warnings.warn('"courant_snyder=True" will be ignored.')
+            if return_fft_spec:
+                warnings.warn('"return_fft_spec=True" will be ignored.')
+
+            method = "sddsnaff"
+        else:
+            if courant_snyder:
+                method = "DFT_Courant_Snyder"
+            else:
+                method = "DFT_phase_space"
+
+    if orig_method != method:
+        warnings.warn(
+            f"Overwriting specified option 'method' from '{orig_method}' to '{method}'"
+        )
+
+    use_sddsnaff = courant_snyder = None
+
+    return use_sddsnaff, courant_snyder, method
+
+
 def calc_chrom_track(
     output_filepath,
     LTE_filepath,
@@ -3083,8 +3137,9 @@ def calc_chrom_track(
     delta_min,
     delta_max,
     ndelta,
-    use_sddsnaff=True,
-    courant_snyder=True,
+    use_sddsnaff=None,
+    courant_snyder=None,
+    method="sddsnaff",
     return_fft_spec=True,
     save_tbt=True,
     n_turns=256,
@@ -3106,6 +3161,12 @@ def calc_chrom_track(
     If "err_log_check" is None, then "nMaxRemoteRetry" is irrelevant.
     """
 
+    assert method in ("sddsnaff", "DFT_Courant_Snyder", "DFT_phase_space")
+
+    use_sddsnaff, courant_snyder, method = _deprecated_msg_use_sddsnaff(
+        use_sddsnaff, courant_snyder, method, return_fft_spec
+    )
+
     LTE_file_pathobj = Path(LTE_filepath)
 
     file_contents = LTE_file_pathobj.read_text()
@@ -3118,6 +3179,7 @@ def calc_chrom_track(
         ndelta=ndelta,
         use_sddsnaff=use_sddsnaff,
         courant_snyder=courant_snyder,
+        method=method,
         return_fft_spec=return_fft_spec,
         save_tbt=save_tbt,
         n_turns=n_turns,
@@ -3237,7 +3299,7 @@ def calc_chrom_track(
             x=np.full((n_turns, ndelta), np.nan),
             y=np.full((n_turns, ndelta), np.nan),
         )
-        if courant_snyder or use_sddsnaff:
+        if method in ("sddsnaff", "DFT_Courant_Snyder"):
             tbt["xp"] = np.full((n_turns, ndelta), np.nan)
             tbt["yp"] = np.full((n_turns, ndelta), np.nan)
 
@@ -3275,7 +3337,7 @@ def calc_chrom_track(
         )
 
         coords_list = ["x", "y"]
-        if courant_snyder or use_sddsnaff:
+        if method in ("sddsnaff", "DFT_Courant_Snyder"):
             coords_list += ["xp", "yp"]
 
         module_name = "pyelegant.nonlin"
@@ -3329,7 +3391,7 @@ def calc_chrom_track(
         tbt = dict(
             x=np.full((n_turns, ndelta), np.nan), y=np.full((n_turns, ndelta), np.nan)
         )
-        if courant_snyder or use_sddsnaff:
+        if method in ("sddsnaff", "DFT_Courant_Snyder"):
             tbt["xp"] = np.full((n_turns, ndelta), np.nan)
             tbt["yp"] = np.full((n_turns, ndelta), np.nan)
         for plane in coords_list:
@@ -3342,7 +3404,7 @@ def calc_chrom_track(
 
     # t0 = time.time()
     # Estimate tunes from TbT data
-    if use_sddsnaff:
+    if method == "sddsnaff":
         tmp = tempfile.NamedTemporaryFile(
             dir=None, delete=False, prefix=f"tmpTbt_", suffix=".sdds"
         )
@@ -3441,7 +3503,28 @@ def calc_chrom_track(
 
         extra_save_kwargs = dict(xptbt=tbt["xp"], yptbt=tbt["yp"])
 
-    elif courant_snyder:
+        if return_fft_spec:
+            *_, fft_nus, fft_hAxs, fft_hAys = calc_chrom_from_tbt_cs(
+                delta_array,
+                tbt["x"],
+                tbt["y"],
+                nux0,
+                nuy0,
+                tbt["xp"],
+                tbt["yp"],
+                betax,
+                alphax,
+                betay,
+                alphay,
+                init_guess_from_prev_step=True,
+                return_fft_spec=True,
+            )
+
+            extra_save_kwargs["fft_nus"] = fft_nus
+            extra_save_kwargs["fft_hAxs"] = fft_hAxs
+            extra_save_kwargs["fft_hAys"] = fft_hAys
+
+    elif method == "DFT_Courant_Snyder":
         if return_fft_spec:
             nus, fft_nus, fft_hAxs, fft_hAys = calc_chrom_from_tbt_cs(
                 delta_array,
@@ -3495,11 +3578,13 @@ def calc_chrom_track(
             )
 
         undefined_tunes = np.isnan(nus["x"]) | np.isnan(nus["y"])
-    else:
+    elif method == "DFT_phase_space":
         nus = calc_chrom_from_tbt_ps(delta_array, tbt["x"], tbt["y"], nux0, nuy0)
         extra_save_kwargs = {}
 
         undefined_tunes = np.isnan(nus["x"]) | np.isnan(nus["y"])
+    else:
+        raise ValueError(f"method={method}")
     nuxs = nus["x"]
     nuys = nus["y"]
     # print('* Time elapsed for tune estimation: {:.3f}'.format(time.time() - t0))
@@ -3994,6 +4079,7 @@ def plot_chrom(
     ax_nu_vs_delta=None,
     ax_nuy_vs_nux=None,
     plot_fft=False,
+    fft_plot_opts=None,
     ax_fft_hx=None,
     ax_fft_hy=None,
 ):
@@ -4456,7 +4542,12 @@ def plot_chrom(
 
     if (fft_d is not None) and plot_fft:
 
-        use_log = True
+        if fft_plot_opts is None:
+            fft_plot_opts = {}
+
+        use_log = fft_plot_opts.get("logscale", False)
+        use_full_ylim = fft_plot_opts.get("full_ylim", True)
+        plot_shifted_curves = fft_plot_opts.get("shifted_curves", True)
 
         font_sz = 18
         if use_log:
@@ -4502,13 +4593,70 @@ def plot_chrom(
                 plt.pcolor(
                     V1 * 1e2, V2, np.log10(norm_fft_hAs), cmap="jet", shading="auto"
                 )
+
             plt.xlabel(rf"$\delta\, [\%]$", size=font_sz)
             plt.ylabel(rf"$\nu_{_nu_plane}$", size=font_sz)
-            ax1.set_ylim(ylim)
+            if not use_full_ylim:
+                ax1.set_ylim(ylim)
             cb = plt.colorbar()
             cb.ax.set_title(EQ_STR)
             cb.ax.title.set_position((0.5, 1.02))
             plt.tight_layout()
+
+            if plot_shifted_curves:
+                # The following section plots slightly shifted FFT curves for better
+                # curve height visualization than the pcolor plot above.
+
+                M = np.zeros((500, 500))
+                xarray = np.linspace(np.min(V2[:, 0]), np.max(V2[:, 0]), M.shape[1])
+                max_y_offset = 5.0
+                offset_frac = max_y_offset / V1.shape[1]
+                yarray = np.linspace(0.0, 1.0 + max_y_offset, M.shape[0])
+                M[yarray <= max_y_offset, :] = 1e-6
+                for j in range(V1.shape[1]):
+                    if np.any(np.isnan(norm_fft_hAs[:, j])):
+                        assert np.all(np.isnan(norm_fft_hAs[:, j]))
+                        continue
+
+                    yinds = np.argmin(
+                        np.abs(
+                            yarray.reshape((-1, 1))
+                            - (norm_fft_hAs[:, j] + j * offset_frac)
+                        ),
+                        axis=0,
+                    )
+                    xinds = np.argmin(
+                        np.abs(xarray.reshape((-1, 1)) - V2[:, j]), axis=0
+                    )
+
+                    for dix in [-1, 0, 1]:
+                        for diy in [-1, 0, 1]:
+                            M_new = np.zeros_like(M)
+                            M_new[
+                                np.clip(yinds + diy, 0, M.shape[0] - 1),
+                                np.clip(xinds + dix, 0, M.shape[1] - 1),
+                            ] = norm_fft_hAs[:, j]
+
+                            M_comb = np.dstack((M, M_new))
+                            M = np.max(M_comb, axis=-1)
+
+                real_yarray = (
+                    np.min(v1array)
+                    + (np.max(v1array) - np.min(v1array)) / max_y_offset * yarray
+                )
+                X, Y = np.meshgrid(xarray, real_yarray)
+                M[M == 0.0] = np.nan
+
+                plt.figure()
+                plt.pcolor(Y.T * 1e2, X.T, M.T, cmap="jet", shading="auto")
+                plt.xlabel(rf"$\delta\, [\%]$", size=font_sz)
+                plt.ylabel(rf"$\nu_{_nu_plane}$", size=font_sz)
+                if not use_full_ylim:
+                    ax1.set_ylim(ylim)
+                cb = plt.colorbar()
+                cb.ax.set_title(EQ_STR)
+                cb.ax.title.set_position((0.5, 1.02))
+                plt.tight_layout()
 
     return ret
 
@@ -4520,8 +4668,9 @@ def calc_tswa_x(
     abs_xmax,
     nx,
     xsign="+",
-    use_sddsnaff=True,
-    courant_snyder=True,
+    use_sddsnaff=None,
+    courant_snyder=None,
+    method="sddsnaff",
     return_fft_spec=True,
     save_tbt=True,
     n_turns=256,
@@ -4541,6 +4690,12 @@ def calc_tswa_x(
     """
     If "err_log_check" is None, then "nMaxRemoteRetry" is irrelevant.
     """
+
+    assert method in ("sddsnaff", "DFT_Courant_Snyder", "DFT_phase_space")
+
+    use_sddsnaff, courant_snyder, method = _deprecated_msg_use_sddsnaff(
+        use_sddsnaff, courant_snyder, method, return_fft_spec
+    )
 
     if xsign == "+":
         x0_array = np.linspace(0.0, abs_xmax, nx)[1:]  # exclude x == 0.0
@@ -4564,6 +4719,7 @@ def calc_tswa_x(
         y0_array,
         use_sddsnaff=use_sddsnaff,
         courant_snyder=courant_snyder,
+        method=method,
         return_fft_spec=return_fft_spec,
         save_tbt=save_tbt,
         n_turns=n_turns,
@@ -4588,8 +4744,9 @@ def calc_tswa_y(
     abs_ymax,
     ny,
     ysign="+",
-    use_sddsnaff=True,
-    courant_snyder=True,
+    use_sddsnaff=None,
+    courant_snyder=None,
+    method="sddsnaff",
     return_fft_spec=True,
     save_tbt=True,
     n_turns=256,
@@ -4609,6 +4766,12 @@ def calc_tswa_y(
     """
     If "err_log_check" is None, then "nMaxRemoteRetry" is irrelevant.
     """
+
+    assert method in ("sddsnaff", "DFT_Courant_Snyder", "DFT_phase_space")
+
+    use_sddsnaff, courant_snyder, method = _deprecated_msg_use_sddsnaff(
+        use_sddsnaff, courant_snyder, method, return_fft_spec
+    )
 
     if ysign == "+":
         y0_array = np.linspace(0.0, abs_ymax, ny)[1:]  # exclude y == 0.0
@@ -4632,6 +4795,7 @@ def calc_tswa_y(
         y0_array,
         use_sddsnaff=use_sddsnaff,
         courant_snyder=courant_snyder,
+        method=method,
         return_fft_spec=return_fft_spec,
         save_tbt=save_tbt,
         n_turns=n_turns,
@@ -4657,8 +4821,9 @@ def _calc_tswa(
     E_MeV,
     x0_array,
     y0_array,
-    use_sddsnaff=True,
-    courant_snyder=True,
+    use_sddsnaff=None,
+    courant_snyder=None,
+    method="sddsnaff",
     return_fft_spec=True,
     save_tbt=True,
     n_turns=256,
@@ -4677,6 +4842,12 @@ def _calc_tswa(
     """
     If "err_log_check" is None, then "nMaxRemoteRetry" is irrelevant.
     """
+
+    assert method in ("sddsnaff", "DFT_Courant_Snyder", "DFT_phase_space")
+
+    use_sddsnaff, courant_snyder, method = _deprecated_msg_use_sddsnaff(
+        use_sddsnaff, courant_snyder, method, return_fft_spec
+    )
 
     assert x0_array.size == y0_array.size
     nscan = x0_array.size
@@ -4808,7 +4979,7 @@ def _calc_tswa(
         tbt = dict(
             x=np.full((n_turns, nscan), np.nan), y=np.full((n_turns, nscan), np.nan)
         )
-        if courant_snyder or use_sddsnaff:
+        if method in ("sddsnaff", "DFT_Courant_Snyder"):
             tbt["xp"] = np.full((n_turns, nscan), np.nan)
             tbt["yp"] = np.full((n_turns, nscan), np.nan)
 
@@ -4848,7 +5019,7 @@ def _calc_tswa(
         )
 
         coords_list = ["x", "y"]
-        if courant_snyder or use_sddsnaff:
+        if method in ("sddsnaff", "DFT_Courant_Snyder"):
             coords_list += ["xp", "yp"]
 
         module_name = "pyelegant.nonlin"
@@ -4901,7 +5072,7 @@ def _calc_tswa(
         tbt = dict(
             x=np.full((n_turns, nscan), np.nan), y=np.full((n_turns, nscan), np.nan)
         )
-        if courant_snyder or use_sddsnaff:
+        if method in ("sddsnaff", "DFT_Courant_Snyder"):
             tbt["xp"] = np.full((n_turns, nscan), np.nan)
             tbt["yp"] = np.full((n_turns, nscan), np.nan)
         for plane in coords_list:
@@ -4914,7 +5085,7 @@ def _calc_tswa(
 
     # t0 = time.time()
     # Estimate tunes and amplitudes from TbT data
-    if use_sddsnaff:
+    if method == "sddsnaff":
         tmp = tempfile.NamedTemporaryFile(
             dir=None, delete=False, prefix=f"tmpTbt_", suffix=".sdds"
         )
@@ -5058,7 +5229,30 @@ def _calc_tswa(
 
         extra_save_kwargs = dict(xptbt=tbt["xp"], yptbt=tbt["yp"])
 
-    elif courant_snyder:
+        if return_fft_spec:
+            *_, fft_nus, fft_hAxs, fft_hAys = calc_tswa_from_tbt_cs(
+                scan_plane,
+                x0_array,
+                y0_array,
+                tbt["x"],
+                tbt["y"],
+                nux0,
+                nuy0,
+                tbt["xp"],
+                tbt["yp"],
+                betax,
+                alphax,
+                betay,
+                alphay,
+                init_guess_from_prev_step=True,
+                return_fft_spec=True,
+            )
+
+            extra_save_kwargs["fft_nus"] = fft_nus
+            extra_save_kwargs["fft_hAxs"] = fft_hAxs
+            extra_save_kwargs["fft_hAys"] = fft_hAys
+
+    elif method == "DFT_Courant_Snyder":
         if return_fft_spec:
             nus, As, fft_nus, fft_hAxs, fft_hAys = calc_tswa_from_tbt_cs(
                 scan_plane,
@@ -5105,13 +5299,15 @@ def _calc_tswa(
             extra_save_kwargs = dict(xptbt=tbt["xp"], yptbt=tbt["yp"])
 
         undefined_tunes = np.isnan(nus["x"]) | np.isnan(nus["y"])
-    else:
+    elif method == "DFT_phase_space":
         nus, As = calc_tswa_from_tbt_ps(
             scan_plane, x0_array, y0_array, tbt["x"], tbt["y"], nux0, nuy0
         )
         extra_save_kwargs = {}
 
         undefined_tunes = np.isnan(nus["x"]) | np.isnan(nus["y"])
+    else:
+        raise ValueError(f"method={method}")
     nuxs, nuys = nus["x"], nus["y"]
     Axs, Ays = As["x"], As["y"]
     time_domain_Axs = np.std(tbt["x"], axis=0, ddof=1) * np.sqrt(2)
@@ -5329,6 +5525,9 @@ def calc_tswa_from_tbt_cs(
 
         if np.any(np.isnan(xarray)) or np.any(np.isnan(yarray)):
             # Particle lost at some point.
+            if return_fft_spec:
+                fft_hAxs.append(np.full((n_turns,), np.nan))
+                fft_hAys.append(np.full((n_turns,), np.nan))
             continue
 
         xparray = xptbt[:, i]
@@ -5591,6 +5790,7 @@ def plot_tswa(
     ax_nu_vs_A=None,
     ax_nuy_vs_nux=None,
     plot_fft=False,
+    fft_plot_opts=None,
     ax_fft_hx=None,
     ax_fft_hy=None,
 ):
@@ -6244,7 +6444,12 @@ def plot_tswa(
 
     if (fft_d is not None) and plot_fft:
 
-        use_log = True
+        if fft_plot_opts is None:
+            fft_plot_opts = {}
+
+        use_log = fft_plot_opts.get("logscale", False)
+        use_full_ylim = fft_plot_opts.get("full_ylim", True)
+        plot_shifted_curves = fft_plot_opts.get("shifted_curves", True)
 
         font_sz = 18
         if use_log:
@@ -6297,11 +6502,69 @@ def plot_tswa(
                 rf"${scan_sign_str}{scan_plane}_0\, [\mathrm{{mm}}]$", size=font_sz
             )
             plt.ylabel(rf"$\nu_{_nu_plane}$", size=font_sz)
-            ax1.set_ylim(ylim)
+            if not use_full_ylim:
+                ax1.set_ylim(ylim)
             cb = plt.colorbar()
             cb.ax.set_title(EQ_STR)
             cb.ax.title.set_position((0.5, 1.02))
             plt.tight_layout()
+
+            if plot_shifted_curves:
+                # The following section plots slightly shifted FFT curves for better
+                # curve height visualization than the pcolor plot above.
+
+                M = np.zeros((500, 500))
+                xarray = np.linspace(np.min(V2[:, 0]), np.max(V2[:, 0]), M.shape[1])
+                max_y_offset = 5.0
+                offset_frac = max_y_offset / V1.shape[1]
+                yarray = np.linspace(0.0, 1.0 + max_y_offset, M.shape[0])
+                M[yarray <= max_y_offset, :] = 1e-6
+                for j in range(V1.shape[1]):
+                    if np.any(np.isnan(norm_fft_hAs[:, j])):
+                        assert np.all(np.isnan(norm_fft_hAs[:, j]))
+                        continue
+
+                    yinds = np.argmin(
+                        np.abs(
+                            yarray.reshape((-1, 1))
+                            - (norm_fft_hAs[:, j] + j * offset_frac)
+                        ),
+                        axis=0,
+                    )
+                    xinds = np.argmin(
+                        np.abs(xarray.reshape((-1, 1)) - V2[:, j]), axis=0
+                    )
+
+                    for dix in [-1, 0, 1]:
+                        for diy in [-1, 0, 1]:
+                            M_new = np.zeros_like(M)
+                            M_new[
+                                np.clip(yinds + diy, 0, M.shape[0] - 1),
+                                np.clip(xinds + dix, 0, M.shape[1] - 1),
+                            ] = norm_fft_hAs[:, j]
+
+                            M_comb = np.dstack((M, M_new))
+                            M = np.max(M_comb, axis=-1)
+
+                real_yarray = (
+                    np.min(v1array)
+                    + (np.max(v1array) - np.min(v1array)) / max_y_offset * yarray
+                )
+                X, Y = np.meshgrid(xarray, real_yarray)
+                M[M == 0.0] = np.nan
+
+                plt.figure()
+                plt.pcolor(Y.T * 1e3, X.T, M.T, cmap="jet", shading="auto")
+                plt.xlabel(
+                    rf"${scan_sign_str}{scan_plane}_0\, [\mathrm{{mm}}]$", size=font_sz
+                )
+                plt.ylabel(rf"$\nu_{_nu_plane}$", size=font_sz)
+                if not use_full_ylim:
+                    ax1.set_ylim(ylim)
+                cb = plt.colorbar()
+                cb.ax.set_title(EQ_STR)
+                cb.ax.title.set_position((0.5, 1.02))
+                plt.tight_layout()
 
     return ret
 
@@ -6330,6 +6593,7 @@ def plot_tswa_both_sides(
     ax_nu_vs_A=None,
     ax_nuy_vs_nux=None,
     plot_fft=False,
+    fft_plot_opts=None,
     ax_fft_hx=None,
     ax_fft_hy=None,
 ):
@@ -7246,7 +7510,12 @@ def plot_tswa_both_sides(
 
     if (fft_d is not None) and plot_fft:
 
-        use_log = True
+        if fft_plot_opts is None:
+            fft_plot_opts = {}
+
+        use_log = fft_plot_opts.get("logscale", False)
+        use_full_ylim = fft_plot_opts.get("full_ylim", True)
+        plot_shifted_curves = fft_plot_opts.get("shifted_curves", True)
 
         font_sz = 18
         if use_log:
@@ -7316,11 +7585,67 @@ def plot_tswa_both_sides(
                 )
             plt.xlabel(rf"${scan_plane}_0\, [\mathrm{{mm}}]$", size=font_sz)
             plt.ylabel(rf"$\nu_{_nu_plane}$", size=font_sz)
-            ax1.set_ylim(ylim)
+            if not use_full_ylim:
+                ax1.set_ylim(ylim)
             cb = plt.colorbar()
             cb.ax.set_title(EQ_STR)
             cb.ax.title.set_position((0.5, 1.02))
             plt.tight_layout()
+
+            if plot_shifted_curves:
+                # The following section plots slightly shifted FFT curves for better
+                # curve height visualization than the pcolor plot above.
+
+                M = np.zeros((500, 500))
+                xarray = np.linspace(np.min(V2[:, 0]), np.max(V2[:, 0]), M.shape[1])
+                max_y_offset = 5.0
+                offset_frac = max_y_offset / V1.shape[1]
+                yarray = np.linspace(0.0, 1.0 + max_y_offset, M.shape[0])
+                M[yarray <= max_y_offset, :] = 1e-6
+                for j in range(V1.shape[1]):
+                    if np.any(np.isnan(norm_fft_hAs[:, j])):
+                        assert np.all(np.isnan(norm_fft_hAs[:, j]))
+                        continue
+
+                    yinds = np.argmin(
+                        np.abs(
+                            yarray.reshape((-1, 1))
+                            - (norm_fft_hAs[:, j] + j * offset_frac)
+                        ),
+                        axis=0,
+                    )
+                    xinds = np.argmin(
+                        np.abs(xarray.reshape((-1, 1)) - V2[:, j]), axis=0
+                    )
+
+                    for dix in [-1, 0, 1]:
+                        for diy in [-1, 0, 1]:
+                            M_new = np.zeros_like(M)
+                            M_new[
+                                np.clip(yinds + diy, 0, M.shape[0] - 1),
+                                np.clip(xinds + dix, 0, M.shape[1] - 1),
+                            ] = norm_fft_hAs[:, j]
+
+                            M_comb = np.dstack((M, M_new))
+                            M = np.max(M_comb, axis=-1)
+
+                real_yarray = (
+                    np.min(v1array)
+                    + (np.max(v1array) - np.min(v1array)) / max_y_offset * yarray
+                )
+                X, Y = np.meshgrid(xarray, real_yarray)
+                M[M == 0.0] = np.nan
+
+                plt.figure()
+                plt.pcolor(Y.T * 1e3, X.T, M.T, cmap="jet", shading="auto")
+                plt.xlabel(rf"${scan_plane}_0\, [\mathrm{{mm}}]$", size=font_sz)
+                plt.ylabel(rf"$\nu_{_nu_plane}$", size=font_sz)
+                if not use_full_ylim:
+                    ax1.set_ylim(ylim)
+                cb = plt.colorbar()
+                cb.ax.set_title(EQ_STR)
+                cb.ax.title.set_position((0.5, 1.02))
+                plt.tight_layout()
 
     return ret
 
