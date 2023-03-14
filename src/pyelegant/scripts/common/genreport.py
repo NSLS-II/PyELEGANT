@@ -208,8 +208,8 @@ class Report_NSLS2U_Default:
             self.user_conf = user_conf
 
             report_version = self.user_conf.get("report_version", None)
-            if report_version != "1.3":
-                warnings.warn("report_version=1.3 is the latest.", DeprecationWarning)
+            if report_version != "1.4":
+                warnings.warn("report_version=1.4 is the latest.", DeprecationWarning)
             self.conf = self.get_default_config(report_version)
 
             self.conf.update(self.user_conf)
@@ -1801,6 +1801,7 @@ class Report_NSLS2U_Default:
 
             with open(self.suppl_plot_data_filepath["tswa"], "rb") as f:
                 _, tswa_data = pickle.load(f)
+            nu_size_caption_suffix = tswa_data.get("nu_size_caption_suffix", "")
             _fit_opts = tswa_data["fit_options"]
             try:
                 aper_undef = {
@@ -1945,16 +1946,18 @@ class Report_NSLS2U_Default:
             doc.append(ver_sentence)
             doc.append(plx.VerticalSpace(plx.NoEscape("-10pt")))
 
+            nFigsPerPlane = len(tswa_plot_captions) // 2
+
             for plane, page_caption_list in [
-                ("x", tswa_plot_captions[:2]),
-                ("y", tswa_plot_captions[2:]),
+                ("x", tswa_plot_captions[:nFigsPerPlane]),
+                ("y", tswa_plot_captions[nFigsPerPlane:]),
             ]:
 
                 with doc.create(plx.Figure(position="h!t")) as fig:
 
                     doc.append(plx.NoEscape(r"\centering"))
 
-                    for iFig, (page, caption) in enumerate(page_caption_list):
+                    for iFig, (page, caption) in enumerate(page_caption_list[:2]):
                         with doc.create(
                             plx.SubFigureForMultiPagePDF(
                                 position="b", width=plx.utils.NoEscape(r"0.5\linewidth")
@@ -1978,6 +1981,39 @@ class Report_NSLS2U_Default:
                         )
                     )
 
+                    if nFigsPerPlane == 2:
+                        pass
+                    elif nFigsPerPlane == 4:
+                        for iFig, (page, caption) in enumerate(page_caption_list[2:]):
+                            with doc.create(
+                                plx.SubFigureForMultiPagePDF(
+                                    position="b",
+                                    width=plx.utils.NoEscape(r"0.5\linewidth"),
+                                )
+                            ) as subfig:
+                                subfig.add_image(
+                                    os.path.basename(plots_pdf_paths["tswa"]),
+                                    page=page,
+                                    width=plx.utils.NoEscape(r"\linewidth"),
+                                )
+                                doc.append(plx.VerticalSpace(plx.NoEscape("-10pt")))
+                                subfig.add_caption(caption.dumps_for_caption())
+
+                            if iFig in (1,):
+                                doc.append(plx.NewLine())
+
+                        doc.append(plx.VerticalSpace(plx.NoEscape("-10pt")))
+                        fig.add_caption(
+                            (
+                                "FFT spectra for different "
+                                + plx.MathText(rf"{plane}_0")
+                                + " amplitude values."
+                                + nu_size_caption_suffix
+                            ).dumps_for_caption()
+                        )
+                    else:
+                        raise NotImplementedError
+
             doc.append(plx.ClearPage())
 
     def add_pdf_L2_nonlin_chrom(self, plots_pdf_paths, nonlin_data_filepaths):
@@ -1997,6 +2033,7 @@ class Report_NSLS2U_Default:
 
             with open(self.suppl_plot_data_filepath["nonlin_chrom"], "rb") as f:
                 nonlin_chrom_data = pickle.load(f)
+            nu_size_caption_suffix = nonlin_chrom_data.get("nu_size_caption_suffix", "")
             _fit_opts = nonlin_chrom_data["fit_options"]
             try:
                 aper_undef = nonlin_chrom_data["aper"]["undefined_tunes"]
@@ -2099,6 +2136,42 @@ class Report_NSLS2U_Default:
                         subfig.add_caption(caption)
                 doc.append(plx.VerticalSpace(plx.NoEscape("-10pt")))
                 fig.add_caption("Nonlinear chromaticity.")
+
+            with doc.create(plx.Figure(position="h!t")) as fig:
+
+                doc.append(plx.NoEscape(r"\centering"))
+
+                delta_str = plx.MathText(r"\delta")
+
+                page_caption_list = [
+                    [3, ("Horizontal spectra vs. " + delta_str).dumps_for_caption()],
+                    [4, ("Vertical spectra vs. " + delta_str).dumps_for_caption()],
+                ]
+
+                for page, caption in page_caption_list:
+                    with doc.create(
+                        plx.SubFigureForMultiPagePDF(
+                            position="b", width=plx.utils.NoEscape(r"0.5\linewidth")
+                        )
+                    ) as subfig:
+                        subfig.add_image(
+                            os.path.basename(plots_pdf_paths["nonlin_chrom"]),
+                            page=page,
+                            width=plx.utils.NoEscape(r"\linewidth"),
+                        )
+                        doc.append(plx.VerticalSpace(plx.NoEscape("-10pt")))
+                        subfig.add_caption(caption)
+                doc.append(plx.VerticalSpace(plx.NoEscape("-10pt")))
+                fig.add_caption(
+                    (
+                        "FFT spectra for different "
+                        + delta_str
+                        + " values."
+                        + nu_size_caption_suffix
+                    ).dumps_for_caption()
+                )
+
+            doc.append(plx.ClearPage())
 
     def add_pdf_L2_mom_aper(self, plots_pdf_paths, nonlin_data_filepaths):
         """"""
@@ -8732,7 +8805,7 @@ class Report_NSLS2U_Default:
         calc_opts = ncf["calc_opts"][calc_type][opt_name]
 
         n_turns = calc_opts["n_turns"]
-        save_fft = calc_opts.get("save_fft", False)
+        save_fft = calc_opts.get("save_fft", self._version >= version.parse("1.4"))
         nx, ny = calc_opts["nx"], calc_opts["ny"]
         x_offset = calc_opts.get("x_offset", 1e-6)
         y_offset = calc_opts.get("y_offset", 1e-6)
@@ -8761,6 +8834,13 @@ class Report_NSLS2U_Default:
 
             err_log_check = dict(funcs=[self._check_remote_err_log_exit_code])
 
+            if self._version >= version.parse("1.4"):
+                use_sddsnaff = courant_snyder = None
+                method = "sddsnaff"
+            else:
+                use_sddsnaff = courant_snyder = True
+                method = "sddsnaff"
+
             for sign, sign_symbol in [("plus", "+"), ("minus", "-")]:
 
                 plane_specific_remote_opts["job_name"] = f"{calc_type}_{plane}_{sign}"
@@ -8776,8 +8856,9 @@ class Report_NSLS2U_Default:
                     E_MeV_default,
                     abs_max,
                     n,
-                    use_sddsnaff=True,
-                    courant_snyder=True,
+                    use_sddsnaff=use_sddsnaff,
+                    courant_snyder=courant_snyder,
+                    method=method,
                     return_fft_spec=save_fft,
                     save_tbt=False,
                     n_turns=n_turns,
@@ -8818,7 +8899,7 @@ class Report_NSLS2U_Default:
         calc_opts = ncf["calc_opts"][calc_type][opt_name]
 
         n_turns = calc_opts["n_turns"]
-        save_fft = calc_opts.get("save_fft", False)
+        save_fft = calc_opts.get("save_fft", self._version >= version.parse("1.4"))
         ndelta = calc_opts["ndelta"]
         x_offset = calc_opts.get("x_offset", 1e-6)
         y_offset = calc_opts.get("y_offset", 1e-6)
@@ -8834,6 +8915,13 @@ class Report_NSLS2U_Default:
 
         err_log_check = dict(funcs=[self._check_remote_err_log_exit_code])
 
+        if self._version >= version.parse("1.4"):
+            use_sddsnaff = courant_snyder = None
+            method = "sddsnaff"
+        else:
+            use_sddsnaff = courant_snyder = True
+            method = "sddsnaff"
+
         pe.nonlin.calc_chrom_track(
             output_filepath,
             LTE_filepath,
@@ -8841,8 +8929,9 @@ class Report_NSLS2U_Default:
             delta_min,
             delta_max,
             ndelta,
-            use_sddsnaff=True,
-            courant_snyder=True,
+            use_sddsnaff=use_sddsnaff,
+            courant_snyder=courant_snyder,
+            method=method,
             return_fft_spec=save_fft,
             save_tbt=False,
             use_beamline=use_beamline,
@@ -9278,11 +9367,19 @@ class Report_NSLS2U_Default:
             )
             # ^ Only relevant when "plot_Axy=True"
 
-            _plot_kwargs["plot_fft"] = _plot_kwargs.get("plot_fft", False)
-            # ^ If True, it may take a while to save the "tswa" PDF file. But these
-            #   FFT color plots will NOT be included into the main report. These
-            #   plots may be useful for debugging or for deciding the number of
-            #   divisions for x0/y0 arrays.
+            if self._version >= version.parse("1.4"):
+                _plot_kwargs["plot_fft"] = _plot_kwargs.get("plot_fft", True)
+                _plot_kwargs["fft_plot_opts"] = _plot_kwargs.get(
+                    "fft_plot_opts",
+                    dict(
+                        logscale=False,
+                        full_ylim=True,
+                        shifted_curves=False,
+                        nu_size=None,
+                    ),
+                )
+            else:
+                _plot_kwargs["plot_fft"] = _plot_kwargs.get("plot_fft", False)
 
             _plot_kwargs["footprint_nuxlim"] = _plot_kwargs.get(
                 "footprint_nuxlim", [0.0, 1.0]
@@ -9300,23 +9397,55 @@ class Report_NSLS2U_Default:
             }
 
             if plot_plus_minus_combined:
-                sel_tswa_caption_keys = [
-                    "nu_vs_x0",
-                    "tunefootprint_vs_x0",
-                    "nu_vs_y0",
-                    "tunefootprint_vs_y0",
-                ]
+                if _plot_kwargs["plot_fft"]:
+                    sel_tswa_caption_keys = [
+                        "nu_vs_x0",
+                        "tunefootprint_vs_x0",
+                        "fft_nux_vs_x0",
+                        "fft_nuy_vs_x0",
+                        "nu_vs_y0",
+                        "tunefootprint_vs_y0",
+                        "fft_nux_vs_y0",
+                        "fft_nuy_vs_y0",
+                    ]
+                else:
+                    sel_tswa_caption_keys = [
+                        "nu_vs_x0",
+                        "tunefootprint_vs_x0",
+                        "nu_vs_y0",
+                        "tunefootprint_vs_y0",
+                    ]
             else:
-                sel_tswa_caption_keys = [
-                    "nu_vs_x0plus",
-                    "nu_vs_x0minus",
-                    "tunefootprint_vs_x0plus",
-                    "tunefootprint_vs_x0minus",
-                    "nu_vs_y0plus",
-                    "nu_vs_y0minus",
-                    "tunefootprint_vs_y0plus",
-                    "tunefootprint_vs_y0minus",
-                ]
+                if _plot_kwargs["plot_fft"]:
+                    sel_tswa_caption_keys = [
+                        "nu_vs_x0plus",
+                        "nu_vs_x0minus",
+                        "tunefootprint_vs_x0plus",
+                        "tunefootprint_vs_x0minus",
+                        "fft_nux_vs_x0plus",
+                        "fft_nux_vs_x0minus",
+                        "fft_nuy_vs_x0plus",
+                        "fft_nuy_vs_x0minus",
+                        "nu_vs_y0plus",
+                        "nu_vs_y0minus",
+                        "tunefootprint_vs_y0plus",
+                        "tunefootprint_vs_y0minus",
+                        "fft_nux_vs_y0plus",
+                        "fft_nux_vs_y0minus",
+                        "fft_nuy_vs_y0plus",
+                        "fft_nuy_vs_y0minus",
+                    ]
+                else:
+                    sel_tswa_caption_keys = [
+                        "nu_vs_x0plus",
+                        "nu_vs_x0minus",
+                        "tunefootprint_vs_x0plus",
+                        "tunefootprint_vs_x0minus",
+                        "nu_vs_y0plus",
+                        "nu_vs_y0minus",
+                        "tunefootprint_vs_y0plus",
+                        "tunefootprint_vs_y0minus",
+                    ]
 
             tswa_captions = []
             tswa_caption_keys = []
@@ -9324,6 +9453,16 @@ class Report_NSLS2U_Default:
             MathText = plx.MathText  # for short-hand notation
 
             tswa_data = {"fit_options": fit_options}
+
+            if _plot_kwargs["plot_fft"]:
+                nu_size = _plot_kwargs["fft_plot_opts"].get("nu_size", None)
+                nu_size_caption_suffix = ""
+                if nu_size is not None:
+                    n_turns = ncf["calc_opts"]["tswa"]["production"]["n_turns"]
+                    nu_size_caption_suffix += (
+                        f" (Freq. vector size changed from {n_turns} to {nu_size})"
+                    )
+                tswa_data["nu_size_caption_suffix"] = nu_size_caption_suffix
 
             if plot_plus_minus_combined:
 
@@ -9353,19 +9492,13 @@ class Report_NSLS2U_Default:
                         "Tune footprint vs. " + MathText(rf"{plane}_0")
                     )
                     tswa_caption_keys.append(f"tunefootprint_vs_{plane}0")
+
                     if _plot_kwargs["plot_fft"]:
-                        tswa_captions.append(
-                            "FFT "
-                            + MathText(r"\nu_x")
-                            + " vs. "
-                            + MathText(rf"{plane}_0")
-                        )
+                        cap = "Horizontal spectra vs. " + MathText(rf"{plane}_0")
+                        tswa_captions.append(cap)
                         tswa_caption_keys.append(f"fft_nux_vs_{plane}0")
                         tswa_captions.append(
-                            "FFT "
-                            + MathText(r"\nu_y")
-                            + " vs. "
-                            + MathText(rf"{plane}_0")
+                            "Vertical spectra vs. " + MathText(rf"{plane}_0")
                         )
                         tswa_caption_keys.append(f"fft_nuy_vs_{plane}0")
             else:
@@ -9415,19 +9548,16 @@ class Report_NSLS2U_Default:
                                 "Tune footprint vs. " + MathText(rf"{plane}_0")
                             )
                             tswa_caption_keys.append(f"tunefootprint_vs_{plane}0{sign}")
+
                             if _plot_kwargs["plot_fft"]:
                                 tswa_captions.append(
-                                    "FFT "
-                                    + MathText(r"\nu_x")
-                                    + " vs. "
-                                    + MathText(rf"{plane}_0")
+                                    "Horizontal Spectra vs. "
+                                    + MathText(rf"{plane}_0 (> 0)")
                                 )
                                 tswa_caption_keys.append(f"fft_nux_vs_{plane}0{sign}")
                                 tswa_captions.append(
-                                    "FFT "
-                                    + MathText(r"\nu_y")
-                                    + " vs. "
-                                    + MathText(rf"{plane}_0")
+                                    "Vertical Spectra vs. "
+                                    + MathText(rf"{plane}_0 (> 0)")
                                 )
                                 tswa_caption_keys.append(f"fft_nuy_vs_{plane}0{sign}")
                         else:
@@ -9449,19 +9579,16 @@ class Report_NSLS2U_Default:
                                 "Tune footprint vs. " + MathText(rf"-{plane}_0")
                             )
                             tswa_caption_keys.append(f"tunefootprint_vs_{plane}0{sign}")
+
                             if _plot_kwargs["plot_fft"]:
                                 tswa_captions.append(
-                                    "FFT "
-                                    + MathText(r"\nu_x")
-                                    + " vs. "
-                                    + MathText(rf"-{plane}_0")
+                                    "Horizontal Spectra vs. "
+                                    + MathText(rf"{plane}_0 (< 0)")
                                 )
                                 tswa_caption_keys.append(f"fft_nux_vs_{plane}0{sign}")
                                 tswa_captions.append(
-                                    "FFT "
-                                    + MathText(r"\nu_y")
-                                    + " vs. "
-                                    + MathText(rf"-{plane}_0")
+                                    "Vertical Spectra vs. "
+                                    + MathText(rf"{plane}_0 (< 0)")
                                 )
                                 tswa_caption_keys.append(f"fft_nuy_vs_{plane}0{sign}")
 
@@ -9480,11 +9607,19 @@ class Report_NSLS2U_Default:
         if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
             _plot_kwargs = ncf.get(f"{calc_type}_plot_opts", {})
 
-            _plot_kwargs["plot_fft"] = _plot_kwargs.get("plot_fft", False)
-            # ^ If True, it may take a while to save the "nonlin_chrom" PDF file.
-            # ^ But these FFT color plots will NOT be included into
-            # ^ the main report. These plots may be useful for debugging
-            # ^ or for deciding the number of divisions for delta arrays.
+            if self._version >= version.parse("1.4"):
+                _plot_kwargs["plot_fft"] = _plot_kwargs.get("plot_fft", True)
+                _plot_kwargs["fft_plot_opts"] = _plot_kwargs.get(
+                    "fft_plot_opts",
+                    dict(
+                        logscale=False,
+                        full_ylim=True,
+                        shifted_curves=False,
+                        nu_size=None,
+                    ),
+                )
+            else:
+                _plot_kwargs["plot_fft"] = _plot_kwargs.get("plot_fft", False)
             _plot_kwargs["max_chrom_order"] = _plot_kwargs.get("max_chrom_order", 4)
             _plot_kwargs["fit_deltalim"] = _plot_kwargs.get(
                 "fit_deltalim", [-2e-2, +2e-2]
@@ -9499,6 +9634,16 @@ class Report_NSLS2U_Default:
             )
 
             nonlin_chrom_data["fit_options"] = fit_options
+
+            if _plot_kwargs["plot_fft"]:
+                nu_size = _plot_kwargs["fft_plot_opts"].get("nu_size", None)
+                nu_size_caption_suffix = ""
+                if nu_size is not None:
+                    n_turns = ncf["calc_opts"]["tswa"]["production"]["n_turns"]
+                    nu_size_caption_suffix += (
+                        f" (Freq. vector size changed from {n_turns} to {nu_size})"
+                    )
+                nonlin_chrom_data["nu_size_caption_suffix"] = nu_size_caption_suffix
 
             self._save_nonlin_plots_to_pdf(calc_type, existing_fignums)
 
@@ -11668,6 +11813,7 @@ class Report_NSLS2U_Default:
             "1.1": self._get_default_config_v1_1,
             "1.2": self._get_default_config_v1_2,
             "1.3": self._get_default_config_v1_3,
+            "1.4": self._get_default_config_v1_4,
         }
         func_dict[None] = func_dict[
             self.get_latest_config_version_str()
@@ -11679,7 +11825,7 @@ class Report_NSLS2U_Default:
     def get_latest_config_version_str():
         """"""
 
-        return "1.3"
+        return "1.4"
 
     @staticmethod
     def upgrade_config(conf):
@@ -11817,10 +11963,30 @@ class Report_NSLS2U_Default:
             test["forbid_resonance_crossing"] = False
 
         elif conf["report_version"] == "1.3":
+            pass  # TODO: version 1.4
+
+        elif conf["report_version"] == "1.4":
             pass  # Latest version. No need to upgrade.
 
         else:
             raise NotImplementedError()
+
+        return conf
+
+    def _get_default_config_v1_4(self, example=False):
+        """"""
+
+        conf = self._get_default_config_v1_3(example=example)
+
+        sqss = yaml.scalarstring.SingleQuotedScalarString
+
+        conf["report_version"] = sqss("1.4")
+        self._version = version.parse("1.4")
+
+        com_map = yaml.comments.CommentedMap
+        com_seq = yaml.comments.CommentedSeq
+
+        # TODO: version 1.4
 
         return conf
 
