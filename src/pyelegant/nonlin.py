@@ -8,6 +8,7 @@ import tempfile
 import time
 import warnings
 
+import PIL
 import h5py
 import matplotlib.patches as patches
 import matplotlib.pylab as plt
@@ -4547,7 +4548,8 @@ def plot_chrom(
 
         use_log = fft_plot_opts.get("logscale", False)
         use_full_ylim = fft_plot_opts.get("full_ylim", True)
-        plot_shifted_curves = fft_plot_opts.get("shifted_curves", True)
+        plot_shifted_curves = fft_plot_opts.get("shifted_curves", False)
+        nu_size = fft_plot_opts.get("nu_size", None)
 
         font_sz = 18
         if use_log:
@@ -4561,9 +4563,16 @@ def plot_chrom(
 
             v2array = fft_d["fft_nus"].copy()
             v2array[v2array < 0.0] += 1
+            if nu_size is not None:
+                assert np.all(np.diff(v2array) > 0.0)
+                v2array_resized = np.linspace(np.min(v2array), np.max(v2array), nu_size)
+            else:
+                v2array_resized = None
 
             if _nu_plane == "x":
                 v2array += nux0_int
+                if v2array_resized is not None:
+                    v2array_resized += nux0_int
 
                 if ax_fft_hx:
                     ax1 = ax_fft_hx
@@ -4575,6 +4584,8 @@ def plot_chrom(
                 ylim = nuxlim
             else:
                 v2array += nuy0_int
+                if v2array_resized is not None:
+                    v2array_resized += nuy0_int
 
                 if ax_fft_hy:
                     ax1 = ax_fft_hy
@@ -4585,14 +4596,38 @@ def plot_chrom(
 
                 ylim = nuylim
 
+            if nu_size is not None:
+                im = PIL.Image.fromarray((norm_fft_hAs * 255).astype(np.uint8), "L")
+                w = norm_fft_hAs.shape[1]
+                h = nu_size
+                im = im.resize((w, h), resample=PIL.Image.Resampling.LANCZOS)
+                im = np.array(list(im.getdata())).reshape((h, w))
+                norm_fft_hAs_resized = im / np.max(im, axis=0)
+
             V1, V2 = np.meshgrid(v1array, v2array)
+            if v2array_resized is not None:
+                V1r, V2r = np.meshgrid(v1array, v2array_resized)
 
             if not use_log:
-                plt.pcolor(V1 * 1e2, V2, norm_fft_hAs, cmap="jet", shading="auto")
+                if v2array_resized is not None:
+                    plt.pcolor(
+                        V1r * 1e2, V2r, norm_fft_hAs_resized, cmap="jet", shading="auto"
+                    )
+                else:
+                    plt.pcolor(V1 * 1e2, V2, norm_fft_hAs, cmap="jet", shading="auto")
             else:
-                plt.pcolor(
-                    V1 * 1e2, V2, np.log10(norm_fft_hAs), cmap="jet", shading="auto"
-                )
+                if v2array_resized is not None:
+                    plt.pcolor(
+                        V1r * 1e2,
+                        V2r,
+                        np.log10(norm_fft_hAs_resized),
+                        cmap="jet",
+                        shading="auto",
+                    )
+                else:
+                    plt.pcolor(
+                        V1 * 1e2, V2, np.log10(norm_fft_hAs), cmap="jet", shading="auto"
+                    )
 
             plt.xlabel(rf"$\delta\, [\%]$", size=font_sz)
             plt.ylabel(rf"$\nu_{_nu_plane}$", size=font_sz)
@@ -6449,7 +6484,8 @@ def plot_tswa(
 
         use_log = fft_plot_opts.get("logscale", False)
         use_full_ylim = fft_plot_opts.get("full_ylim", True)
-        plot_shifted_curves = fft_plot_opts.get("shifted_curves", True)
+        plot_shifted_curves = fft_plot_opts.get("shifted_curves", False)
+        nu_size = fft_plot_opts.get("nu_size", None)
 
         font_sz = 18
         if use_log:
@@ -6466,9 +6502,16 @@ def plot_tswa(
 
             v2array = fft_d["fft_nus"].copy()
             v2array[v2array < 0.0] += 1
+            if nu_size is not None:
+                assert np.all(np.diff(v2array) > 0.0)
+                v2array_resized = np.linspace(np.min(v2array), np.max(v2array), nu_size)
+            else:
+                v2array_resized = None
 
             if _nu_plane == "x":
                 v2array += nux0_int
+                if v2array_resized is not None:
+                    v2array_resized += nux0_int
 
                 if ax_fft_hx:
                     ax1 = ax_fft_hx
@@ -6480,6 +6523,8 @@ def plot_tswa(
                 ylim = nuxlim
             else:
                 v2array += nuy0_int
+                if v2array_resized is not None:
+                    v2array_resized += nuy0_int
 
                 if ax_fft_hy:
                     ax1 = ax_fft_hy
@@ -6490,14 +6535,38 @@ def plot_tswa(
 
                 ylim = nuylim
 
+            if nu_size is not None:
+                im = PIL.Image.fromarray((norm_fft_hAs * 255).astype(np.uint8), "L")
+                w = norm_fft_hAs.shape[1]
+                h = nu_size
+                im = im.resize((w, h), resample=PIL.Image.Resampling.LANCZOS)
+                im = np.array(list(im.getdata())).reshape((h, w))
+                norm_fft_hAs_resized = im / np.max(im, axis=0)
+
             V1, V2 = np.meshgrid(v1array, v2array)
+            if v2array_resized is not None:
+                V1r, V2r = np.meshgrid(v1array, v2array_resized)
 
             if not use_log:
-                plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap="jet", shading="auto")
+                if v2array_resized is not None:
+                    plt.pcolor(
+                        V1r * 1e3, V2r, norm_fft_hAs_resized, cmap="jet", shading="auto"
+                    )
+                else:
+                    plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap="jet", shading="auto")
             else:
-                plt.pcolor(
-                    V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap="jet", shading="auto"
-                )
+                if v2array_resized is not None:
+                    plt.pcolor(
+                        V1r * 1e3,
+                        V2r,
+                        np.log10(norm_fft_hAs_resized),
+                        cmap="jet",
+                        shading="auto",
+                    )
+                else:
+                    plt.pcolor(
+                        V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap="jet", shading="auto"
+                    )
             plt.xlabel(
                 rf"${scan_sign_str}{scan_plane}_0\, [\mathrm{{mm}}]$", size=font_sz
             )
@@ -7515,7 +7584,8 @@ def plot_tswa_both_sides(
 
         use_log = fft_plot_opts.get("logscale", False)
         use_full_ylim = fft_plot_opts.get("full_ylim", True)
-        plot_shifted_curves = fft_plot_opts.get("shifted_curves", True)
+        plot_shifted_curves = fft_plot_opts.get("shifted_curves", False)
+        nu_size = fft_plot_opts.get("nu_size", None)
 
         font_sz = 18
         if use_log:
@@ -7535,9 +7605,16 @@ def plot_tswa_both_sides(
             assert np.all(fft_d["+"]["fft_nus"] == fft_d["-"]["fft_nus"])
             v2array = fft_d["+"]["fft_nus"].copy()
             v2array[v2array < 0.0] += 1
+            if nu_size is not None:
+                assert np.all(np.diff(v2array) > 0.0)
+                v2array_resized = np.linspace(np.min(v2array), np.max(v2array), nu_size)
+            else:
+                v2array_resized = None
 
             if _nu_plane == "x":
                 v2array += nux0_int
+                if v2array_resized is not None:
+                    v2array_resized += nux0_int
 
                 if ax_fft_hx:
                     ax1 = ax_fft_hx
@@ -7557,6 +7634,8 @@ def plot_tswa_both_sides(
                 ylim = nuxlim
             else:
                 v2array += nuy0_int
+                if v2array_resized is not None:
+                    v2array_resized += nuy0_int
 
                 if ax_fft_hy:
                     ax1 = ax_fft_hy
@@ -7575,14 +7654,38 @@ def plot_tswa_both_sides(
 
                 ylim = nuylim
 
+            if nu_size is not None:
+                im = PIL.Image.fromarray((norm_fft_hAs * 255).astype(np.uint8), "L")
+                w = norm_fft_hAs.shape[1]
+                h = nu_size
+                im = im.resize((w, h), resample=PIL.Image.Resampling.LANCZOS)
+                im = np.array(list(im.getdata())).reshape((h, w))
+                norm_fft_hAs_resized = im / np.max(im, axis=0)
+
             V1, V2 = np.meshgrid(v1array, v2array)
+            if v2array_resized is not None:
+                V1r, V2r = np.meshgrid(v1array, v2array_resized)
 
             if not use_log:
-                plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap="jet", shading="auto")
+                if v2array_resized is not None:
+                    plt.pcolor(
+                        V1r * 1e3, V2r, norm_fft_hAs_resized, cmap="jet", shading="auto"
+                    )
+                else:
+                    plt.pcolor(V1 * 1e3, V2, norm_fft_hAs, cmap="jet", shading="auto")
             else:
-                plt.pcolor(
-                    V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap="jet", shading="auto"
-                )
+                if v2array_resized is not None:
+                    plt.pcolor(
+                        V1r * 1e3,
+                        V2r,
+                        np.log10(norm_fft_hAs_resized),
+                        cmap="jet",
+                        shading="auto",
+                    )
+                else:
+                    plt.pcolor(
+                        V1 * 1e3, V2, np.log10(norm_fft_hAs), cmap="jet", shading="auto"
+                    )
             plt.xlabel(rf"${scan_plane}_0\, [\mathrm{{mm}}]$", size=font_sz)
             plt.ylabel(rf"$\nu_{_nu_plane}$", size=font_sz)
             if not use_full_ylim:
