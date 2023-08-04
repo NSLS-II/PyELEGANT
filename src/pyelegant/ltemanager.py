@@ -301,7 +301,7 @@ class Lattice:
         """
 
         for el in L:
-            if isinstance(el, collections.Iterable) and not isinstance(el, str):
+            if isinstance(el, collections.abc.Iterable) and not isinstance(el, str):
                 for sub in self.flatten_nested_list(el):
                     yield sub
             else:
