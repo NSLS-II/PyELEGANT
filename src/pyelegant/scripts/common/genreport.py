@@ -61,6 +61,30 @@ SYMBOL = dict(
     minus=chr(0x2013),  # 0x2013 := "en dash"
 )
 
+RDT = {
+    "h11001": r"$\partial\nu_x / \partial\delta$",
+    "h00111": r"$\partial\nu_y / \partial\delta$",
+    "h20001": r"$\partial\beta_x / \partial\delta$",
+    "h00201": r"$\partial\beta_y / \partial\delta$",
+    "h10002": r"$\partial\eta_x / \partial\delta$",
+    "h21000": r"$\nu_x$",
+    "h30000": r"$3\nu_x$",
+    "h10110": r"$\nu_x$",
+    "h10020": r"$\nu_x - 2\nu_y$",
+    "h10200": r"$\nu_x + 2\nu_y$",
+    "h22000": r"$\partial\nu_x / \partial J_x$",
+    "h11110": r"$\partial\nu_{x,y} / \partial J_{y,x}$",
+    "h00220": r"$\partial\nu_y / \partial J_y$",
+    "h31000": r"$2\nu_x$",
+    "h40000": r"$4\nu_x$",
+    "h20110": r"$2\nu_x$",
+    "h11200": r"$2\nu_y$",
+    "h20020": r"$2\nu_x - 2\nu_y$",
+    "h20200": r"$2\nu_x + 2\nu_y$",
+    "h00310": r"$2\nu_y$",
+    "h00400": r"$4\nu_y$",
+}
+
 
 def gradient_fill(
     x,
@@ -189,6 +213,7 @@ class Report_NSLS2U_Default:
             "tswa",
             "nonlin_chrom",
             "mom_aper",
+            "driving_terms",
         ]
         self.all_nonlin_calc_comments = [
             "Dynamic Aperture",
@@ -199,6 +224,7 @@ class Report_NSLS2U_Default:
             "Tune Shift with Amplitude",
             "Nonlinear Chromaticity",
             "Momentum Aperture",
+            "Resonance Driving Terms",
         ]
         assert len(self.all_nonlin_calc_types) == len(self.all_nonlin_calc_comments)
 
@@ -1370,6 +1396,9 @@ class Report_NSLS2U_Default:
         if "mom_aper" in included_types:
             self.add_pdf_L2_mom_aper(plots_pdf_paths, nonlin_data_filepaths)
 
+        if "driving_terms" in included_types:
+            self.add_pdf_L2_driving_terms(plots_pdf_paths, nonlin_data_filepaths)
+
     def add_pdf_L2_xy_aper(self, plots_pdf_paths, nonlin_data_filepaths):
         """"""
 
@@ -2306,6 +2335,69 @@ class Report_NSLS2U_Default:
                     )
                     doc.append(plx.VerticalSpace(plx.NoEscape("-10pt")))
                     fig.add_caption("Momentum Aperture.")
+
+            doc.append(plx.ClearPage())
+
+    def add_pdf_L2_driving_terms(self, plots_pdf_paths, nonlin_data_filepaths):
+
+        if self._version <= version.parse("1.3"):
+            return
+
+        doc = self.doc
+
+        with open(self.suppl_plot_data_filepath["driving_terms"], "rb") as f:
+            all_rdt_data = pickle.load(f)
+
+        with doc.create(plx.Section("Resonance Driving Terms")):
+
+            table_spec = " ".join(["l"] * 3)
+
+            with doc.create(plx.LongTable(table_spec)) as table:
+
+                doc.append(plx.NoEscape(r"\caption[table]{Resonance Driving Terms}\\"))
+
+                table.add_hline()
+                headers = ["Lie Generator", "Effect", "Value"]
+                table.add_row(headers)
+                ncol = len(headers)
+                table.add_hline()
+                table.end_table_header()
+                table.add_hline()
+                table.add_row(
+                    (plx.MultiColumn(ncol, align="r", data="Continued onto Next Page"),)
+                )
+                table.add_hline()
+                table.end_table_footer()
+                table.add_hline()
+                table.end_table_last_footer()
+
+                for k, effect in RDT.items():
+                    term_str = f"$|h_{{{k[1:]}}}|$"
+                    val = all_rdt_data["This Lattice"][k]
+                    assert val >= 0.0
+                    temp_val_str = f"{val:.3g}"
+                    if ("e" in temp_val_str) or temp_val_str.startswith("0."):
+                        val_str = "${}$".format(pe.util.pprint_sci_notation(val, ".2e"))
+                    else:
+                        val_str = f"${val:.2f}$"
+                    table.add_row(
+                        [
+                            plx.NoEscape(term_str),
+                            plx.NoEscape(effect),
+                            plx.NoEscape(val_str),
+                        ]
+                    )
+
+            with doc.create(plx.Figure(position="h!t")) as fig:
+                doc.append(plx.NoEscape(r"\centering"))
+                fig.add_image(
+                    os.path.basename(plots_pdf_paths["driving_terms"]),
+                    width=plx.utils.NoEscape(r"0.8\linewidth"),
+                )
+                doc.append(plx.VerticalSpace(plx.NoEscape("-10pt")))
+                fig.add_caption("Magnitudes of various driving terms.")
+
+            doc.append(plx.ClearPage())
 
     def add_pdf_RF_lifetime(self):
         """"""
@@ -6311,7 +6403,7 @@ class Report_NSLS2U_Default:
             ws.write(row, 2, self.lin_data[k], num_txt_fmts["0.00E+00"])
             row += 1
 
-        # Start wrting other nonlinear dynamics data
+        # Start writing other nonlinear dynamics data
         row = 0
         col_offset = 4
 
@@ -6510,7 +6602,13 @@ class Report_NSLS2U_Default:
         Path(report_folderpath).mkdir(exist_ok=True)
 
         self.suppl_plot_data_filepath = {}
-        for calc_type in ["xy_aper", "tswa", "nonlin_chrom", "mom_aper"]:
+        for calc_type in [
+            "xy_aper",
+            "tswa",
+            "nonlin_chrom",
+            "mom_aper",
+            "driving_terms",
+        ]:
             self.suppl_plot_data_filepath[calc_type] = os.path.join(
                 self.report_folderpath, f"{calc_type}.plot_suppl.pkl"
             )
@@ -8460,6 +8558,9 @@ class Report_NSLS2U_Default:
             elif calc_type == "mom_aper":
                 suffix_list.append(f"_mom_aper_{opt_name}.{output_filetype}")
                 data_file_key_list.append(calc_type)
+            elif calc_type == "driving_terms":
+                suffix_list.append(f"_rdt_{opt_name}.{output_filetype}.NotBeingUsed")
+                data_file_key_list.append(calc_type)
             else:
                 raise ValueError
 
@@ -9672,6 +9773,66 @@ class Report_NSLS2U_Default:
 
             with open(self.suppl_plot_data_filepath["mom_aper"], "wb") as f:
                 pickle.dump(mom_aper_data, f)
+
+        calc_type = "driving_terms"
+        if (calc_type in nonlin_data_filepaths) and do_plot[calc_type]:
+
+            try:
+                comp_filepaths = ncf["driving_terms_plot_opts"]["comparison_filepaths"]
+            except:
+                comp_filepaths = {}
+
+            comp_driving_terms = {}
+            for lat_name, lin_summary_pkl_filepath in comp_filepaths.items():
+                with open(lin_summary_pkl_filepath, "rb") as f:
+                    *_, comp_lin_data = pickle.load(f)
+                comp_driving_terms[lat_name] = {
+                    term_name: comp_lin_data[term_name] for term_name in list(RDT)
+                }
+
+            names = [k[1:] for k in list(RDT)]
+
+            x = np.arange(len(names))  # label locations
+            width = 0.25  # width of the bars
+
+            fig, ax = plt.subplots()
+            multiplier = 0
+            offset = width * multiplier
+            if comp_driving_terms == {}:  # When no comparison lattice is provided
+                _kwargs = {}
+            else:
+                _kwargs = dict(label=r"$\mathrm{This\; Lattice}$")
+            rects = ax.bar(
+                x + offset,
+                [self.lin_data[k] for k in list(RDT)],
+                width=width,
+                align="edge",
+                **_kwargs,
+            )
+            for comp_name, rdts in comp_driving_terms.items():
+                multiplier += 1
+                offset = width * multiplier
+                rects = ax.bar(
+                    x + offset,
+                    [rdts[k] for k in list(RDT)],
+                    width=width,
+                    align="edge",
+                    label=r"$\mathrm{{{}}}$".format(comp_name.replace(" ", "\;")),
+                )
+            plt.yscale("log")
+            plt.ylabel(r"$|h|$", size=20)
+            plt.grid(True, axis="y", linestyle=":", color="k")
+            if comp_driving_terms != {}:
+                ax.legend(loc="best", framealpha=1.0)
+            plt.xticks(x + width, names, rotation=90)
+            plt.tight_layout()
+
+            self._save_nonlin_plots_to_pdf(calc_type, existing_fignums)
+
+            all_rdt_data = {"This Lattice": {k: self.lin_data[k] for k in list(RDT)}}
+            all_rdt_data.update(comp_driving_terms)
+            with open(self.suppl_plot_data_filepath["driving_terms"], "wb") as f:
+                pickle.dump(all_rdt_data, f)
 
     @staticmethod
     def calc_sync_tune(E_GeV, U0_eV, alphac, harmonic_number, rf_v):

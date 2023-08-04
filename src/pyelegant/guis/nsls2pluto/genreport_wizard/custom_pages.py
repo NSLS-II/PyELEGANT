@@ -1665,6 +1665,8 @@ class PageNonlinCalcPlot(PageGenReport):
                                 wtype = conv_type.split("_")[0]
                                 fieldname = f"{wtype}_{k2}_{self.calc_type}_{mode}"
                                 self.setField(fieldname, conv(v2))
+                        elif k == "fft_plot_opts":
+                            pass  # TODO
                         else:
                             raise NotImplementedError
 
@@ -1913,7 +1915,16 @@ class PageNonlinCalcPlot(PageGenReport):
             prop_names_from_wizard = list(self.setter_getter[mode])
             for k in list(plot_opts):
                 if k not in prop_names_from_wizard:
-                    del plot_opts[k]
+                    if k == "fft_plot_opts":
+                        print(
+                            'WARNING: TODO: "fft_plot_opts" needs to be handled properly by this wizard.'
+                        )
+                    elif k == "plot_fft":
+                        print(
+                            'WARNING: TODO: "plot_fft" needs to be handled properly by this wizard.'
+                        )
+                    else:
+                        del plot_opts[k]
 
             for k, conv_type in self.setter_getter[mode].items():
                 conv = self.converters[conv_type]["get"]
@@ -5150,6 +5161,10 @@ class PageNonlinProduction(PageGenReport):
             for calc_type in self.all_calc_types:
                 v = self.field(f"check_{opt_type}_{calc_type}")
                 ncf[opt_type][calc_type] = v
+
+        # TODO
+        if "driving_terms" in ncf["include"]:
+            ncf["include"]["driving_terms"] = True
 
         if ncf["use_beamline"] is not mod_conf["use_beamline_ring"]:
             ncf["use_beamline"] = mod_conf["use_beamline_ring"]
