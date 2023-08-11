@@ -4,7 +4,6 @@ import datetime
 import getpass
 import glob
 import gzip
-import json
 import os
 from pathlib import Path
 import pickle
@@ -19,8 +18,10 @@ import dill
 import numpy as np
 from ruamel import yaml
 
-from . import facility_name, util
+from . import util
 from .local import sbatch_std_print_enabled
+
+REMOTE_NAME = os.environ.get("PYELEGANT_REMOTE", "")
 
 _IMPORT_TIMESTAMP = time.time()
 
@@ -66,7 +67,8 @@ else:
     __elegant_version__ = None
 del p, out, err
 
-if facility_name == "nsls2apcluster":
+
+if REMOTE_NAME == "nsls2apcluster":
     DEFAULT_REMOTE_OPTS = dict(
         sbatch={"use": False, "wait": True},
         pelegant=False,
@@ -92,7 +94,7 @@ if facility_name == "nsls2apcluster":
             ],
         ],
     )
-elif facility_name == "nsls2pluto":
+elif REMOTE_NAME == "nsls2pluto":
     DEFAULT_REMOTE_OPTS = dict(
         sbatch={"use": False, "wait": True},
         pelegant=False,
@@ -109,7 +111,7 @@ elif facility_name == "nsls2pluto":
         exclude=None,
     )
 else:
-    raise ValueError(f"Invalid facility_name: {facility_name}")
+    raise ValueError(f"Invalid $PYELEGANT_REMOTE: {REMOTE_NAME}")
 
 
 def clear_slurm_excl_nodes():
@@ -245,10 +247,10 @@ def get_slurm_allowed_qos_list():
 
     username = getpass.getuser()
 
-    if facility_name == "nsls2apcluster":
+    if REMOTE_NAME == "nsls2apcluster":
         allowed_qos_list = ["default"]
 
-    elif facility_name == "nsls2pluto":
+    elif REMOTE_NAME == "nsls2pluto":
         cmd = f"sacctmgr show assoc user={username} format=qos -P --noheader"
         p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding="utf-8")
         out, err = p.communicate()
@@ -256,7 +258,7 @@ def get_slurm_allowed_qos_list():
 
         allowed_qos_list = ["default"] + sorted(allowed_qos_list)
     else:
-        raise ValueError(f"Invalid facility name: {facility_name}")
+        raise ValueError(f"Invalid $PYELEGANT_REMOTE: {REMOTE_NAME}")
 
     return allowed_qos_list
 

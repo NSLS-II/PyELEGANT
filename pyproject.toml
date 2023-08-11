@@ -1,0 +1,68 @@
+[tool.poetry]
+name = "pyelegant"
+version = "0.10.0"
+description = "Python Interface to the 6D Accelerator Program ELEGANT (ELEctron Generation ANd Tracking)"
+authors = ["Yoshiteru Hidaka <yhidaka@bnl.gov>"]
+maintainers = ["Yoshiteru Hidaka <yhidaka@bnl.gov>"]
+license = "BSD-3-Clause"
+repository = "https://github.com/NSLS-II/PyELEGANT"
+
+packages = [
+    { include = "pyelegant", from = "src" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = "^1.25.2"
+scipy = "^1.11.1"
+matplotlib = "^3.7.2"
+"ruamel.yaml" = "^0.17.32"
+Pillow = "^10.0.0"
+h5py = "^3.9.0"
+
+#mpi4py = "^3.1.4"
+#dill = "^0.3.7"
+#QtPy = "^2.3.1"
+#jupyter = "^1.0.0"
+#ipympl = "^0.9.3"
+#PyLaTeX = "^1.4.1"
+#XlsxWriter = "^3.1.2"
+#packaging = "^23.1"
+
+mpi4py = { version = "^3.1.4", optional = true } # must be installed by pip, not conda
+dill = { version = "^0.3.7", optional = true }
+QtPy = { version = "^2.3.1", optional = true }
+jupyter = { version = "^1.0.0", optional = true }
+ipympl = { version = "^0.9.3", optional = true}
+PyLaTeX = { version = "^1.4.1", optional = true }
+XlsxWriter = { version = "^3.1.2", optional = true }
+packaging = { version = "^23.1", optional = true }
+
+[tool.poetry.extras]
+jupy = ["jupyter", "ipympl"]
+parallel = ["mpi4py", "dill", "QtPy"]
+genreport = ["QtPy", "pylatex", "xlsxwriter", "packaging"]
+all = ["jupyter", "ipympl", "mpi4py", "dill", "QtPy", "pylatex", "xlsxwriter", "packaging"]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+
+[tool.poetry.scripts]
+# Console scripts common to all REMOTE_NAME's
+pyele_zip_lte = "pyelegant.scripts.common.ziplte:zip_lte"
+pyele_unzip_lte = "pyelegant.scripts.common.ziplte:unzip_lte"
+pyele_report = "pyelegant.scripts.common.genreport:main"
+
+# Console scripts specific to REMOTE_NAME (e.g., nsls2pluto)
+pyele_slurm_print_queue = "pyelegant.scripts:slurm_print_queue"
+pyele_slurm_print_load = "pyelegant.scripts:slurm_print_load"
+pyele_slurm_scancel_regex_jobname = "pyelegant.scripts:slurm_scancel_by_regex_jobname"
+pyele_slurm_nfree_change = "pyelegant.scripts:slurm_notify_on_num_free_cores_change"
+
+# GUI scripts specific to REMOTE_NAME (e.g., nsls2pluto)
+pyele_gui_slurm = "pyelegant.guis:gui_slurm_main"
+pyele_gui_report_wiz = "pyelegant.guis:gui_report_wiz_main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

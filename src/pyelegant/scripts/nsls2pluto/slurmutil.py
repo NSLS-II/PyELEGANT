@@ -6,10 +6,12 @@ import shlex
 from subprocess import PIPE, Popen
 import time
 
-from .. import facility_name
-from ..nsls2pluto import get_n_free_cores, sendRunCompleteMail
+from ... import remote
 
-if facility_name == "nsls2apcluster":
+get_n_free_cores = remote.get_n_free_cores
+sendRunCompleteMail = remote.sendRunCompleteMail
+
+if remote.REMOTE_NAME == "nsls2apcluster":
     #                 (combined_node_name) (_template)   (node_num_range)
     GROUPED_NODES = [
         ("apcpu-[001-005]", "apcpu-{:03d}", range(1, 5 + 1)),
@@ -21,7 +23,7 @@ if facility_name == "nsls2apcluster":
         ),
     ]
 
-elif facility_name == "nsls2pluto":
+elif remote.REMOTE_NAME == "nsls2pluto":
     GROUPED_NODES = [
         ("gpu[001-012]", "gpu{:03d}", range(1, 12 + 1)),
         ("hpc[001-014]", "hpc{:03d}", range(1, 14 + 1)),
@@ -29,7 +31,7 @@ elif facility_name == "nsls2pluto":
         ("submit[1-2]", "submit{:d}", range(1, 2 + 1)),
     ]
 else:
-    raise ValueError(f'Invalid "facility_name": {facility_name}')
+    raise ValueError(f"Invalid REMOTE_NAME: {remote.REMOTE_NAME}")
 
 
 def chained_Popen(cmd_list):

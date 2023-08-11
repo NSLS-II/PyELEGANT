@@ -15,7 +15,7 @@ from qtpy import QtCore, QtGui, QtWidgets
 Qt = QtCore.Qt
 from qtpy import uic
 
-from ... import facility_name
+from .... import remote
 
 
 def chained_Popen(cmd_list):
@@ -377,12 +377,12 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
             if state not in parsed[partition]:
                 parsed[partition][state] = []
 
-            if facility_name == "nsls2apcluster":
+            if remote.REMOTE_NAME == "nsls2apcluster":
                 self._sinfo_parsing_nsls2apcluster(parsed, partition, state, nodes_str)
-            elif facility_name == "nsls2pluto":
+            elif remote.REMOTE_NAME == "nsls2pluto":
                 self._sinfo_parsing_nsls2pluto(parsed, partition, state, nodes_str)
             else:
-                raise ValueError(f"Invalid facility_name: {facility_name}")
+                raise ValueError(f"Invalid REMOTE_NAME: {remote.REMOTE_NAME}")
 
         self.sinfo = parsed
 
@@ -685,12 +685,12 @@ class ClusterStatusWindow(QtWidgets.QMainWindow):
         self.update_partition_info()
         self.update_sinfo()
         #
-        if facility_name == "nsls2apcluster":
+        if remote.REMOTE_NAME == "nsls2apcluster":
             group_summary, suspendables = self._update_load_table_nsls2apcluster()
-        elif facility_name == "nsls2pluto":
+        elif remote.REMOTE_NAME == "nsls2pluto":
             group_summary, suspendables = self._update_load_table_nsls2pluto()
         else:
-            raise ValueError(f"Invalid facility_name: {facility_name}")
+            raise ValueError(f"Invalid REMOTE_NAME: {remote.REMOTE_NAME}")
 
         cmd = "scontrol show node"
         p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding="utf-8")

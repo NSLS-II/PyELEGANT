@@ -76,10 +76,10 @@ def get_slurm_allowed_qos_list():
 
     username = getpass.getuser()
 
-    if pe.facility_name == "nsls2apcluster":
+    if pe.remote.REMOTE_NAME == "nsls2apcluster":
         allowed_qos_list = ["default"]
 
-    elif pe.facility_name == "nsls2pluto":
+    elif pe.remote.REMOTE_NAME == "nsls2pluto":
         cmd = f"sacctmgr show assoc user={username} format=qos -P --noheader"
         p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE, encoding="utf-8")
         out, err = p.communicate()
@@ -87,7 +87,7 @@ def get_slurm_allowed_qos_list():
 
         allowed_qos_list = ["default"] + sorted(allowed_qos_list)
     else:
-        raise ValueError(f"Invalid facility name: {pe.facility_name}")
+        raise ValueError(f"Invalid REMOTE_NAME: {pe.remote.REMOTE_NAME}")
 
     return allowed_qos_list
 
