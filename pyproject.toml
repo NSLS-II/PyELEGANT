@@ -13,7 +13,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-numpy = "^1.25.2"
+numpy = "^1.24.4"
 scipy = "^1.11.1"
 matplotlib = "^3.7.2"
 "ruamel.yaml" = "^0.17.32"
