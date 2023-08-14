@@ -1,0 +1,2 @@
+# # From an answer on 08/03/2022 viewed on 08/14/2023 at https://stackoverflow.com/questions/73218304/how-to-clear-jupyter-notebooks-output-and-metadata-when-using-git-commit
+*.ipynb filter=strip-notebook-output
