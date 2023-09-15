@@ -2630,7 +2630,7 @@ class EleDesigner:
                     print(f'Failed to delete "{fp}"')
 
     # ----------------------------------------------------------------------
-    def load_sdds_output_files(self):
+    def load_sdds_output_files(self, str_format="%25.16e"):
         """"""
 
         output, meta = {}, {}
@@ -2640,7 +2640,7 @@ class EleDesigner:
             # print(f'Processing "{sdds_fp}"...')
             ext = sdds_fp.split(".")[-1]
             try:
-                output[ext], meta[ext] = sdds.sdds2dicts(sdds_fp)
+                output[ext], meta[ext] = sdds.sdds2dicts(sdds_fp, str_format=str_format)
             except:
                 continue
 

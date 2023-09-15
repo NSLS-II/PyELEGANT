@@ -135,9 +135,14 @@ def printout(
     elif os.name == "nt":
         newline_char = "\r\n"
 
-    _, column_info_dict = query(sdds_filepath, suppress_err_msg=suppress_err_msg)
+    param_info_dict, column_info_dict = query(
+        sdds_filepath, suppress_err_msg=suppress_err_msg
+    )
+
     if column_name_list is None:
         column_name_list = list(column_info_dict)
+    else:
+        column_info_dict = {k: column_info_dict[k] for k in column_name_list}
 
     if column_name_list == []:
         column_option_str = ""
@@ -147,8 +152,9 @@ def printout(
             column_option_str += ",format=" + str_format
 
     if param_name_list is None:
-        param_info_dict, _ = query(sdds_filepath, suppress_err_msg=suppress_err_msg)
         param_name_list = list(param_info_dict)
+    else:
+        param_info_dict = {k: param_info_dict[k] for k in param_name_list}
 
     if param_name_list == []:
         param_option_str = ""
@@ -180,7 +186,7 @@ def printout(
         print("sddsprintout stderr:", error)
         print("sddsprintout stdout:", output)
 
-    if param_name_list == []:  # or (param_name_list is None):
+    if param_name_list == []:
         param_dict = {}
     else:
         if False:  # old version
@@ -257,9 +263,10 @@ def printout(
             # Extract string types
             if "string" in [q_d["TYPE"] for q_d in param_info_dict.values()]:
 
-                ordered_param_name_list = [None] * len(param_name_list)
-                for param_name, q_d in param_info_dict.items():
-                    ordered_param_name_list[q_d["_index"]] = param_name
+                inds = [q_d["_index"] for param_name, q_d in param_info_dict.items()]
+                ordered_param_name_list = np.array(list(param_info_dict))[
+                    np.argsort(inds)
+                ].tolist()
 
                 for param_name, q_d in param_info_dict.items():
 
@@ -297,7 +304,7 @@ def printout(
                         param_dict[param_name] = vals
 
             len_list = [len(v) for _, v in param_dict.items()]
-            assert len(set(len_list)) == 1  # i.e., having save length
+            assert len(set(len_list)) == 1  # i.e., having same length
             _temp_dict = {}
             if len_list[0] == 1:
                 # Only single "page"
@@ -436,34 +443,92 @@ def printout(
     return param_dict, column_dict
 
 
-def sdds2dicts(sdds_filepath, str_format=""):
+def sdds2dicts(sdds_filepath, str_format="", show_cmd=False, suppress_err_msg=True):
     """"""
 
-    meta_params, meta_columns = query(sdds_filepath, suppress_err_msg=True)
+    meta_params, meta_columns = query(sdds_filepath, suppress_err_msg=suppress_err_msg)
 
     meta = {}
+
     if meta_params:
         meta["params"] = meta_params
+        param_name_list = list(meta["params"])
+        double_param_name_list = [
+            name for name, _d in meta["params"].items() if _d["TYPE"] == "double"
+        ]
+        if double_param_name_list == []:
+            double_param_name_list = None
+        nondouble_param_name_list = [
+            name for name, _d in meta["params"].items() if _d["TYPE"] != "double"
+        ]
+        if nondouble_param_name_list == []:
+            nondouble_param_name_list = None
+    else:
+        param_name_list = []
+        double_param_name_list = None
+        nondouble_param_name_list = None
+
     if meta_columns:
         meta["columns"] = meta_columns
+        column_name_list = list(meta["columns"])
+        double_column_name_list = [
+            name for name, _d in meta["columns"].items() if _d["TYPE"] == "double"
+        ]
+        if double_column_name_list == []:
+            double_column_name_list = None
+        nondouble_column_name_list = [
+            name for name, _d in meta["columns"].items() if _d["TYPE"] != "double"
+        ]
+        if nondouble_column_name_list == []:
+            nondouble_column_name_list = None
+    else:
+        column_name_list = []
+        double_column_name_list = None
+        nondouble_column_name_list = None
 
     output = {}
 
     if meta_params == {} and meta_columns == {}:
         return output, meta
 
-    params, columns = printout(
-        sdds_filepath,
-        param_name_list=None,
-        column_name_list=None,
-        str_format=str_format,
-        show_output=False,
-        show_cmd=False,
-        suppress_err_msg=True,
-    )
+    if double_param_name_list or double_column_name_list:
+        double_params, double_columns = printout(
+            sdds_filepath,
+            param_name_list=double_param_name_list,
+            column_name_list=double_column_name_list,
+            str_format=str_format,
+            show_output=False,
+            show_cmd=show_cmd,
+            suppress_err_msg=suppress_err_msg,
+        )
+    else:
+        double_params = {}
+        double_columns = {}
 
-    if params:
-        for _k, _v in params.items():
+    if nondouble_param_name_list or nondouble_column_name_list:
+        nondouble_params, nondouble_columns = printout(
+            sdds_filepath,
+            param_name_list=nondouble_param_name_list,
+            column_name_list=nondouble_column_name_list,
+            str_format="",
+            show_output=False,
+            show_cmd=show_cmd,
+            suppress_err_msg=suppress_err_msg,
+        )
+    else:
+        nondouble_params = {}
+        nondouble_columns = {}
+
+    if param_name_list:
+        params = {}
+        for _k in param_name_list:
+            if _k in double_param_name_list:
+                _v = double_params[_k]
+            elif _k in nondouble_param_name_list:
+                _v = nondouble_params[_k]
+            else:
+                raise RuntimeError
+
             if meta["params"][_k]["TYPE"] in ("long", "short"):
                 try:
                     params[_k] = int(_v)
@@ -476,13 +541,26 @@ def sdds2dicts(sdds_filepath, str_format=""):
                     sys.stderr.write("\n")
                     sys.stderr.flush()
                     raise
+            else:
+                params[_k] = _v
+
         output["params"] = params
-    if columns:
-        for _k, _v in columns.items():
+
+    if column_name_list:
+        columns = {}
+        for _k in column_name_list:
+            if _k in double_column_name_list:
+                _v = double_columns[_k]
+            elif _k in nondouble_column_name_list:
+                _v = nondouble_columns[_k]
+            else:
+                raise RuntimeError
+
             if meta["columns"][_k]["TYPE"] in ("long", "short"):
                 columns[_k] = np.array(_v).astype(int)
             else:
                 columns[_k] = np.array(_v)
+
         output["columns"] = columns
 
     return output, meta

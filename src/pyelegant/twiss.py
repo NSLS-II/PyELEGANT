@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 
 import h5py
@@ -33,6 +34,7 @@ def calc_ring_twiss(
     del_tmp_files=True,
     run_local=True,
     remote_opts=None,
+    sdds_str_format="%25.16e",
 ):
     """"""
 
@@ -62,6 +64,7 @@ def calc_ring_twiss(
         del_tmp_files=del_tmp_files,
         run_local=run_local,
         remote_opts=remote_opts,
+        sdds_str_format=sdds_str_format,
     )
 
 
@@ -95,6 +98,7 @@ def calc_line_twiss(
     del_tmp_files=True,
     run_local=True,
     remote_opts=None,
+    sdds_str_format="%25.16e",
 ):
     """"""
 
@@ -132,6 +136,7 @@ def calc_line_twiss(
         del_tmp_files=del_tmp_files,
         run_local=run_local,
         remote_opts=remote_opts,
+        sdds_str_format=sdds_str_format,
     )
 
 
@@ -167,6 +172,7 @@ def _calc_twiss(
     del_tmp_files=True,
     run_local=True,
     remote_opts=None,
+    sdds_str_format="%25.16e",
 ):
     """"""
 
@@ -334,7 +340,7 @@ def _calc_twiss(
             output_filepaths=None,
         )
 
-    _d = ed.load_sdds_output_files()
+    _d = ed.load_sdds_output_files(str_format=sdds_str_format)
     output, meta = _d["data"], _d["meta"]
 
     if calc_matrix_lin_chrom:
