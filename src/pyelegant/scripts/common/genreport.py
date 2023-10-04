@@ -1452,7 +1452,7 @@ class Report_NSLS2U_Default:
                         width=plx.utils.NoEscape(r"0.5\linewidth"),
                     )
                     doc.append(plx.VerticalSpace(plx.NoEscape("-10pt")))
-                    fig.add_caption("Dyanmic Aperture.")
+                    fig.add_caption("Dynamic Aperture.")
 
     def add_pdf_L2_fmap(self, plots_pdf_paths, nonlin_data_filepaths):
         """"""
