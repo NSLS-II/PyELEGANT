@@ -2999,6 +2999,7 @@ def calc_chrom_twiss(
         "insert_elements",
         name="*",
         exclude="*",
+        allow_no_matches=True,
         add_at_start=True,
         element_def=temp_malign_elem_def,
     )
@@ -3245,6 +3246,7 @@ def calc_chrom_track(
         "insert_elements",
         name="*",
         exclude="*",
+        allow_no_matches=True,
         add_at_start=True,
         element_def=temp_watch_elem_def,
     )
@@ -4962,6 +4964,7 @@ def _calc_tswa(
         "insert_elements",
         name="*",
         exclude="*",
+        allow_no_matches=True,
         add_at_start=True,
         element_def=temp_watch_elem_def,
     )
@@ -7854,6 +7857,7 @@ def track(
         "insert_elements",
         name="*",
         exclude="*",
+        allow_no_matches=True,
         add_at_start=True,
         element_def=temp_watch_elem_def,
     )
@@ -8074,6 +8078,7 @@ def calc_offmom_closed_orbits(
         "insert_elements",
         name="*",
         exclude="*",
+        allow_no_matches=True,
         add_at_start=True,
         element_def=temp_malign_elem_def,
     )

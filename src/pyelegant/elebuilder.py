@@ -471,6 +471,8 @@ class EleBlocks:
             STRING exclude = NULL;
             double s_start = -1;
             double s_end = -1;
+            STRING start_at_element = NULL;
+            STRING end_at_element = NULL;
             long skip = 1;
             long disable = 0;
             long insert_before = 0;
@@ -479,6 +481,8 @@ class EleBlocks:
             STRING element_def = NULL;
             long total_occurrences = 0;
             long occurrence[100]={0};
+            long allow_no_insertions = 0;
+            long allow_no_matches = 0;
         &end
         """
         )
