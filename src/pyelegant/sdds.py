@@ -492,6 +492,12 @@ def sdds2dicts(sdds_filepath, str_format="", show_cmd=False, suppress_err_msg=Tr
         return output, meta
 
     if double_param_name_list or double_column_name_list:
+
+        if double_param_name_list is None:
+            double_param_name_list = []
+        if double_column_name_list is None:
+            double_column_name_list = []
+
         double_params, double_columns = printout(
             sdds_filepath,
             param_name_list=double_param_name_list,
