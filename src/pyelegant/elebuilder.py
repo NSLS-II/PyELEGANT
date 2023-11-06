@@ -2761,7 +2761,9 @@ class EleDesigner:
                 if is_scalar:
                     try:
                         block.append(
-                            ("{k} = {v:%s}" % self.double_format).format(k=k, v=v)
+                            (
+                                "{k} = {v:%s}" % self.double_format.replace("%", "")
+                            ).format(k=k, v=v)
                         )
                     except ValueError:
                         if v.startswith("<") and v.endswith(">"):  # macro definition
@@ -2775,7 +2777,8 @@ class EleDesigner:
                         try:
                             block.append(
                                 (
-                                    "{k}[{array_index:d}] = {v:%s}" % self.double_format
+                                    "{k}[{array_index:d}] = {v:%s}"
+                                    % self.double_format.replace("%", "")
                                 ).format(k=k, v=v[array_index], array_index=array_index)
                             )
                         except ValueError:

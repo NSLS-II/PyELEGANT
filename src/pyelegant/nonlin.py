@@ -346,7 +346,7 @@ def _calc_cmap(
     output, meta = {}, {}
     for k, v in tmp_filepaths.items():
         try:
-            output[k], meta[k] = sdds.sdds2dicts(v)
+            output[k], meta[k] = sdds.sdds2dicts(v, str_format="%25.16e")
         except:
             continue
 
@@ -1481,7 +1481,7 @@ def calc_find_aper_nlines(
     output, meta = {}, {}
     for k, v in tmp_filepaths.items():
         try:
-            output[k], meta[k] = sdds.sdds2dicts(v)
+            output[k], meta[k] = sdds.sdds2dicts(v, str_format="%25.16e")
         except:
             continue
 
@@ -2173,7 +2173,7 @@ def calc_mom_aper(
     output, meta = {}, {}
     for k, v in tmp_filepaths.items():
         try:
-            output[k], meta[k] = sdds.sdds2dicts(v)
+            output[k], meta[k] = sdds.sdds2dicts(v, str_format="%25.16e")
         except:
             continue
 
@@ -2444,7 +2444,7 @@ def calc_Touschek_lifetime(
     # pass
 
     try:
-        sdds.sdds2dicts(mmap_filepath)
+        sdds.sdds2dicts(mmap_filepath, str_format="%25.16e")
         # "mmap_filepath" is a valid SDDS file
         mmap_sdds_filepath = mmap_filepath
     except:
@@ -2499,7 +2499,7 @@ def calc_Touschek_lifetime(
     output, meta = {}, {}
     for k, v in output_tmp_filepaths.items():
         try:
-            output[k], meta[k] = sdds.sdds2dicts(v)
+            output[k], meta[k] = sdds.sdds2dicts(v, str_format="%25.16e")
         except:
             continue
 
@@ -3042,7 +3042,7 @@ def calc_chrom_twiss(
                 print_stderr=std_print_enabled["err"],
             )
 
-            output, _ = sdds.sdds2dicts(twi_filepath)
+            output, _ = sdds.sdds2dicts(twi_filepath, str_format="%25.16e")
 
             nuxs[i] = output["params"]["nux"]
             nuys[i] = output["params"]["nuy"]
@@ -3320,7 +3320,7 @@ def calc_chrom_track(
             # tElapsed['run_ele'] += time.time() - t0
 
             # t0 = time.time()
-            output, _ = sdds.sdds2dicts(watch_pathobj)
+            output, _ = sdds.sdds2dicts(watch_pathobj, str_format="%25.16e")
             # tElapsed['sdds2dicts'] += time.time() - t0
 
             # t0 = time.time()
@@ -3449,7 +3449,7 @@ def calc_chrom_track(
                     print(f"stdout: {out}")
                 if err:
                     print(f"stderr: {err}")
-            naff_d, naff_meta = sdds.sdds2dicts(naff_sdds_path)
+            naff_d, naff_meta = sdds.sdds2dicts(naff_sdds_path, str_format="%25.16e")
 
             nus["x"][iDelta] = naff_d["columns"]["xFrequency"][0]
             nus["y"][iDelta] = naff_d["columns"]["yFrequency"][0]
@@ -3951,7 +3951,7 @@ def _calc_chrom_track_get_tbt(
                 print_stderr=print_stderr,
             )
 
-            output, _ = sdds.sdds2dicts(watch_pathobj)
+            output, _ = sdds.sdds2dicts(watch_pathobj, str_format="%25.16e")
 
             cols = output["columns"]
             for k in list(sub_tbt):
@@ -5035,7 +5035,7 @@ def _calc_tswa(
             # tElapsed['run_ele'] += time.time() - t0
 
             # t0 = time.time()
-            output, _ = sdds.sdds2dicts(watch_pathobj)
+            output, _ = sdds.sdds2dicts(watch_pathobj, str_format="%25.16e")
             # tElapsed['sdds2dicts'] += time.time() - t0
 
             # t0 = time.time()
@@ -5169,7 +5169,7 @@ def _calc_tswa(
                     print(f"stdout: {out}")
                 if err:
                     print(f"stderr: {err}")
-            naff_d, naff_meta = sdds.sdds2dicts(naff_sdds_path)
+            naff_d, naff_meta = sdds.sdds2dicts(naff_sdds_path, str_format="%25.16e")
 
             nus["x"][iXY] = naff_d["columns"]["xFrequency"][0]
             nus["y"][iXY] = naff_d["columns"]["yFrequency"][0]
@@ -5434,7 +5434,7 @@ def _calc_tswa_get_tbt(
                 print_stderr=print_stderr,
             )
 
-            output, _ = sdds.sdds2dicts(watch_pathobj)
+            output, _ = sdds.sdds2dicts(watch_pathobj, str_format="%25.16e")
 
             cols = output["columns"]
             for k in list(sub_tbt):
@@ -7765,6 +7765,7 @@ def track(
     xp0=0.0,
     y0=0.0,
     yp0=0.0,
+    t0=0.0,
     delta0=0.0,
     output_coordinates=("x", "xp", "y", "yp", "delta"),
     double_format="",
@@ -7796,6 +7797,7 @@ def track(
         xp0=xp0,
         y0=y0,
         yp0=yp0,
+        t0=t0,
         delta0=delta0,
         output_coordinates=output_coordinates,
         double_format=double_format,
@@ -7828,7 +7830,9 @@ def track(
 
     watch_pathobj = ele_pathobj.with_suffix(".wc")
 
-    ed = elebuilder.EleDesigner(ele_filepath, double_format=".12g")
+    ed = elebuilder.EleDesigner(
+        ele_filepath, double_format=(".12g" if double_format == "" else double_format)
+    )
 
     elebuilder.add_transmute_blocks(ed, transmute_elements)
 
@@ -7879,6 +7883,7 @@ def track(
     centroid[1] = xp0
     centroid[2] = y0
     centroid[3] = yp0
+    centroid[4] = t0
     centroid[5] = delta0
     #
     ed.add_block("bunched_beam", n_particles_per_bunch=1, centroid=centroid)
@@ -7929,21 +7934,21 @@ def track(
             remote_opts, ele_filepath, err_log_check, nMaxRemoteRetry
         )
     #
-    output, _ = sdds.sdds2dicts(watch_pathobj)
+    output, _ = sdds.sdds2dicts(watch_pathobj, str_format="%25.16e")
     #
     cols = output["columns"]
     #
-    if double_format != "":
-        coord_keys = [k if k != "delta" else "p" for k in list(tbt)]
-        _, _tbt_cols = sdds.printout(
-            watch_pathobj,
-            column_name_list=coord_keys,
-            param_name_list=[],
-            str_format=double_format,
-            suppress_err_msg=True,
-        )
-        for k, v in _tbt_cols.items():
-            cols[k] = v
+    # if double_format != "":
+    #     coord_keys = [k if k != "delta" else "p" for k in list(tbt)]
+    #     _, _tbt_cols = sdds.printout(
+    #         watch_pathobj,
+    #         column_name_list=coord_keys,
+    #         param_name_list=[],
+    #         str_format=double_format,
+    #         suppress_err_msg=True,
+    #     )
+    #     for k, v in _tbt_cols.items():
+    #         cols[k] = v
     #
     for k in list(tbt):
         if k == "delta":
@@ -8007,6 +8012,7 @@ def calc_offmom_closed_orbits(
     iteration_fraction=0.1,
     closed_orbit_iterations=500,
     use_beamline=None,
+    double_format="",
     N_KICKS=None,
     transmute_elements=None,
     ele_filepath=None,
@@ -8055,7 +8061,9 @@ def calc_offmom_closed_orbits(
         ele_filepath = str(ele_pathobj.resolve())
         tmp.close()
 
-    ed = elebuilder.EleDesigner(ele_filepath, double_format=".12g")
+    ed = elebuilder.EleDesigner(
+        ele_filepath, double_format=(".12g" if double_format == "" else double_format)
+    )
 
     elebuilder.add_transmute_blocks(ed, transmute_elements)
 
@@ -8164,8 +8172,8 @@ def calc_offmom_closed_orbits(
                     print_stderr=std_print_enabled["err"],
                 )
 
-                clo_output, _ = sdds.sdds2dicts(clo_filepath)
-                fin_output, _ = sdds.sdds2dicts(fin_filepath)
+                clo_output, _ = sdds.sdds2dicts(clo_filepath, str_format="%25.16e")
+                fin_output, _ = sdds.sdds2dicts(fin_filepath, str_format="%25.16e")
 
                 if _is_positive:
                     j = positive_inds[i]
