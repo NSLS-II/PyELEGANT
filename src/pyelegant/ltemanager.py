@@ -131,6 +131,45 @@ class Lattice:
 
         return kickmap_filepaths
 
+    def extract_filepaths_from_elem_defs(self, prop_name: str, elem_type: str = ""):
+
+        filepaths = {"raw": {}, "abs": {}}
+
+        for name, elem_type_in_def, prop_str in self.elem_defs:
+            name = name.upper()
+
+            if elem_type:
+                if elem_type_in_def != elem_type:
+                    continue
+
+            fp_str = self.parse_elem_properties(prop_str).get(prop_name, "")
+
+            if (fp_str.startswith('"') and fp_str.endswith('"')) or (
+                fp_str.startswith("'") and fp_str.endswith("'")
+            ):
+                fp_str = fp_str[1:-1]
+
+            if fp_str == "":
+                continue
+
+            filepaths["raw"][name] = fp_str
+
+            abs_fp = (self.elem_files_root_folder / fp_str).resolve()
+
+            filepaths["abs"][name] = str(abs_fp)
+
+        return filepaths
+
+    def get_systematic_multipole_filepaths(self):
+        """"""
+
+        return self.extract_filepaths_from_elem_defs("SYSTEMATIC_MULTIPOLES")
+
+    def get_random_multipole_filepaths(self):
+        """"""
+
+        return self.extract_filepaths_from_elem_defs("RANDOM_MULTIPOLES")
+
     def remove_comments(self, text):
         """"""
 
@@ -535,27 +574,37 @@ class Lattice:
             header_comment=header_comment,
             orig_LTE_filepath=str(Path(self.LTE_filepath).resolve()),
             raw_LTE_text=self.LTE_text,  # save raw LTE text
+            suppl={},
         )
 
-        km_files = self.get_kickmap_filepaths()
+        for file_type, method in [
+            ("km", self.get_kickmap_filepaths),
+            ("sys_mpole", self.get_systematic_multipole_filepaths),
+            ("rnd_mpole", self.get_random_multipole_filepaths),
+        ]:
+            files_d = method()
+            if files_d["raw"]:
+                u_folderpaths = np.unique(
+                    [
+                        str(Path(abs_path).parent)
+                        for elem_name, abs_path in files_d["abs"].items()
+                    ]
+                ).tolist()
 
-        u_folderpaths = np.unique(
-            [
-                str(Path(abs_path).parent)
-                for elem_name, abs_path in km_files["abs"].items()
-            ]
-        ).tolist()
+                suppl_contents = dict(
+                    unique_parents=u_folderpaths, meta={}, file_contents={}
+                )
 
-        contents["km"] = dict(unique_parents=u_folderpaths, meta={}, file_contents={})
+                for elem_name, abs_path in files_d["abs"].items():
+                    suppl_contents["file_contents"][abs_path] = (
+                        Path(abs_path).read_bytes().decode("latin-1")
+                    )
+                    suppl_contents["meta"][elem_name] = dict(
+                        abs_path=abs_path,
+                        folder_index=u_folderpaths.index(str(Path(abs_path).parent)),
+                    )
 
-        for elem_name, abs_path in km_files["abs"].items():
-            contents["km"]["file_contents"][abs_path] = (
-                Path(abs_path).read_bytes().decode("latin-1")
-            )
-            contents["km"]["meta"][elem_name] = dict(
-                abs_path=abs_path,
-                folder_index=u_folderpaths.index(str(Path(abs_path).parent)),
-            )
+                contents["suppl"][file_type] = suppl_contents
 
         with gzip.GzipFile(output_ltezip_filepath, "wb") as f:
             f.write(json.dumps(contents).encode("utf-8"))
@@ -568,6 +617,7 @@ class Lattice:
         use_abs_paths_for_suppl_files=True,
         overwrite_lte=False,
         overwrite_suppl=False,
+        double_format="%.16g",
     ):
         """
         If "output_lte_filepath_str" is not specified, a new LTE file will be
@@ -589,7 +639,11 @@ class Lattice:
         (default).
         """
 
-        suppl_files_folderpath_d = dict(km=None)
+        double_format = double_format.replace("%", ":")
+
+        suppl_files_folderpath_d = {}
+
+        suppl_files_folderpath = Path(suppl_files_folderpath_str)
 
         with gzip.GzipFile(ltezip_filepath, "rb") as f:
             contents = json.loads(f.read().decode("utf-8"))
@@ -627,55 +681,73 @@ class Lattice:
         # Add element definition sections
         lines.append("\n")
         _newly_created_suppl_filepaths = collections.defaultdict(list)
+        suppl_contents = contents["suppl"]
+        elem_names_w_suppl_filepaths = {
+            file_type: list(_d["meta"]) for file_type, _d in suppl_contents.items()
+        }
         for elem_name, elem_type, prop_str in d["elem_defs"]:
-            if elem_type == "UKICKMAP":
-                temp_prop_str_list = []
-                for token in prop_str.split(","):
-                    if token.split("=")[0].strip() == "INPUT_FILE":
-                        orig_abs_path = contents["km"]["meta"][elem_name]["abs_path"]
-                        orig_filename = str(Path(orig_abs_path).name)
+            prop_d = temp_LTE.parse_elem_properties(prop_str)
+            for file_type, suppl_elem_names in elem_names_w_suppl_filepaths.items():
+                if elem_name not in suppl_elem_names:
+                    continue
 
-                        if suppl_files_folderpath_d["km"] is None:
-                            suppl_files_folderpath_d["km"] = Path(
-                                suppl_files_folderpath_str
-                            ).joinpath("km")
-                            suppl_files_folderpath_d["km"].mkdir(
-                                parents=True, exist_ok=True
+                if file_type not in suppl_files_folderpath_d:
+                    suppl_files_folderpath_d[file_type] = (
+                        suppl_files_folderpath / file_type
+                    )
+                    suppl_files_folderpath_d[file_type].mkdir(
+                        parents=True, exist_ok=True
+                    )
+
+                meta = suppl_contents[file_type]["meta"][elem_name]
+
+                orig_abs_path = meta["abs_path"]
+                orig_filename = Path(orig_abs_path).name
+
+                new_rel_path = suppl_files_folderpath_d[file_type] / orig_filename
+                new_abs_path = new_rel_path.resolve()
+
+                if new_abs_path not in _newly_created_suppl_filepaths[file_type]:
+                    if new_abs_path.exists() and (not overwrite_suppl):
+                        raise FileExistsError(
+                            (
+                                f"Cannot write a new LTE supplementary file "
+                                f'to "{new_abs_path}"'
                             )
-
-                        new_rel_path = suppl_files_folderpath_d["km"].joinpath(
-                            orig_filename
                         )
-                        new_abs_path = new_rel_path.resolve()
-                        if new_abs_path not in _newly_created_suppl_filepaths["km"]:
-                            if new_abs_path.exists() and (not overwrite_suppl):
-                                raise FileExistsError(
-                                    (
-                                        f"Cannot write a new LTE supplementary file "
-                                        f'to "{new_abs_path}"'
-                                    )
-                                )
 
-                            new_abs_path.write_bytes(
-                                contents["km"]["file_contents"][orig_abs_path].encode(
-                                    "latin-1"
-                                )
-                            )
-                            print(f"* Created LTE supplementary file: {new_abs_path}")
-                            _newly_created_suppl_filepaths["km"].append(new_abs_path)
+                    new_abs_path.write_bytes(
+                        suppl_contents[file_type]["file_contents"][
+                            orig_abs_path
+                        ].encode("latin-1")
+                    )
+                    print(f"* Created LTE supplementary file: {new_abs_path}")
+                    _newly_created_suppl_filepaths[file_type].append(new_abs_path)
 
-                        if use_abs_paths_for_suppl_files:
-                            token = f'INPUT_FILE="{new_abs_path}"'
-                        else:
-                            token = f'INPUT_FILE="{new_rel_path}"'
+                if file_type == "km":
+                    filepath_prop_name = "INPUT_FILE"
+                elif file_type == "sys_mpole":
+                    filepath_prop_name = "SYSTEMATIC_MULTIPOLES"
+                elif file_type == "rnd_mpole":
+                    filepath_prop_name = "RANDOM_MULTIPOLES"
+                else:
+                    raise ValueError(file_type)
 
-                    temp_prop_str_list.append(token.strip())
+                assert filepath_prop_name in prop_d
+                if use_abs_paths_for_suppl_files:
+                    prop_d[filepath_prop_name] = f'"{new_abs_path}"'
+                else:
+                    prop_d[filepath_prop_name] = f'"{new_rel_path}"'
 
-                prop_str = ", ".join(temp_prop_str_list)
-            else:
-                prop_str = ", ".join([token.strip() for token in prop_str.split(",")])
+            prop_str = ", ".join(
+                [
+                    ("{}={%s}" % double_format).format(_k, _v)
+                    if isinstance(_v, float)
+                    else f"{_k}={_v}"
+                    for _k, _v in prop_d.items()
+                ]
+            )
 
-            prop_str = prop_str.strip()
             if prop_str == "":
                 temp_line = f"{elem_name}: {elem_type}"
             else:
