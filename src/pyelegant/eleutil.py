@@ -105,6 +105,55 @@ def save_lattice_after_alter_elements(
         print(f'Failed to delete "{ele_filepath}"')
 
 
+def save_lattice_after_transmute_elements(
+    input_LTE_filepath: str,
+    new_LTE_filepath: str,
+    transmute_elements: Union[Dict, List],
+) -> None:
+    """"""
+
+    tmp = tempfile.NamedTemporaryFile(
+        dir=os.getcwd(), delete=False, prefix=f"tmp_", suffix=".ele"
+    )
+    ele_filepath = os.path.abspath(tmp.name)
+    tmp.close()
+
+    ed = elebuilder.EleDesigner(
+        ele_filepath, double_format=".12g", auto_print_on_add=False
+    )
+
+    if isinstance(transmute_elements, dict):
+        ed.add_block("transmute_elements", **transmute_elements)
+    else:
+        for block in transmute_elements:
+            ed.add_block("transmute_elements", **block)
+
+    ed.add_newline()
+
+    ed.add_block("run_setup", lattice=input_LTE_filepath, p_central_mev=1.0)
+    # ^ The value for "p_central_mev" being used here is just an arbitrary
+    #   non-zero value. If it stays as the default value of 0, then ELEGANT will
+    #   complain.
+
+    ed.add_newline()
+
+    ed.add_block("save_lattice", filename=new_LTE_filepath)
+
+    ed.write()
+
+    run(
+        ele_filepath,
+        print_cmd=False,
+        print_stdout=std_print_enabled["out"],
+        print_stderr=std_print_enabled["err"],
+    )
+
+    try:
+        os.remove(ele_filepath)
+    except:
+        print(f'Failed to delete "{ele_filepath}"')
+
+
 def get_transport_matrices(
     input_LTE_filepath: str,
     use_beamline: Optional[str] = None,
