@@ -870,6 +870,30 @@ class Lattice:
 
         return self.get_elem_inds_from_names(matched_elem_names)
 
+    def get_elem_props_from_regex(self, pattern):
+
+        matched_elem_names = [
+            elem_name
+            for elem_name in self._unique_used_elem_names
+            if re.match(pattern, elem_name) is not None
+        ]
+
+        elem_inds = self.get_elem_inds_from_names(matched_elem_names)
+
+        d = {}
+
+        for elem_name, ei in zip(matched_elem_names, elem_inds):
+            sub_d = d[elem_name] = {}
+
+            sub_d["index"] = ei
+
+            matched_index = self._all_used_elem_names.index(elem_name)
+            _, sub_d["elem_type"], prop_str = self.elem_defs[matched_index]
+
+            sub_d["properties"] = self.parse_elem_properties(prop_str)
+
+        return d
+
     def get_elem_inds_from_name_occur_tuples(self, name_occur_tuples):
         """"""
 
