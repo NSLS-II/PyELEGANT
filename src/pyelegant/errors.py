@@ -30,6 +30,40 @@ else:
 
 SupportType = IntEnum("SupportType", ["section", "plinth", "girder"], start=0)
 
+AVAIL_ELEM_PROPS = {}
+
+
+def _update_AVAIL_ELEM_PROPS():
+    if AVAIL_ELEM_PROPS:
+        return
+
+    from ruamel import yaml
+
+    yaml_filepath = Path(__file__).parent / "elegant_elem_dict.yaml"
+
+    y = yaml.YAML()
+    y.preserve_quotes = True
+    d = y.load(yaml_filepath.read_text())
+
+    sel_prop_names = [
+        "DX",
+        "DY",
+        "DZ",
+        "TILT",
+        "PITCH",
+        "YAW",
+        "ETILT",
+        "EPITCH",
+        "EYAW",
+    ]
+
+    for p_name in sel_prop_names:
+        AVAIL_ELEM_PROPS[p_name] = [
+            elem_type
+            for elem_type, sub_d in d["elements"].items()
+            if any([L[0] == p_name for L in sub_d["table"]])
+        ]
+
 
 @dataclass
 class TGES:
@@ -460,17 +494,18 @@ class MagnetError:
 class Errors:
     def __init__(
         self,
-        base_LTE: ltemanager.Lattice,
+        design_LTE: ltemanager.Lattice,
         rng: Union[int, np.random.Generator] = 42,
         modified_name_prefix="",
         modified_name_suffix="",
     ) -> None:
-        assert isinstance(base_LTE, ltemanager.Lattice)
-        self.base_LTE = base_LTE
 
-        self.used_beamline_name = self.base_LTE.used_beamline_name
+        assert isinstance(design_LTE, ltemanager.Lattice)
+        self.design_LTE = design_LTE
 
-        d = self.base_LTE.get_used_beamline_element_defs(
+        self.used_beamline_name = self.design_LTE.used_beamline_name
+
+        d = self.design_LTE.get_used_beamline_element_defs(
             used_beamline_name=self.used_beamline_name
         )
         self.beamline_defs = d["beamline_defs"]
@@ -486,11 +521,13 @@ class Errors:
         self._init_support_rotations()
         self.n_elems = len(self.flat_LTE.flat_used_elem_names) + 1  # +1 for __BEG__
 
-        self.ring = [
-            dict(name=self.flat_LTE.flat_used_elem_names[i - 1])
-            if i != 0
-            else dict(name="__BEG__")
+        _flat_elem_names = [
+            self.flat_LTE.flat_used_elem_names[i - 1] if i != 0 else "__BEG__"
             for i in range(self.n_elems)
+        ]
+        self.ring = [
+            dict(name=name, elem_type=self.flat_LTE.get_elem_type_from_name(name))
+            for name in _flat_elem_names
         ]
 
         self._supports_defined = {
@@ -596,7 +633,7 @@ class Errors:
         )
         new_LTE_filepath = Path(tmp.name)
 
-        self.base_LTE.write_LTE(
+        self.design_LTE.write_LTE(
             new_LTE_filepath,
             self.used_beamline_name,
             self.elem_defs,
@@ -1237,7 +1274,7 @@ class Errors:
             plt.figure()
             plt.plot(self.s_ends, self.support_rots["yaw"], ".-")
 
-    def generate_LTE_file(self, new_LTE_filepath):
+    def generate_LTE_file(self, output_LTEZIP_filepath):
         self.mod_prop_dict_list.clear()
         mods = self.mod_prop_dict_list
 
@@ -1276,27 +1313,55 @@ class Errors:
 
             elif err_type == "support":
 
+                _update_AVAIL_ELEM_PROPS()
+                elem_type = self.ring[ei]["elem_type"]
+
                 for coord in "xyz":
                     prop_val = self.support_offsets[coord][ei]
                     if prop_val != 0.0:
+                        prop_name = f"d{coord}".upper()
+                        if elem_type not in AVAIL_ELEM_PROPS[prop_name]:
+                            continue
                         mods.append(
                             dict(
                                 elem_name=elem_name,
-                                prop_name=f"d{coord}".upper(),
+                                prop_name=prop_name,
                                 prop_val=prop_val,
                             )
                         )
 
-                # Note: ELEGANT `MULT` elements do not have "pitch" and "yaw".
                 prop_val = self.support_rots["roll"][ei]
                 if prop_val != 0.0:
+                    if elem_type in AVAIL_ELEM_PROPS["ETILT"]:
+                        prop_name = "ETILT"
+                    elif elem_type in AVAIL_ELEM_PROPS["TILT"]:
+                        prop_name = "TILT"
+                    else:
+                        continue
                     mods.append(
                         dict(
                             elem_name=elem_name,
-                            prop_name="TILT",
+                            prop_name=prop_name,
                             prop_val=prop_val,
                         )
                     )
+
+                for k in ["pitch", "yaw"]:
+                    prop_val = self.support_rots[k][ei]
+                    if prop_val != 0.0:
+                        if elem_type in AVAIL_ELEM_PROPS[f"E{k.upper()}"]:
+                            prop_name = f"E{k.upper()}"
+                        elif elem_type in AVAIL_ELEM_PROPS[k.upper()]:
+                            prop_name = k.upper()
+                        else:
+                            continue
+                        mods.append(
+                            dict(
+                                elem_name=elem_name,
+                                prop_name=prop_name,
+                                prop_val=prop_val,
+                            )
+                        )
 
             elif err_type == "bpm":
                 for coord in "xy":
@@ -1445,17 +1510,17 @@ class Errors:
             else:
                 raise ValueError(err_type)
 
-        ltemanager.write_modified_LTE(
-            new_LTE_filepath,
-            mods,
-            LTE_obj=self.flat_LTE,
+        temp_LTE_filepath = ltemanager.write_temp_modified_LTE(
+            mods, LTE_obj=self.flat_LTE
         )
-
         new_LTE = ltemanager.Lattice(
-            new_LTE_filepath, used_beamline_name=self.flat_LTE.used_beamline_name
+            temp_LTE_filepath, used_beamline_name=self.flat_LTE.used_beamline_name
         )
-        new_LTEZIP_filepath = new_LTE_filepath.with_suffix(".ltezip")
-        new_LTE.zip_lte(new_LTEZIP_filepath)
+        new_LTE.zip_lte(output_LTEZIP_filepath)
+        try:
+            temp_LTE_filepath.unlink()
+        except:
+            pass
 
         for fp in temp_suppl_filepaths:
             try:
@@ -1463,10 +1528,9 @@ class Errors:
             except:
                 pass
 
-        return new_LTEZIP_filepath
-
 
 if __name__ == "__main__":
+
     import sys
 
     import pyelegant as pe
