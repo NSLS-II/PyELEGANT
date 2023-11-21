@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import re
 import tempfile
+from typing import Union
 
 import numpy as np
 
@@ -12,7 +13,14 @@ import numpy as np
 class Lattice:
     """ """
 
-    def __init__(self, LTE_filepath="", used_beamline_name=""):
+    def __init__(
+        self,
+        LTE_filepath: Union[Path, str] = "",
+        LTEZIP_filepath: Union[Path, str] = "",
+        used_beamline_name: str = "",
+        tempdir_path: Union[Path, str, None] = None,
+        del_tempdir_on_exit: bool = True,
+    ):
         """Constructor"""
 
         if used_beamline_name is None:
@@ -49,8 +57,18 @@ class Lattice:
             "WATCH",
         ]
 
-        if LTE_filepath != "":
-            self.load_LTE(LTE_filepath, used_beamline_name=used_beamline_name)
+        self.tempdir = None
+        self._LTE_suppl_files_folderpath = None
+        self.del_tempdir_on_exit = del_tempdir_on_exit
+
+        if (LTE_filepath != "") or (LTEZIP_filepath != ""):
+            self.load_LTE(
+                LTE_filepath=LTE_filepath,
+                LTEZIP_filepath=LTEZIP_filepath,
+                used_beamline_name=used_beamline_name,
+                tempdir_path=tempdir_path,
+                del_tempdir_on_exit=del_tempdir_on_exit,
+            )
 
         self._persistent_LTE_d = None
 
@@ -62,22 +80,110 @@ class Lattice:
         self.cleaned_LTE_text = self.remove_comments(self.cleaned_LTE_text)
         self.cleaned_LTE_text = self.delete_ampersands(self.cleaned_LTE_text)
 
+    @staticmethod
+    def temp_unzip_ltezip(LTEZIP_filepath, tempdir_path=None, del_tempdir_on_exit=True):
+
+        LTEZIP_filepath = Path(LTEZIP_filepath)
+        assert LTEZIP_filepath.exists()
+
+        tempdir = tempfile.TemporaryDirectory(prefix="tmpLteZip_", dir=tempdir_path)
+        print(
+            f'\nTemporary directory "{tempdir.name}" has been created to unzip the LTEZIP file.'
+        )
+
+        generated_temp_folderpath = Path(tempdir.name)
+
+        # Until Python 3.12, there is no "delete" option for TemporaryDirectory().
+        # So this is the workaround to keep the temp directory, if so desired.
+        if not del_tempdir_on_exit:
+            tempdir.cleanup()
+            generated_temp_folderpath.mkdir(parents=True, exist_ok=True)
+            tempdir = None
+
+        temp_lte_file = tempfile.NamedTemporaryFile(
+            dir=generated_temp_folderpath, delete=False, suffix=".lte"
+        )
+        suppl_files_folderpath = generated_temp_folderpath / "lte_suppl"
+
+        temp_lte_filepath = Lattice.unzip_lte(
+            LTEZIP_filepath,
+            output_lte_filepath=Path(temp_lte_file.name),
+            suppl_files_folderpath=suppl_files_folderpath,
+            overwrite_lte=True,
+            overwrite_suppl=True,
+        )
+        print(f'\nTemporary LTE file "{temp_lte_filepath}" has been created.')
+
+        return dict(
+            tempdir=tempdir,
+            LTE_filepath=temp_lte_filepath,
+            suppl_files_folderpath=suppl_files_folderpath,
+        )
+
+    def remove_tempdir(self):
+
+        if self.tempdir is None:
+            return
+
+        self.tempdir.cleanup()
+
+    def __del__(self):
+
+        if self.del_tempdir_on_exit:
+            self.remove_tempdir()
+
     def load_LTE(
-        self, LTE_filepath, used_beamline_name="", elem_files_root_folderpath=None
+        self,
+        LTE_filepath: Union[Path, str] = "",
+        LTEZIP_filepath: Union[Path, str] = "",
+        used_beamline_name: str = "",
+        elem_files_root_folderpath=None,
+        tempdir_path=None,
+        del_tempdir_on_exit=True,
     ):
         """"""
 
         if used_beamline_name is None:
             used_beamline_name = ""
 
-        LTE_file = Path(LTE_filepath)
+        if (LTE_filepath == "") and (LTEZIP_filepath == ""):
+            raise ValueError(
+                "Either LTE_filepath or LTEZIP_filepath must be specified."
+            )
+        if (LTE_filepath != "") and (LTEZIP_filepath != ""):
+            raise ValueError(
+                "Both LTE_filepath and LTEZIP_filepath cannot be specified."
+            )
+
+        if LTE_filepath != "":
+            LTE_filepath = Path(LTE_filepath)
+            assert LTE_filepath.exists()
+        else:
+            if LTEZIP_filepath == "":
+                raise ValueError(
+                    "Either LTE_filepath or LTEZIP_filepath must be specified."
+                )
+
+            LTEZIP_filepath = Path(LTEZIP_filepath)
+            assert LTEZIP_filepath.exists()
+
+            self.del_tempdir_on_exit = del_tempdir_on_exit
+
+            temp_d = Lattice.temp_unzip_ltezip(
+                LTEZIP_filepath,
+                tempdir_path=tempdir_path,
+                del_tempdir_on_exit=del_tempdir_on_exit,
+            )
+            self.tempdir = temp_d["tempdir"]
+            LTE_filepath = temp_d["LTE_filepath"]
+            self._LTE_suppl_files_folderpath = temp_d["suppl_files_folderpath"]
 
         if elem_files_root_folderpath is None:
-            self.elem_files_root_folder = LTE_file.parent
+            self.elem_files_root_folder = LTE_filepath.parent
         else:
             self.elem_files_root_folder = Path(elem_files_root_folderpath)
 
-        self.LTE_text = LTE_file.read_text()
+        self.LTE_text = LTE_filepath.read_text()
         self.LTE_filepath = LTE_filepath
 
         self._clean_up_LTE_text()
@@ -106,6 +212,10 @@ class Lattice:
         if unhandled_types != []:
             print("Element types that are not handled:")
             print(unhandled_types)
+
+    def get_LTE_suppl_files_folderpath(self):
+
+        return self._LTE_suppl_files_folderpath
 
     def get_kickmap_filepaths(self):
         """"""
@@ -612,15 +722,15 @@ class Lattice:
     @staticmethod
     def unzip_lte(
         ltezip_filepath,
-        output_lte_filepath_str="",
-        suppl_files_folderpath_str="./lte_suppl",
+        output_lte_filepath: Union[Path, str] = "",
+        suppl_files_folderpath: Union[Path, str] = "./lte_suppl",
         use_abs_paths_for_suppl_files=True,
         overwrite_lte=False,
         overwrite_suppl=False,
         double_format="%.16g",
     ):
         """
-        If "output_lte_filepath_str" is not specified, a new LTE file will be
+        If "output_lte_filepath" is not specified, a new LTE file will be
         created in the current directory with the same file name as the original
         LTE file.
 
@@ -643,17 +753,17 @@ class Lattice:
 
         suppl_files_folderpath_d = {}
 
-        suppl_files_folderpath = Path(suppl_files_folderpath_str)
+        suppl_files_folderpath = Path(suppl_files_folderpath)
 
         with gzip.GzipFile(ltezip_filepath, "rb") as f:
             contents = json.loads(f.read().decode("utf-8"))
 
-        if output_lte_filepath_str == "":
+        if output_lte_filepath == "":
             output_lte_filepath = Path.cwd().joinpath(
                 Path(contents["orig_LTE_filepath"]).name
             )
         else:
-            output_lte_filepath = Path(output_lte_filepath_str)
+            output_lte_filepath = Path(output_lte_filepath)
 
         if output_lte_filepath.exists() and (not overwrite_lte):
             raise FileExistsError(
@@ -787,7 +897,7 @@ class Lattice:
         # Write the LTE file
         output_lte_filepath.write_text("\n".join(lines))
 
-        return str(output_lte_filepath.resolve())
+        return output_lte_filepath
 
     @staticmethod
     def get_wrapped_line(line, max_len=80, sep=",", indent=2):
@@ -1016,7 +1126,7 @@ def write_temp_modified_LTE(
         LTE_obj=LTE_obj,
     )
 
-    return temp_LTE_filepstr
+    return Path(temp_LTE_filepstr)
 
 
 def write_modified_LTE(
