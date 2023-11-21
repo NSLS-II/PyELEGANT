@@ -6,7 +6,8 @@ repos:
   hooks:
   - id: trailing-whitespace
   - id: end-of-file-fixer
-  - id: check-yaml
+#  - id: check-yaml    # The line the script `yaml = ruamel.yaml.YAML(typ='safe')`
+#    args: ['-unsafe'] # causes otherwise valid YAML files to fail. Removing this on 11/21/2023.
   - id: check-added-large-files
 - repo: https://github.com/psf/black
   rev: 22.3.0
