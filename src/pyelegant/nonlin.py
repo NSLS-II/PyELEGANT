@@ -1349,6 +1349,8 @@ def calc_find_aper_nlines(
     ymax=0.1,
     ini_ndiv=21,
     n_lines=11,
+    n_splits=0,
+    split_fraction=0.5,
     neg_y_search=False,
     n_turns=1024,
     use_beamline=None,
@@ -1387,6 +1389,8 @@ def calc_find_aper_nlines(
     input_dict["ymax"] = ymax
     input_dict["ini_ndiv"] = ini_ndiv
     input_dict["n_lines"] = n_lines
+    input_dict["n_splits"] = n_splits
+    input_dict["split_fraction"] = split_fraction
     input_dict["neg_y_search"] = neg_y_search
 
     output_file_type = util.auto_check_output_file_type(
@@ -1436,8 +1440,10 @@ def calc_find_aper_nlines(
         ymax=ymax,
         nx=ini_ndiv,
         n_lines=n_lines,
+        n_splits=n_splits,
+        split_fraction=split_fraction,
         full_plane=neg_y_search,
-        offset_by_orbit=True,  # recommended according to the manual
+        offset_by_orbit=True,  # recommended according to the manual, but it appears to be not working
     )
 
     ed.write()

@@ -1,12 +1,33 @@
 import collections
+from collections import defaultdict
+from dataclasses import dataclass
+from enum import IntEnum
 import gzip
 import json
 from pathlib import Path
 import re
 import tempfile
-from typing import Union
+from typing import Dict, List, Tuple, Type, Union
 
 import numpy as np
+
+OutputType = IntEnum("OutputType", ["List", "Dict", "NumPy"])
+
+PY_TYPES = {"np_array_or_list": Union[np.ndarray, List]}
+
+ELEGANT_ELEM_DICT = {}
+
+
+@dataclass
+class ElementNameOccurrencePair:
+    name: str
+    occurrence_num: int  # start from 1
+
+
+@dataclass
+class ElementNameInstancePair:
+    name: str
+    instance_index: int  # start from 0
 
 
 ########################################################################
@@ -20,6 +41,7 @@ class Lattice:
         used_beamline_name: str = "",
         tempdir_path: Union[Path, str, None] = None,
         del_tempdir_on_exit: bool = True,
+        verbose: bool = True,
     ):
         """Constructor"""
 
@@ -61,6 +83,8 @@ class Lattice:
         self._LTE_suppl_files_folderpath = None
         self.del_tempdir_on_exit = del_tempdir_on_exit
 
+        self.verbose = verbose
+
         if (LTE_filepath != "") or (LTEZIP_filepath != ""):
             self.load_LTE(
                 LTE_filepath=LTE_filepath,
@@ -81,15 +105,17 @@ class Lattice:
         self.cleaned_LTE_text = self.delete_ampersands(self.cleaned_LTE_text)
 
     @staticmethod
-    def temp_unzip_ltezip(LTEZIP_filepath, tempdir_path=None, del_tempdir_on_exit=True):
-
+    def temp_unzip_ltezip(
+        LTEZIP_filepath, tempdir_path=None, del_tempdir_on_exit=True, verbose=True
+    ):
         LTEZIP_filepath = Path(LTEZIP_filepath)
         assert LTEZIP_filepath.exists()
 
         tempdir = tempfile.TemporaryDirectory(prefix="tmpLteZip_", dir=tempdir_path)
-        print(
-            f'\nTemporary directory "{tempdir.name}" has been created to unzip the LTEZIP file.'
-        )
+        if verbose:
+            print(
+                f'\nTemporary directory "{tempdir.name}" has been created to unzip the LTEZIP file.'
+            )
 
         generated_temp_folderpath = Path(tempdir.name)
 
@@ -111,8 +137,10 @@ class Lattice:
             suppl_files_folderpath=suppl_files_folderpath,
             overwrite_lte=True,
             overwrite_suppl=True,
+            verbose=verbose,
         )
-        print(f'\nTemporary LTE file "{temp_lte_filepath}" has been created.')
+        if verbose:
+            print(f'\nTemporary LTE file "{temp_lte_filepath}" has been created.')
 
         return dict(
             tempdir=tempdir,
@@ -121,14 +149,12 @@ class Lattice:
         )
 
     def remove_tempdir(self):
-
         if self.tempdir is None:
             return
 
         self.tempdir.cleanup()
 
     def __del__(self):
-
         if self.del_tempdir_on_exit:
             self.remove_tempdir()
 
@@ -158,6 +184,8 @@ class Lattice:
         if LTE_filepath != "":
             LTE_filepath = Path(LTE_filepath)
             assert LTE_filepath.exists()
+
+            self.LTEZIP_filepath = ""
         else:
             if LTEZIP_filepath == "":
                 raise ValueError(
@@ -167,12 +195,15 @@ class Lattice:
             LTEZIP_filepath = Path(LTEZIP_filepath)
             assert LTEZIP_filepath.exists()
 
+            self.LTEZIP_filepath = LTEZIP_filepath
+
             self.del_tempdir_on_exit = del_tempdir_on_exit
 
             temp_d = Lattice.temp_unzip_ltezip(
                 LTEZIP_filepath,
                 tempdir_path=tempdir_path,
                 del_tempdir_on_exit=del_tempdir_on_exit,
+                verbose=self.verbose,
             )
             self.tempdir = temp_d["tempdir"]
             LTE_filepath = temp_d["LTE_filepath"]
@@ -192,6 +223,7 @@ class Lattice:
 
         self.used_beamline_name = d["used_beamline_name"]
         self.beamline_defs = d["beamline_defs"]
+        self._beamline_defs_d = {e[0]: e[1] for e in self.beamline_defs}
         self.elem_defs = d["elem_defs"]
         self.flat_used_elem_names = d["flat_used_elem_names"]
 
@@ -213,8 +245,51 @@ class Lattice:
             print("Element types that are not handled:")
             print(unhandled_types)
 
-    def get_LTE_suppl_files_folderpath(self):
+        self._elem_map = {}
 
+        self._elem_names = np.array(["__BEG__"] + self.flat_used_elem_names)
+        self.n_elements = len(self._elem_names)
+        self._elem_counts = defaultdict(int)
+        self._elem_props = {}
+        self._elem_map[("name", "elem_inds")] = defaultdict(list)
+        name2inds = self._elem_map[("name", "elem_inds")]
+        self._elem_map[("type", "elem_inds")] = defaultdict(list)
+        type2inds = self._elem_map[("type", "elem_inds")]
+        self._elem_instance_indexes = []
+        for i, name in enumerate(self._elem_names):
+            self._elem_instance_indexes.append(self._elem_counts[name])
+            self._elem_counts[name] += 1
+            name2inds[name].append(i)
+
+            sub_d = {"elem_name": name, "index": i}
+
+            if name != "__BEG__":
+                matched_index = self._all_used_elem_names.index(name)
+                _, sub_d["elem_type"], prop_str = self.elem_defs[matched_index]
+                sub_d["properties"] = self.parse_elem_properties(prop_str)
+            else:
+                sub_d["elem_type"] = "__BEG__"
+                sub_d["properties"] = {}
+
+            self._elem_props[name] = sub_d
+
+            type2inds[sub_d["elem_type"]].append(i)
+
+        self._elem_instance_indexes = np.array(self._elem_instance_indexes)
+
+        self._duplicate_elem_counts = {
+            name: counts for name, counts in self._elem_counts.items() if counts != 1
+        }
+
+        # The following variables will be filled in as requested.
+
+        self._lengths = None
+        self._spos_us = None
+        self._spos_ds = None
+        self._spos_mid = None
+        self._circumf = None
+
+    def get_LTE_suppl_files_folderpath(self):
         return self._LTE_suppl_files_folderpath
 
     def get_kickmap_filepaths(self):
@@ -242,7 +317,6 @@ class Lattice:
         return kickmap_filepaths
 
     def extract_filepaths_from_elem_defs(self, prop_name: str, elem_type: str = ""):
-
         filepaths = {"raw": {}, "abs": {}}
 
         for name, elem_type_in_def, prop_str in self.elem_defs:
@@ -315,7 +389,7 @@ class Lattice:
         pattern = r"&.*[\n\r\s]+"
         return re.sub(pattern, "", text)
 
-    def get_all_elem_defs(self, LTE_text):
+    def get_all_elem_defs(self, LTE_text) -> List[Tuple]:
         """
         "LTE_text" must not contain comments and ampersands.
         """
@@ -335,7 +409,7 @@ class Lattice:
 
         return elem_def
 
-    def get_all_beamline_defs(self, LTE_text):
+    def get_all_beamline_defs(self, LTE_text) -> List[Tuple]:
         """
         "LTE_text" must not contain comments and ampersands.
         """
@@ -347,7 +421,7 @@ class Lattice:
         )
 
         beamline_def = []
-        for (name, type_name, rest) in matches:
+        for name, type_name, rest in matches:
             if type_name.upper() == "LINE":
                 rest = rest.strip().replace("=", "").replace("(", "").replace(")", "")
                 name_list = [
@@ -396,7 +470,6 @@ class Lattice:
         """
 
         if beamline_name in all_beamline_names:
-
             if used_beamline_names is not None:
                 used_beamline_names.append(beamline_name)
 
@@ -574,7 +647,6 @@ class Lattice:
             used_beamline_name = ""
 
         if self._persistent_LTE_d is None:
-
             d = self.get_used_beamline_element_defs(
                 used_beamline_name=used_beamline_name
             )
@@ -586,7 +658,6 @@ class Lattice:
                 self._persistent_LTE_d[""] = d["used_beamline_name"]
 
         else:
-
             if used_beamline_name in self._persistent_LTE_d:
                 pass
             else:
@@ -677,7 +748,7 @@ class Lattice:
 
         return list(set(unhandled_list))
 
-    def zip_lte(self, output_ltezip_filepath, header_comment=""):
+    def zip_lte(self, output_ltezip_filepath: Union[Path, str], header_comment=""):
         """"""
 
         contents = dict(
@@ -728,6 +799,7 @@ class Lattice:
         overwrite_lte=False,
         overwrite_suppl=False,
         double_format="%.16g",
+        verbose=True,
     ):
         """
         If "output_lte_filepath" is not specified, a new LTE file will be
@@ -790,7 +862,7 @@ class Lattice:
         #
         # Add element definition sections
         lines.append("\n")
-        _newly_created_suppl_filepaths = collections.defaultdict(list)
+        _newly_created_suppl_filepaths = defaultdict(list)
         suppl_contents = contents["suppl"]
         elem_names_w_suppl_filepaths = {
             file_type: list(_d["meta"]) for file_type, _d in suppl_contents.items()
@@ -831,7 +903,8 @@ class Lattice:
                             orig_abs_path
                         ].encode("latin-1")
                     )
-                    print(f"* Created LTE supplementary file: {new_abs_path}")
+                    if verbose:
+                        print(f"* Created LTE supplementary file: {new_abs_path}")
                     _newly_created_suppl_filepaths[file_type].append(new_abs_path)
 
                 if file_type == "km":
@@ -869,7 +942,6 @@ class Lattice:
         lines.append("\n")
         if d["beamline_defs"] != []:
             for beamline_name, sub_name_multiplier_tups in d["beamline_defs"]:
-
                 sub_lines = []
                 for sub_name, multiplier in sub_name_multiplier_tups:
                     if multiplier == 1:
@@ -929,48 +1001,70 @@ class Lattice:
 
             return f'{sep} &\n{" " * indent}'.join(new_line_list)
 
-    def get_elem_inds_from_name(self, elem_name):
+    def get_all_elem_def_dict(self):
+        return self._elem_props
+
+    def get_all_beamline_def_dict(self):
+        return self._beamline_defs_d
+
+    def get_elem_inds_from_name(
+        self, elem_name: str, output_type: OutputType = OutputType.NumPy
+    ) -> PY_TYPES["np_array_or_list"]:
         """"""
 
-        elem_inds = np.where(np.array(self.flat_used_elem_names) == elem_name)[0]
+        assert output_type in (OutputType.NumPy, OutputType.List)
 
-        if elem_inds.size != 0:
-            elem_inds += 1
-            # Increase indexes by 1 to account for ELEGANT's insertion of the
-            # special element "_BEG_" at the beginning of the beamline defined
-            # in "self.flat_used_elem_names".
+        elem_map = self._elem_map[("name", "elem_inds")]
 
-        return elem_inds
+        if elem_name not in elem_map:
+            raise ValueError(f"Element name '{elem_name}' does not exist!")
 
-    def get_elem_inds_from_names(self, elem_names):
+        elem_inds_list = elem_map[elem_name]
+
+        if output_type == OutputType.NumPy:
+            return np.array(elem_inds_list)
+        else:
+            return elem_inds_list
+
+    def get_elem_inds_from_names(
+        self,
+        elem_names: Union[List[str], np.ndarray],
+        output_type: OutputType = OutputType.NumPy,
+    ) -> PY_TYPES["np_array_or_list"]:
+        """Returned element indexes are ordered by s-position"""
+
+        assert output_type in (OutputType.NumPy, OutputType.List)
+
+        elem_inds = []
+        for name in elem_names:
+            elem_inds += self.get_elem_inds_from_name(name, output_type=OutputType.List)
+
+        elem_inds = np.sort(elem_inds)
+
+        if output_type == OutputType.NumPy:
+            return elem_inds
+        else:
+            return elem_inds.tolist()
+
+    def get_names_from_elem_inds(
+        self,
+        elem_inds: Union[List[int], np.ndarray],
+        output_type: OutputType = OutputType.NumPy,
+    ) -> PY_TYPES["np_array_or_list"]:
         """"""
 
-        _flat_used_elem_names = np.array(self.flat_used_elem_names)
+        if isinstance(elem_inds, list):
+            elem_inds = np.array(elem_inds)
 
-        match = _flat_used_elem_names == elem_names[0]
-        for name in elem_names[1:]:
-            match = match | (_flat_used_elem_names == name)
+        if output_type == OutputType.NumPy:
+            return self._elem_names[elem_inds]
+        else:
+            return self._elem_names[elem_inds].tolist()
 
-        elem_inds = np.where(match)[0]
-
-        if elem_inds.size != 0:
-            elem_inds += 1
-            # Increase indexes by 1 to account for ELEGANT's insertion of the
-            # special element "_BEG_" at the beginning of the beamline defined
-            # in "self.flat_used_elem_names".
-
-        return elem_inds
-
-    def get_names_from_elem_inds(self, elem_inds):
-        """"""
-
-        # Must decrease indexes by 1 to account for ELEGANT's insertion of the
-        # special element "_BEG_" at the beginning of the beamline defined
-        # in "self.flat_used_elem_names".
-        return np.array(self.flat_used_elem_names)[np.array(elem_inds) - 1]
-
-    def get_elem_inds_from_regex(self, pattern):
-        """"""
+    def get_elem_inds_from_regex(
+        self, pattern: str, output_type: OutputType = OutputType.NumPy
+    ) -> PY_TYPES["np_array_or_list"]:
+        """Returned element indexes are ordered by s-position"""
 
         matched_elem_names = [
             elem_name
@@ -978,99 +1072,385 @@ class Lattice:
             if re.match(pattern, elem_name) is not None
         ]
 
-        return self.get_elem_inds_from_names(matched_elem_names)
+        return self.get_elem_inds_from_names(
+            matched_elem_names, output_type=output_type
+        )
 
-    def get_elem_props_from_regex(self, pattern):
+    def get_elem_props_from_elem_inds(
+        self, elem_inds: List[int], output_type: OutputType = OutputType.Dict
+    ) -> Union[Dict[str, Dict], List[Dict]]:
+        assert output_type in (OutputType.List, OutputType.Dict)
 
+        if output_type == OutputType.List:
+            return [
+                self._elem_props[name]
+                for name in self.get_names_from_elem_inds(elem_inds)
+            ]
+        else:
+            return {
+                name: self._elem_props[name]
+                for name in self.get_names_from_elem_inds(elem_inds)
+            }
+
+    def get_elem_props_from_regex(
+        self, pattern: str, output_type: OutputType = OutputType.Dict
+    ) -> Union[Dict[str, Dict], List[Dict]]:
         matched_elem_names = [
             elem_name
             for elem_name in self._unique_used_elem_names
             if re.match(pattern, elem_name) is not None
         ]
 
-        elem_inds = self.get_elem_inds_from_names(matched_elem_names)
+        sorted_elem_inds = self.get_elem_inds_from_names(matched_elem_names)
 
-        d = {}
+        return self.get_elem_props_from_elem_inds(
+            sorted_elem_inds, output_type=output_type
+        )
 
-        for elem_name, ei in zip(matched_elem_names, elem_inds):
-            sub_d = d[elem_name] = {}
+    def get_elem_props_from_names(
+        self,
+        elem_names: Union[List[str], np.ndarray],
+        output_type: OutputType = OutputType.Dict,
+    ) -> Union[Dict[str, Dict], List[Dict]]:
+        assert output_type in (OutputType.Dict, OutputType.List)
 
-            sub_d["index"] = ei
+        if output_type == OutputType.Dict:
+            return {name: self._elem_props[name] for name in elem_names}
+        else:
+            return [self._elem_props[name] for name in elem_names]
 
-            matched_index = self._all_used_elem_names.index(elem_name)
-            _, sub_d["elem_type"], prop_str = self.elem_defs[matched_index]
+    def get_closest_us_ds_elem_inds_from_ref_elem_ind(
+        self, ref_elem_ind: int, elem_type_to_search: str, n_us: int = 1, n_ds: int = 1
+    ) -> Dict[str, np.ndarray]:
+        assert n_us >= 0
+        assert n_ds >= 0
+        assert n_us + n_ds >= 1
 
-            sub_d["properties"] = self.parse_elem_properties(prop_str)
+        inds = self.get_elem_inds_from_elem_type(elem_type_to_search)
 
-        return d
+        output = dict(us=[], ds=[])
 
-    def get_elem_inds_from_name_occur_tuples(self, name_occur_tuples):
+        if inds.size == 0:
+            return output
+
+        n_elems = self.n_elements
+        inds = np.hstack((inds - n_elems, inds, inds + n_elems))
+
+        if n_us >= 1:
+            us_inds = inds[inds < ref_elem_ind]
+            if us_inds.size != 0:
+                sort_inds = np.argsort(np.abs(us_inds - ref_elem_ind))
+                sel_inds = us_inds[sort_inds[:n_us]]
+                sel_inds[sel_inds < 0] += n_elems
+                assert 0 <= np.min(sel_inds) < n_elems
+                assert 0 <= np.max(sel_inds) < n_elems
+                output["us"] = sel_inds
+
+        if n_ds >= 1:
+            ds_inds = inds[inds > ref_elem_ind]
+            if ds_inds.size != 0:
+                sort_inds = np.argsort(np.abs(ds_inds - ref_elem_ind))
+                sel_inds = ds_inds[sort_inds[:n_ds]]
+                sel_inds[sel_inds >= n_elems] -= n_elems
+                assert 0 <= np.min(sel_inds) < n_elems
+                assert 0 <= np.max(sel_inds) < n_elems
+                output["ds"] = sel_inds
+
+        return output
+
+    def get_closest_us_ds_elem_inds_from_ref_name(
+        self, ref_elem_name: str, elem_type_to_search: str, n_us: int = 1, n_ds: int = 1
+    ) -> List[Dict[str, np.ndarray]]:
+        return [
+            self.get_closest_us_ds_elem_inds_from_ref_elem_ind(
+                ref_elem_ind, elem_type_to_search, n_us=n_us, n_ds=n_ds
+            )
+            for ref_elem_ind in self.get_elem_inds_from_name(ref_elem_name)
+        ]
+
+    def get_closest_elem_inds_from_ref_elem_ind(
+        self,
+        ref_elem_ind: int,
+        elem_type_to_search: str,
+        n: int = 1,
+        output_type: OutputType = OutputType.NumPy,
+    ) -> np.ndarray:
+        assert output_type in (OutputType.NumPy, OutputType.List)
+
+        s_mid = self.get_s_mid_array()
+        C = self.get_circumference()
+
+        s_ref = s_mid[ref_elem_ind]
+
+        inds = self.get_elem_inds_from_elem_type(elem_type_to_search)
+
+        if inds.size == 0:
+            return None
+
+        s_ext = np.hstack((s_mid[inds] - C, s_mid[inds], s_mid[inds] + C))
+        inds_ext = np.hstack((inds, inds, inds))
+
+        sort_inds = np.argsort(np.abs(s_ext - s_ref))
+
+        if output_type == OutputType.NumPy:
+            return inds_ext[sort_inds[:n]]
+        else:
+            return inds_ext[sort_inds[:n]].tolist()
+
+    def get_closest_elem_inds_from_ref_name(
+        self, ref_elem_name: str, elem_type_to_search: str, n: int = 1
+    ) -> List[np.ndarray]:
+        return [
+            self.get_closest_elem_inds_from_ref_elem_ind(
+                ref_elem_ind, elem_type_to_search, n=n
+            )
+            for ref_elem_ind in self.get_elem_inds_from_name(ref_elem_name)
+        ]
+
+    def get_closest_names_from_ref_elem_ind(
+        self,
+        ref_elem_ind: int,
+        elem_type_to_search: str,
+        n=1,
+        output_type: OutputType = OutputType.NumPy,
+    ) -> PY_TYPES["np_array_or_list"]:
+        assert output_type in (OutputType.NumPy, OutputType.List)
+
+        inds = self.get_closest_elem_inds_from_ref_elem_ind(
+            ref_elem_ind, elem_type_to_search, n=n
+        )
+
+        return self.get_names_from_elem_inds(inds, output_type=output_type)
+
+    def get_closest_names_from_ref_name(
+        self,
+        ref_elem_name: str,
+        elem_type_to_search: str,
+        n=1,
+    ) -> List[np.ndarray]:
+        return [
+            self.get_names_from_elem_inds(
+                self.get_closest_elem_inds_from_ref_elem_ind(
+                    ref_elem_ind, elem_type_to_search, n=n
+                )
+            )
+            for ref_elem_ind in self.get_elem_inds_from_name(ref_elem_name)
+        ]
+
+    def get_elem_inds_from_name_instance_pairs(
+        self,
+        pairs: List[ElementNameInstancePair],
+        output_type: OutputType = OutputType.NumPy,
+    ) -> PY_TYPES["np_array_or_list"]:
         """"""
 
-        u_elem_names = np.unique([name for name, _ in name_occur_tuples])
-        elem_inds_d = {
-            name: self.get_elem_inds_from_name(name) for name in u_elem_names
-        }
+        assert output_type in (OutputType.NumPy, OutputType.List)
 
-        return np.array(
+        elem_inds = []
+        for p in pairs:
+            matched_indexes = np.where(
+                (self._elem_names == p.name)
+                & (self._elem_instance_indexes == p.instance_index)
+            )[0]
+            if matched_indexes.size == 0:
+                raise ValueError(
+                    f"Element Name '{p.name}' Instance Index {p.instance_index} does not exist."
+                )
+            elif matched_indexes.size == 1:
+                elem_inds.append(matched_indexes[0])
+            else:
+                raise RuntimeError("This cannot happen. Must debug PyELEGANT.")
+
+        if output_type == OutputType.NumPy:
+            return np.array(elem_inds)
+        else:
+            return elem_inds
+
+    def get_elem_inds_from_name_occur_pairs(
+        self,
+        pairs: List[ElementNameOccurrencePair],
+        output_type: OutputType = OutputType.NumPy,
+    ) -> PY_TYPES["np_array_or_list"]:
+        """"""
+
+        assert output_type in (OutputType.NumPy, OutputType.List)
+
+        elem_inds = []
+        for p in pairs:
+            matched_indexes = np.where(
+                (self._elem_names == p.name)
+                & (self._elem_instance_indexes == p.occurrence_num - 1)
+            )[0]
+            if matched_indexes.size == 0:
+                raise ValueError(
+                    f"Element Name '{p.name}' Occurrence Number {p.occurrence_num} does not exist."
+                )
+            elif matched_indexes.size == 1:
+                elem_inds.append(matched_indexes[0])
+            else:
+                raise RuntimeError("This cannot happen. Must debug PyELEGANT.")
+
+        if output_type == OutputType.NumPy:
+            return np.array(elem_inds)
+        else:
+            return elem_inds
+
+    def get_name_occur_pairs_from_elem_inds(
+        self, elem_inds: Union[List[int], np.ndarray]
+    ) -> List[ElementNameOccurrencePair]:
+        """"""
+
+        return [
+            ElementNameOccurrencePair(
+                name=self._elem_names[i],
+                occurrence_num=self._elem_instance_indexes[i] + 1,
+            )
+            for i in elem_inds
+        ]
+
+    def get_name_instance_pairs_from_elem_inds(
+        self, elem_inds: Union[List[int], np.ndarray]
+    ) -> List[ElementNameInstancePair]:
+        """"""
+
+        return [
+            ElementNameInstancePair(
+                name=self._elem_names[i], instance_index=self._elem_instance_indexes[i]
+            )
+            for i in elem_inds
+        ]
+
+    def get_elem_type_from_name(self, elem_name: str) -> str:
+        """"""
+
+        return self._elem_props[elem_name]["elem_type"]
+
+    def get_elem_inds_from_elem_type(
+        self, elem_type: str, output_type: OutputType = OutputType.NumPy
+    ) -> PY_TYPES["np_array_or_list"]:
+        assert output_type in (OutputType.NumPy, OutputType.List)
+
+        elem_inds_list = self._elem_map[("type", "elem_inds")][elem_type]
+
+        if output_type == OutputType.NumPy:
+            return np.array(elem_inds_list)
+        else:
+            return elem_inds_list
+
+    def _calc_spos_variables(self):
+        all_elem_props = self.get_elem_props_from_names(self._elem_names)
+
+        self._lengths = np.array(
             [
-                elem_inds_d[elem_name][occur - 1]
-                # ^ Index here must be decreased by 1 as "ElementOccurence" is 1-based index
-                for elem_name, occur in name_occur_tuples
+                all_elem_props[name]["properties"].get("L", 0.0)
+                for name in self._elem_names
             ]
         )
 
-    def get_name_occur_tuples_from_elem_inds(self, elem_inds):
-        """"""
+        spos_ds = np.cumsum(self._lengths)
+        spos_us = spos_ds - self._lengths
+        spos_mid = (spos_us + spos_ds) / 2
 
-        elem_names = self.get_names_from_elem_inds(elem_inds)
-        assert len(elem_names) == len(elem_inds)
+        # 0.0 inserted at the beginning for "__BEG__"
+        self._spos_ds = np.append(0.0, spos_ds)
+        self._spos_us = np.append(0.0, spos_us)
+        self._spos_mid = np.append(0.0, spos_mid)
 
-        u_elem_names = np.unique(elem_names)
-        elem_inds_d = {
-            name: self.get_elem_inds_from_name(name).tolist() for name in u_elem_names
-        }
+        self._circumf = spos_ds[-1]
 
-        return [
-            (name, elem_inds_d[name].index(i) + 1)
-            # ^ Index here must be increased by 1 as "ElementOccurence" is 1-based index
-            for name, i in zip(elem_names, elem_inds)
-        ]
+    def get_s_us_array(self) -> np.ndarray:
+        if self._spos_us is None:
+            self._calc_spos_variables()
 
-    def get_elem_type_from_name(self, elem_name):
-        """"""
+        return self._spos_us
 
-        if elem_name in self._all_used_elem_names:
-            matched_index = self._all_used_elem_names.index(elem_name)
-            _, elem_type, _ = self.elem_defs[matched_index]
+    def get_s_ds_array(self) -> np.ndarray:
+        if self._spos_ds is None:
+            self._calc_spos_variables()
+
+        return self._spos_ds
+
+    def get_s_mid_array(self) -> np.ndarray:
+        if self._spos_mid is None:
+            self._calc_spos_variables()
+
+        return self._spos_mid
+
+    def get_circumference(self) -> float:
+        if self._circumf is None:
+            self._calc_spos_variables()
+
+        return self._circumf
+
+    def is_unique_elem_name(self, elem_name: str) -> bool:
+        if elem_name not in self._elem_names:
+            raise ValueError(
+                f'Element name "{elem_name}" does not exist in the lattice'
+            )
+
+        if elem_name not in self._duplicate_elem_counts:
+            return True
         else:
-            elem_type = None
-
-        return elem_type
+            return False
 
     @staticmethod
-    def write_LTE(new_LTE_filepath, used_beamline_name, elem_defs, beamline_defs):
+    def write_LTE(
+        new_LTE_filepath: Union[Path, str],
+        used_beamline_name: str,
+        elem_defs: Union[Dict, List],
+        beamline_defs: Union[Dict, List],
+        double_format: str = "%.16g",
+    ):
         """"""
 
+        if isinstance(beamline_defs, list):
+            beamline_defs_d = {e[0]: e[1] for e in beamline_defs}
+        elif isinstance(beamline_defs, dict):
+            beamline_defs_d = beamline_defs
+        else:
+            raise TypeError()
+
         used_beamline_name = used_beamline_name.upper()
-        assert used_beamline_name in [
-            beamline_name for (beamline_name, _) in beamline_defs
-        ]
+        assert used_beamline_name in beamline_defs_d
 
         lines = []
 
-        for elem_name, elem_type, prop_str in elem_defs:
-            if ":" in elem_name:  # Must enclose element name with double quotes
-                # if the name contains ":".
-                elem_name = f'"{elem_name}"'
-            def_line = f"{elem_name}: {elem_type}"
-            if prop_str != "":
-                def_line += f", {prop_str}"
-            lines.append(Lattice.get_wrapped_line(def_line))
+        if isinstance(elem_defs, list):  # for backward compatibility
+            for elem_name, elem_type, prop_str in elem_defs:
+                if ":" in elem_name:  # Must enclose element name with double quotes
+                    # if the name contains ":".
+                    elem_name = f'"{elem_name}"'
+                def_line = f"{elem_name}: {elem_type}"
+                if prop_str != "":
+                    def_line += f", {prop_str}"
+                lines.append(Lattice.get_wrapped_line(def_line))
+        else:
+
+            double_format = double_format.replace("%", ":")
+
+            for elem_name, d in elem_defs.items():
+                if ":" in elem_name:  # Must enclose element name with double quotes
+                    # if the name contains ":".
+                    elem_name = f'"{elem_name}"'
+                elem_type = d["elem_type"]
+                def_line = f"{elem_name}: {elem_type}"
+
+                prop_str = ", ".join(
+                    [
+                        ("{}={%s}" % double_format).format(_k, _v)
+                        if isinstance(_v, float)
+                        else f"{_k}={_v}"
+                        for _k, _v in d["properties"].items()
+                    ]
+                )
+                if prop_str != "":
+                    def_line += f", {prop_str}"
+
+                lines.append(Lattice.get_wrapped_line(def_line))
 
         lines.append(" ")
 
-        for beamline_name, bdef in beamline_defs:
+        for beamline_name, bdef in beamline_defs_d.items():
             def_parts = []
             for name, multiplier in bdef:
                 if multiplier == 1:
@@ -1170,3 +1550,21 @@ def write_modified_LTE(
         LTE_d["elem_defs"],
         LTE_d["beamline_defs"],
     )
+
+
+def get_ELEGANT_element_dictionary():
+    if ELEGANT_ELEM_DICT == {}:
+        from ruamel import yaml
+
+        yaml_filepath = Path(__file__).parent / "elegant_elem_dict.yaml"
+
+        y = yaml.YAML()
+        y.preserve_quotes = True
+        d = y.load(yaml_filepath.read_text())
+
+        # Strip away YAML stuff
+        d = json.loads(json.dumps(d))
+
+        ELEGANT_ELEM_DICT.update(d)
+
+    return ELEGANT_ELEM_DICT

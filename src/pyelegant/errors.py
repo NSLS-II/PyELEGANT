@@ -37,13 +37,7 @@ def _update_AVAIL_ELEM_PROPS():
     if AVAIL_ELEM_PROPS:
         return
 
-    from ruamel import yaml
-
-    yaml_filepath = Path(__file__).parent / "elegant_elem_dict.yaml"
-
-    y = yaml.YAML()
-    y.preserve_quotes = True
-    d = y.load(yaml_filepath.read_text())
+    d = ltemanager.get_ELEGANT_element_dictionary()
 
     sel_prop_names = [
         "DX",

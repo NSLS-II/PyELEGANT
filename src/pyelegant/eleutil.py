@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import tempfile
 from typing import Dict, List, Optional, Union
 
@@ -9,9 +10,14 @@ from .local import run
 
 
 def save_lattice_after_load_parameters(
-    input_LTE_filepath: str, new_LTE_filepath: str, load_parameters: Dict
+    input_LTE_filepath: Union[Path, str],
+    new_LTE_filepath: Union[Path, str],
+    load_parameters: Dict,
 ) -> None:
     """"""
+
+    input_LTE_filepath = Path(input_LTE_filepath)
+    new_LTE_filepath = Path(new_LTE_filepath)
 
     tmp = tempfile.NamedTemporaryFile(
         dir=os.getcwd(), delete=False, prefix=f"tmp_", suffix=".ele"
@@ -23,7 +29,7 @@ def save_lattice_after_load_parameters(
         ele_filepath, double_format=".12g", auto_print_on_add=False
     )
 
-    ed.add_block("run_setup", lattice=input_LTE_filepath, p_central_mev=1.0)
+    ed.add_block("run_setup", lattice=str(input_LTE_filepath), p_central_mev=1.0)
     # ^ The value for "p_central_mev" being used here is just an arbitrary
     #   non-zero value. If it stays as the default value of 0, then ELEGANT will
     #   complain.
@@ -41,7 +47,7 @@ def save_lattice_after_load_parameters(
 
     ed.add_newline()
 
-    ed.add_block("save_lattice", filename=new_LTE_filepath)
+    ed.add_block("save_lattice", filename=str(new_LTE_filepath))
 
     ed.write()
 
@@ -59,9 +65,14 @@ def save_lattice_after_load_parameters(
 
 
 def save_lattice_after_alter_elements(
-    input_LTE_filepath: str, new_LTE_filepath: str, alter_elements: Union[Dict, List]
+    input_LTE_filepath: Union[Path, str],
+    new_LTE_filepath: Union[Path, str],
+    alter_elements: Union[Dict, List],
 ) -> None:
     """"""
+
+    input_LTE_filepath = Path(input_LTE_filepath)
+    new_LTE_filepath = Path(new_LTE_filepath)
 
     tmp = tempfile.NamedTemporaryFile(
         dir=os.getcwd(), delete=False, prefix=f"tmp_", suffix=".ele"
@@ -73,7 +84,7 @@ def save_lattice_after_alter_elements(
         ele_filepath, double_format=".12g", auto_print_on_add=False
     )
 
-    ed.add_block("run_setup", lattice=input_LTE_filepath, p_central_mev=1.0)
+    ed.add_block("run_setup", lattice=str(input_LTE_filepath), p_central_mev=1.0)
     # ^ The value for "p_central_mev" being used here is just an arbitrary
     #   non-zero value. If it stays as the default value of 0, then ELEGANT will
     #   complain.
@@ -88,7 +99,7 @@ def save_lattice_after_alter_elements(
 
     ed.add_newline()
 
-    ed.add_block("save_lattice", filename=new_LTE_filepath)
+    ed.add_block("save_lattice", filename=str(new_LTE_filepath))
 
     ed.write()
 
@@ -106,11 +117,14 @@ def save_lattice_after_alter_elements(
 
 
 def save_lattice_after_transmute_elements(
-    input_LTE_filepath: str,
-    new_LTE_filepath: str,
+    input_LTE_filepath: Union[Path, str],
+    new_LTE_filepath: Union[Path, str],
     transmute_elements: Union[Dict, List],
 ) -> None:
     """"""
+
+    input_LTE_filepath = Path(input_LTE_filepath)
+    new_LTE_filepath = Path(new_LTE_filepath)
 
     tmp = tempfile.NamedTemporaryFile(
         dir=os.getcwd(), delete=False, prefix=f"tmp_", suffix=".ele"
@@ -130,14 +144,14 @@ def save_lattice_after_transmute_elements(
 
     ed.add_newline()
 
-    ed.add_block("run_setup", lattice=input_LTE_filepath, p_central_mev=1.0)
+    ed.add_block("run_setup", lattice=str(input_LTE_filepath), p_central_mev=1.0)
     # ^ The value for "p_central_mev" being used here is just an arbitrary
     #   non-zero value. If it stays as the default value of 0, then ELEGANT will
     #   complain.
 
     ed.add_newline()
 
-    ed.add_block("save_lattice", filename=new_LTE_filepath)
+    ed.add_block("save_lattice", filename=str(new_LTE_filepath))
 
     ed.write()
 
@@ -155,12 +169,14 @@ def save_lattice_after_transmute_elements(
 
 
 def get_transport_matrices(
-    input_LTE_filepath: str,
+    input_LTE_filepath: Union[Path, str],
     use_beamline: Optional[str] = None,
     individual_matrices: bool = False,
     del_tmp_files: bool = True,
 ) -> Dict:
     """"""
+
+    input_LTE_filepath = Path(input_LTE_filepath)
 
     tmp = tempfile.NamedTemporaryFile(
         dir=os.getcwd(), delete=False, prefix=f"tmp_", suffix=".ele"
@@ -174,7 +190,7 @@ def get_transport_matrices(
 
     ed.add_block(
         "run_setup",
-        lattice=input_LTE_filepath,
+        lattice=str(input_LTE_filepath),
         use_beamline=use_beamline,
         p_central_mev=1.0,
     )
@@ -218,7 +234,7 @@ def get_transport_matrices(
 
 
 def get_M66(
-    input_LTE_filepath: str,
+    input_LTE_filepath: Union[Path, str],
     use_beamline: Optional[str] = None,
     ini_elem_name: Optional[str] = None,
     ini_elem_occur: int = 1,
