@@ -2701,7 +2701,7 @@ def plot_Touschek_lifetime(
     plt.plot(s[_vis], FN[_vis], "b-", label=r"$\delta < 0$")
     plt.plot(s[_vis], FP[_vis], "r-", label=r"$\delta > 0$")
     plt.axhline(0, color="k")
-    plt.ylabel(r"$f_{+}, f_{-}\, [\mathrm{s}^{-1}]$", size=font_sz)
+    plt.ylabel(r"$f_{+}, f_{-}\, [\mathrm{s \cdot m}^{-1}]$", size=font_sz)
     plt.xlim(slim)
     tau_info_title = rf"$\tau_{{\mathrm{{Touschek}}}} = {tau_hr:.3g}\, [\mathrm{{hr}}]$"
     if title != "":
