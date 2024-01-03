@@ -862,7 +862,6 @@ class ClosedOrbitCalculatorViaTraj:
         self._write_ele_files()
 
     def remove_tempdir(self):
-
         if not hasattr(self, "tempdir"):
             return
 
@@ -1009,15 +1008,9 @@ class ClosedOrbitCalculatorViaTraj:
             circumf = self.LTE.get_circumference()
             c = constants.c  # speed of light [m/s]
 
+        x0, xp0, y0, yp0, dp0 = inj_coords
+        base_traj = self._calc_traj(x0=x0, xp0=xp0, y0=y0, yp0=yp0, dp0=dp0, dt=True)
         if self.alphac is None:
-            x0, xp0, y0, yp0, dp0 = inj_coords
-            base_traj = self._calc_traj(
-                x0=x0, xp0=xp0, y0=y0, yp0=yp0, dp0=dp0, dt=True
-            )
-            base_diff = {
-                coord: np.diff(base_traj[coord])[0] for coord in base_traj.keys()
-            }
-
             dp_change = 1e-6
 
             traj = self._calc_traj(
@@ -1029,6 +1022,8 @@ class ClosedOrbitCalculatorViaTraj:
                 / circumf
                 / dp_change
             )
+        else:
+            traj = base_traj
 
         use_svd = True
 
@@ -1210,31 +1205,20 @@ class ClosedOrbitThreader:
         self,
         LTE: Lattice,
         E_MeV: float,
-        bpmx_names,
-        bpmy_names,
-        hcor_names,
-        vcor_names,
-        zero_orbit_type="BBA",
-        BBA_elem_type="KQUAD",
-        BBA_elem_names=None,
+        bpmx_names: List[str],
+        bpmy_names: List[str],
+        hcor_names: List[str],
+        vcor_names: List[str],
+        zero_orbit_type: str = "BBA",
+        BBA_elem_type: str = "KQUAD",
+        BBA_elem_names: Union[None, List[str]] = None,
         TRM_filepath: Union[Path, str] = "",
-        N_KICKS: Optional[dict] = None,
+        N_KICKS: Optional[Dict] = None,
         tempdir_path: Union[None, Path, str] = None,
         print_stdout=False,
         print_stderr=True,
     ) -> None:
-        """
-        method = 0:
-
-        This method can get stuck if the particle dies somewhere in the 1st
-        turn, without making any progress to propagate further down the ring.
-
-        method = 1:
-
-        This method works!
-
-        obs_incl_dxy_thresh [m]
-        """
+        """ """
 
         std_print_enabled["out"] = print_stdout
         std_print_enabled["err"] = print_stderr
@@ -1326,7 +1310,6 @@ class ClosedOrbitThreader:
         self.tempdir = tempfile.TemporaryDirectory(prefix="tmpCOThr_", dir=tempdir_path)
 
     def remove_tempdir(self):
-
         if not hasattr(self, "tempdir"):
             return
 
