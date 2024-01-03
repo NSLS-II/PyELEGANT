@@ -1268,6 +1268,42 @@ class Errors:
             plt.figure()
             plt.plot(self.s_ends, self.support_rots["yaw"], ".-")
 
+    def generate_LTE_file_wo_errors(
+        self, output_LTE_filepath="", output_LTEZIP_filepath=""
+    ):
+        """This method generates an LTE/LTEZIP file with all the families with multiple
+        occurrences individualized just as error instance LTE/LTEZIP files would be.
+
+        This will be convenient when computing the design response matrices and their
+        subsequent uses for optics corrections for an LTE with errors, for which the
+        families are always individualized to avoid duplicate element names."""
+
+        mods = {}
+
+        if output_LTE_filepath != "":
+            ltemanager.write_modified_LTE(
+                output_LTE_filepath,
+                mods,
+                LTE_obj=self.flat_LTE,
+            )
+        elif output_LTEZIP_filepath != "":
+            temp_LTE_filepath = ltemanager.write_temp_modified_LTE(
+                mods, LTE_obj=self.flat_LTE
+            )
+            new_LTE = ltemanager.Lattice(
+                temp_LTE_filepath, used_beamline_name=self.flat_LTE.used_beamline_name
+            )
+
+            new_LTE.zip_lte(output_LTEZIP_filepath)
+            try:
+                temp_LTE_filepath.unlink()
+            except:
+                pass
+        else:
+            raise ValueError(
+                "Both `output_LTE_filepath` and `output_LTEZIP_filepath` cannot be empty strings."
+            )
+
     def generate_LTE_file(self, output_LTEZIP_filepath):
         self.mod_prop_dict_list.clear()
         mods = self.mod_prop_dict_list
