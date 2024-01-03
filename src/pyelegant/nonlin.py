@@ -573,7 +573,6 @@ def _plot_cmap(
     UB = cmax
 
     if scatter:
-
         font_sz = 18
 
         plt.figure()
@@ -605,7 +604,6 @@ def _plot_cmap(
         plt.tight_layout()
 
     else:
-
         font_sz = 18
 
         v1array = np.linspace(v1min, v1max, n1)
@@ -1243,7 +1241,6 @@ def _plot_fma(
     UB = cmax
 
     if scatter:
-
         font_sz = 18
 
         plt.figure()
@@ -1275,14 +1272,12 @@ def _plot_fma(
         plt.tight_layout()
 
     else:
-
         font_sz = 18
 
         if not quadratic_spacing:
             v1array = np.linspace(v1min, v1max, n1)
             v2array = np.linspace(v2min, v2max, n2)
         else:
-
             dv1 = v1max - max([0.0, v1min])
             v1array = np.sqrt(np.linspace((dv1**2) / n1, dv1**2, n1))
             # v1array - np.unique(v1)
@@ -1669,7 +1664,6 @@ def calc_ring_rf_params(
     """"""
 
     if rf_bucket_percent is not None:
-
         try:
             assert rf_bucket_percent > 0.0
         except:
@@ -2249,7 +2243,6 @@ def calc_mom_aper(
         raise ValueError()
 
     if del_tmp_files:
-
         for fp in ed.actual_output_filepath_list + tmp_files_to_be_deleted:
             if fp.startswith("/dev"):
                 continue
@@ -2628,7 +2621,6 @@ def get_Touschek_F_interpolator():
         d = pickle.load(f)
 
     def interpolator(xarray):
-
         xarray = np.array(xarray)
 
         Farray = d["pchip_interp"](xarray)
@@ -2800,7 +2792,6 @@ def add_magnet_profiles(ax, twi_arrays, parameters_arrays, slim, s_margin_m=0.1)
             twi_ar["ElementOccurence"],
         )
     ):
-
         cur_s = s - s0_m
 
         if (s < slim[0] - s_margin_m) or (s > slim[1] + s_margin_m):
@@ -2810,7 +2801,6 @@ def add_magnet_profiles(ax, twi_arrays, parameters_arrays, slim, s_margin_m=0.1)
         elem_type = elem_type.upper()
 
         if elem_type in ("QUAD", "KQUAD"):
-
             K1 = _get_param_val("K1", parameters, elem_name, elem_occur)
             c = "r"
             if K1 >= 0.0:  # Focusing Quad
@@ -2829,7 +2819,6 @@ def add_magnet_profiles(ax, twi_arrays, parameters_arrays, slim, s_margin_m=0.1)
             ax.add_patch(p)
 
         elif elem_type in ("SEXT", "KSEXT"):
-
             K2 = _get_param_val("K2", parameters, elem_name, elem_occur)
             c = "b"
             if K2 >= 0.0:  # Focusing Sext
@@ -2868,7 +2857,6 @@ def add_magnet_profiles(ax, twi_arrays, parameters_arrays, slim, s_margin_m=0.1)
             ax.add_patch(p)
 
         elif elem_type in ("OCTU", "KOCT"):
-
             K3 = _get_param_val("K3", parameters, elem_name, elem_occur)
             c = "g"
             if K3 >= 0.0:  # Focusing Octupole
@@ -3086,7 +3074,6 @@ def calc_chrom_twiss(
 
 
 def _deprecated_msg_use_sddsnaff(use_sddsnaff, courant_snyder, method, return_fft_spec):
-
     if use_sddsnaff is not None:
         warnings.warn(
             "'use_sddsnaff' is deprecated. Use method='sddsnaff' for use_sddsnaff=True.",
@@ -3335,7 +3322,6 @@ def calc_chrom_track(
                 tbt[k][: len(cols[k]), i] = cols[k]
             # tElapsed['tbt_population'] += time.time() - t0
     else:
-
         if remote_opts is None:
             remote_opts = dict(ntasks=20)
 
@@ -3372,7 +3358,6 @@ def calc_chrom_track(
             )
 
             if (err_log_check is not None) and isinstance(chunked_results, str):
-
                 err_log_text = chunked_results
                 print("\n** Error Log check found the following problem:")
                 print(err_log_text)
@@ -3677,11 +3662,11 @@ def calc_chrom_from_tbt_ps(delta_array, xtbt, ytbt, nux0, nuy0):
             if False:
                 # This algorithm does NOT work too well if tune change
                 # between neighboring delta points are too large.
-                out = sigproc.getDftPeak(xarray, init_nux, **opts)
+                out = sigproc.get_dft_peak(xarray, init_nux, **opts)
                 nus["x"][i] = out["nu"]
                 init_nux = out["nu"]
 
-                out = sigproc.getDftPeak(yarray, init_nuy, **opts)
+                out = sigproc.get_dft_peak(yarray, init_nuy, **opts)
                 nus["y"][i] = out["nu"]
                 init_nuy = out["nu"]
             else:
@@ -3690,7 +3675,7 @@ def calc_chrom_from_tbt_ps(delta_array, xtbt, ytbt, nux0, nuy0):
                 A_arb = np.abs(ff_rect)
                 init_nux = nu_vec[np.argmax(A_arb[: (n_turns // 2)])]
                 # Then fine-tune
-                out = sigproc.getDftPeak(xarray, init_nux, **opts)
+                out = sigproc.get_dft_peak(xarray, init_nux, **opts)
                 nus["x"][i] = out["nu"]
 
                 # Find the rough peak first
@@ -3698,7 +3683,7 @@ def calc_chrom_from_tbt_ps(delta_array, xtbt, ytbt, nux0, nuy0):
                 A_arb = np.abs(ff_rect)
                 init_nuy = nu_vec[np.argmax(A_arb[: (n_turns // 2)])]
                 # Then fine-tune
-                out = sigproc.getDftPeak(yarray, init_nuy, **opts)
+                out = sigproc.get_dft_peak(yarray, init_nuy, **opts)
                 nus["y"][i] = out["nu"]
 
     if nux_above_half:
@@ -3854,11 +3839,11 @@ def calc_chrom_from_tbt_cs(
             hy = yhat - 1j * pyhat
 
             if init_guess_from_prev_step:
-                rough_peak_nux = sigproc.findNearestFftPeak(
+                rough_peak_nux = sigproc.find_closest_fft_peak(
                     hx, init_nux, window=opts["window"]
                 )["nu"]
                 # print(f'init/rough nux: {init_nux:.6f}/{rough_peak_nux:.6f}')
-                out = sigproc.getDftPeak(hx, rough_peak_nux, **opts)
+                out = sigproc.get_dft_peak(hx, rough_peak_nux, **opts)
                 nus["x"][i] = out["nu"]
                 init_nux = out["nu"]
             else:
@@ -3867,7 +3852,7 @@ def calc_chrom_from_tbt_cs(
                 A_arb = np.abs(ff_rect)
                 init_nux = nu_vec[np.argmax(A_arb)]
                 # Then fine-tune
-                out = sigproc.getDftPeak(hx, init_nux, **opts)
+                out = sigproc.get_dft_peak(hx, init_nux, **opts)
                 nus["x"][i] = out["nu"]
             if return_fft_spec:
                 if fft_nus is None:
@@ -3875,11 +3860,11 @@ def calc_chrom_from_tbt_cs(
                 fft_hAxs.append(out["fft_As"])
 
             if init_guess_from_prev_step:
-                rough_peak_nuy = sigproc.findNearestFftPeak(
+                rough_peak_nuy = sigproc.find_closest_fft_peak(
                     hy, init_nuy, window=opts["window"]
                 )["nu"]
                 # print(f'init/rough nuy: {init_nuy:.6f}/{rough_peak_nuy:.6f}')
-                out = sigproc.getDftPeak(hy, rough_peak_nuy, **opts)
+                out = sigproc.get_dft_peak(hy, rough_peak_nuy, **opts)
                 nus["y"][i] = out["nu"]
                 init_nuy = out["nu"]
             else:
@@ -3888,7 +3873,7 @@ def calc_chrom_from_tbt_cs(
                 A_arb = np.abs(ff_rect)
                 init_nuy = nu_vec[np.argmax(A_arb)]
                 # Then fine-tune
-                out = sigproc.getDftPeak(hy, init_nuy, **opts)
+                out = sigproc.get_dft_peak(hy, init_nuy, **opts)
                 nus["y"][i] = out["nu"]
             if return_fft_spec:
                 fft_hAys.append(out["fft_As"])
@@ -3935,7 +3920,6 @@ def _calc_chrom_track_get_tbt(
     with tempfile.TemporaryDirectory(
         prefix="tmpCalcChrom_", dir=tempdir_path
     ) as tmpdirname:
-
         ele_pathobj = Path(tmpdirname).joinpath(ele_filename)
         watch_pathobj = Path(tmpdirname).joinpath(watch_filename)
 
@@ -3948,7 +3932,6 @@ def _calc_chrom_track_get_tbt(
         ele_filepath = str(ele_pathobj.resolve())
 
         for delta in delta_sub_array:
-
             run(
                 ele_filepath,
                 print_cmd=print_cmd,
@@ -4326,7 +4309,6 @@ def plot_chrom(
     for plane in ["x", "y"]:
         fit_label[plane] = rf"\nu_{plane} = "
         for i, c in zip(range(max_chrom_order + 1)[::-1], coeffs[plane]):
-
             if i != 0:
                 fit_label[plane] += util.pprint_sci_notation(c, fit_label_format)
             else:
@@ -4550,7 +4532,6 @@ def plot_chrom(
     plt.tight_layout()
 
     if (fft_d is not None) and plot_fft:
-
         if fft_plot_opts is None:
             fft_plot_opts = {}
 
@@ -4568,7 +4549,6 @@ def plot_chrom(
         v1array = deltas
 
         for _nu_plane in ["x", "y"]:
-
             v2array = fft_d["fft_nus"].copy()
             v2array[v2array < 0.0] += 1
             if nu_size is not None:
@@ -5050,7 +5030,6 @@ def _calc_tswa(
                 tbt[k][: len(cols[k]), i] = cols[k]
             # tElapsed['tbt_population'] += time.time() - t0
     else:
-
         if remote_opts is None:
             remote_opts = dict(ntasks=20)
 
@@ -5088,7 +5067,6 @@ def _calc_tswa(
             )
 
             if (err_log_check is not None) and isinstance(chunked_results, str):
-
                 err_log_text = chunked_results
                 print("\n** Error Log check found the following problem:")
                 print(err_log_text)
@@ -5418,7 +5396,6 @@ def _calc_tswa_get_tbt(
     with tempfile.TemporaryDirectory(
         prefix="tmpCalcTSwA_", dir=tempdir_path
     ) as tmpdirname:
-
         ele_pathobj = Path(tmpdirname).joinpath(ele_filename)
         watch_pathobj = Path(tmpdirname).joinpath(watch_filename)
 
@@ -5431,7 +5408,6 @@ def _calc_tswa_get_tbt(
         ele_filepath = str(ele_pathobj.resolve())
 
         for x0, y0 in xy0_sub_array_list:
-
             run(
                 ele_filepath,
                 print_cmd=print_cmd,
@@ -5480,12 +5456,12 @@ def calc_tswa_from_tbt_ps(scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0
         if False:
             # This algorithm does NOT work too well if tune change
             # between neighboring delta points are too large.
-            out = sigproc.getDftPeak(xarray, init_nux, **opts)
+            out = sigproc.get_dft_peak(xarray, init_nux, **opts)
             nus["x"][i] = out["nu"]
             As["x"][i] = out["A"]
             init_nux = out["nu"]
 
-            out = sigproc.getDftPeak(yarray, init_nuy, **opts)
+            out = sigproc.get_dft_peak(yarray, init_nuy, **opts)
             nus["y"][i] = out["nu"]
             As["y"][i] = out["A"]
             init_nuy = out["nu"]
@@ -5495,7 +5471,7 @@ def calc_tswa_from_tbt_ps(scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0
             A_arb = np.abs(ff_rect)
             init_nux = nu_vec[np.argmax(A_arb[: (n_turns // 2)])]
             # Then fine-tune
-            out = sigproc.getDftPeak(xarray, init_nux, **opts)
+            out = sigproc.get_dft_peak(xarray, init_nux, **opts)
             nus["x"][i] = out["nu"]
             As["x"][i] = out["A"]
 
@@ -5504,7 +5480,7 @@ def calc_tswa_from_tbt_ps(scan_plane, x0_array, y0_array, xtbt, ytbt, nux0, nuy0
             A_arb = np.abs(ff_rect)
             init_nuy = nu_vec[np.argmax(A_arb[: (n_turns // 2)])]
             # Then fine-tune
-            out = sigproc.getDftPeak(yarray, init_nuy, **opts)
+            out = sigproc.get_dft_peak(yarray, init_nuy, **opts)
             nus["y"][i] = out["nu"]
             As["y"][i] = out["A"]
 
@@ -5593,11 +5569,11 @@ def calc_tswa_from_tbt_cs(
         hy = yhat - 1j * pyhat
 
         if init_guess_from_prev_step:
-            rough_peak_nux = sigproc.findNearestFftPeak(
+            rough_peak_nux = sigproc.find_closest_fft_peak(
                 hx, init_nux, window=opts["window"]
             )["nu"]
             # print(f'init/rough nux: {init_nux:.6f}/{rough_peak_nux:.6f}')
-            out = sigproc.getDftPeak(hx, rough_peak_nux, **opts)
+            out = sigproc.get_dft_peak(hx, rough_peak_nux, **opts)
             nus["x"][i] = out["nu"]
             init_nux = out["nu"]
         else:
@@ -5606,7 +5582,7 @@ def calc_tswa_from_tbt_cs(
             A_arb = np.abs(ff_rect)
             init_nux = nu_vec[np.argmax(A_arb)]
             # Then fine-tune
-            out = sigproc.getDftPeak(hx, init_nux, **opts)
+            out = sigproc.get_dft_peak(hx, init_nux, **opts)
             nus["x"][i] = out["nu"]
         sqrt_twoJx = out["A"]
         As["x"][i] = sqrt_twoJx * np.sqrt(
@@ -5618,11 +5594,11 @@ def calc_tswa_from_tbt_cs(
             fft_hAxs.append(out["fft_As"])
 
         if init_guess_from_prev_step:
-            rough_peak_nuy = sigproc.findNearestFftPeak(
+            rough_peak_nuy = sigproc.find_closest_fft_peak(
                 hy, init_nuy, window=opts["window"]
             )["nu"]
             # print(f'init/rough nuy: {init_nuy:.6f}/{rough_peak_nuy:.6f}')
-            out = sigproc.getDftPeak(hy, rough_peak_nuy, **opts)
+            out = sigproc.get_dft_peak(hy, rough_peak_nuy, **opts)
             nus["y"][i] = out["nu"]
             init_nuy = out["nu"]
         else:
@@ -5631,7 +5607,7 @@ def calc_tswa_from_tbt_cs(
             A_arb = np.abs(ff_rect)
             init_nuy = nu_vec[np.argmax(A_arb)]
             # Then fine-tune
-            out = sigproc.getDftPeak(hy, init_nuy, **opts)
+            out = sigproc.get_dft_peak(hy, init_nuy, **opts)
             nus["y"][i] = out["nu"]
         sqrt_twoJy = out["A"]
         As["y"][i] = sqrt_twoJy * np.sqrt(
@@ -6164,7 +6140,6 @@ def plot_tswa(
     fit_y_extrap_line_style = "r:"
 
     if plot_xy0:
-
         if ax_nu_vs_xy0:
             ax1 = ax_nu_vs_xy0
         else:
@@ -6286,7 +6261,6 @@ def plot_tswa(
         plt.tight_layout()
 
     if plot_Axy:
-
         if ax_nu_vs_A:
             ax1 = ax_nu_vs_A
         else:
@@ -6487,7 +6461,6 @@ def plot_tswa(
     plt.tight_layout()
 
     if (fft_d is not None) and plot_fft:
-
         if fft_plot_opts is None:
             fft_plot_opts = {}
 
@@ -6508,7 +6481,6 @@ def plot_tswa(
             v1array = np.abs(y0s)
 
         for _nu_plane in ["x", "y"]:
-
             v2array = fft_d["fft_nus"].copy()
             v2array[v2array < 0.0] += 1
             if nu_size is not None:
@@ -6850,7 +6822,6 @@ def plot_tswa_both_sides(
     max_neg_res_xing_v = np.nan
 
     for side in ["+", "-"]:
-
         ret[side] = {}
 
         if False:
@@ -7111,7 +7082,6 @@ def plot_tswa_both_sides(
     fit_y_extrap_line_style = "r:"
 
     if plot_xy0:
-
         if ax_nu_vs_xy0:
             ax1 = ax_nu_vs_xy0
         else:
@@ -7316,7 +7286,6 @@ def plot_tswa_both_sides(
         plt.tight_layout()
 
     if plot_Axy:
-
         if ax_nu_vs_A:
             ax1 = ax_nu_vs_A
         else:
@@ -7587,7 +7556,6 @@ def plot_tswa_both_sides(
     plt.tight_layout()
 
     if (fft_d is not None) and plot_fft:
-
         if fft_plot_opts is None:
             fft_plot_opts = {}
 
@@ -7610,7 +7578,6 @@ def plot_tswa_both_sides(
             v1array = y0s_combo
 
         for _nu_plane in ["x", "y"]:
-
             assert np.all(fft_d["+"]["fft_nus"] == fft_d["-"]["fft_nus"])
             v2array = fft_d["+"]["fft_nus"].copy()
             v2array[v2array < 0.0] += 1
@@ -7922,7 +7889,6 @@ def track(
 
         sbatch_info = None
     else:
-
         if remote_opts is None:
             remote_opts = dict(sbatch={"use": True, "wait": True})
 
@@ -8168,7 +8134,6 @@ def calc_offmom_closed_orbits(
             (True, delta_array[positive]),
             (False, delta_array[negative][::-1]),
         ]:
-
             for i, delta in enumerate(_one_side_delta_array):
                 run(
                     ele_filepath,
@@ -8267,7 +8232,6 @@ def _relaunchable_remote_run(remote_opts, ele_filepath, err_log_check, nMaxRemot
             and (sbatch_info is not None)
             and sbatch_info["err_found"]
         ):
-
             err_log_text = sbatch_info["err_log"]
             print("\n** Error Log check found the following problem:")
             print(err_log_text)
