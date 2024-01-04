@@ -272,7 +272,6 @@ class TbTLinOptCorrector:
         bpmy_names: List[str],
         normal_quad_names: List[Union[str, List[str]]],
         skew_quad_names: List[Union[str, List[str]]],
-        use_x1_y1_re_im: bool = False,
         n_turns: int = 256,
         actual_inj_CO: Union[Dict, None] = None,
         tbt_ps_offset_wrt_CO: Union[Dict, None] = None,
@@ -329,12 +328,11 @@ class TbTLinOptCorrector:
         assert self.bpm_names["x"].tolist() == self.bpm_names["y"].tolist()
         assert self.nBPM["x"] == self.nBPM["y"]
 
-        self.use_x1_y1_re_im = use_x1_y1_re_im
-        if self.use_x1_y1_re_im:
-            self._avail_obs_keys = ["x1_re", "x1_im", "y1_re", "y1_im"]
-        else:
-            self._avail_obs_keys = ["x1_bbeat", "x1_phi", "y1_bbeat", "y1_phi"]
-        self._avail_obs_keys += [
+        self._avail_obs_keys = [
+            "x1_bbeat",
+            "x1_phi",
+            "y1_bbeat",
+            "y1_phi",
             "x2_re",
             "x2_im",
             "y2_re",
@@ -630,7 +628,7 @@ class TbTLinOptCorrector:
 
         temp_LTE = Lattice(
             LTE_filepath=new_LTE_filepath,
-            used_beamline_name=self.LTE.used_beamline_name,
+            used_beamline_name=self.LTE_d["actual"].used_beamline_name,
         )
 
         new_LTEZIP_filepath = Path(new_LTEZIP_filepath)
@@ -973,14 +971,13 @@ class TbTLinOptCorrector:
         nu_resolution=1e-5,
         nux0_range=None,
         nuy0_range=None,
-        fxy1_closed=True,
     ):
         """
-        If `fxy1_closed` is True, for a given m-by-n TbT data ("m" turns for "n" BPMs),
-        the first BPM data from second turn to the last (Turn Index 1 thru "m-1") will
-        be added as the virtual last BPM (BPM Index "n") TbT data with a total of
-        "m-1" turns. To match the total number of turns for all the BPMs, the last
-        turn data (Turn Index "m-1") for the BPMs that actually exist (Index 0 thru
+        For a given m-by-n TbT data ("m" turns for "n" BPMs), the first BPM data
+        from second turn to the last (Turn Index 1 thru "m-1") will be added as the
+        virtual last BPM (BPM Index "n") TbT data with a total of "m-1" turns.
+        To match the total number of turns for all the BPMs, the last turn data
+        (Turn Index "m-1") for the BPMs that actually exist (Index 0 thru
         "n-1") will be all discarded such that all the real (BPM Index 0 thru "n-1"
         and virtual (BPM Index "n") BPM TbT data will have only "m-1" turns. In
         other words, the final BPM TbT data shape will be "m-1"-by-"n+1".
@@ -990,12 +987,11 @@ class TbTLinOptCorrector:
         X = xtbt.T
         Y = ytbt.T
 
-        if fxy1_closed:
-            # Add 1-st BPM data from 2nd turn to the last as an additional BPM
-            # TbT data, while reomving the last TbT data from the existing BPM
-            # TbT data to maintain the same number of turns for all the BPM data
-            X = np.hstack((X[:-1, :], X[1:, 0].reshape((-1, 1))))
-            Y = np.hstack((Y[:-1, :], Y[1:, 0].reshape((-1, 1))))
+        # Add 1-st BPM data from 2nd turn to the last as an additional BPM
+        # TbT data, while reomving the last TbT data from the existing BPM
+        # TbT data to maintain the same number of turns for all the BPM data
+        X = np.hstack((X[:-1, :], X[1:, 0].reshape((-1, 1))))
+        Y = np.hstack((Y[:-1, :], Y[1:, 0].reshape((-1, 1))))
 
         if n_turn_to_use is None:
             s_ = np.s_[start_turn_index:]
@@ -1020,93 +1016,12 @@ class TbTLinOptCorrector:
         )
 
     @staticmethod
-    def normalize_phase_adj_lin_freq_components(
-        lin_comp_d, model_bpm_beta, tune_above_half
-    ):
-        """Assuming `fxy1_closed=True`, i.e., the first and the last data in
-        `lin_comp_d` are both from the first BPM (the first data from the first
-        turn while the last data from the second turn)"""
-
-        assert (nBPM := model_bpm_beta["x"].size) == model_bpm_beta["y"].size
-
-        assert lin_comp_d["x1amp"].size == lin_comp_d["y1amp"].size == nBPM + 1
-
-        # The last data has the redundant amplitude informtion for the first BPM,
-        # so excluding it.
-        x_sq = lin_comp_d["x1amp"][:-1] ** 2
-        y_sq = lin_comp_d["y1amp"][:-1] ** 2
-
-        est_twoJx_arr = x_sq / model_bpm_beta["x"]
-        est_twoJy_arr = y_sq / model_bpm_beta["y"]
-        base_est_twoJx = np.mean(est_twoJx_arr)
-        base_est_twoJy = np.mean(est_twoJy_arr)
-        if False:
-            print(f"Base est 2Jx = {base_est_twoJx:.6g}")
-            print(f"Base est 2Jy = {base_est_twoJy:.6g}")
-
-            base_est_twoJx_rms = np.std(est_twoJx_arr)
-            base_est_twoJy_rms = np.std(est_twoJy_arr)
-            print(f"RMS est 2Jx = {base_est_twoJx_rms:.6g}")
-            print(f"RMS est 2Jy = {base_est_twoJy_rms:.6g}")
-
-        x1phi_rad = unwrap_montonically_increasing(
-            lin_comp_d["x1phi"], tune_above_half=tune_above_half["x"]
-        )
-        y1phi_rad = unwrap_montonically_increasing(
-            lin_comp_d["y1phi"], tune_above_half=tune_above_half["y"]
-        )
-        if False:
-            plt.figure()
-            v = model_bpm_phix
-            plt.plot(v - v[0], "b.-")
-            v = np.unwrap(1 - lin_comp_d["x1phi"]) / (2 * np.pi)
-            plt.plot(v - v[0], "r.-")
-            v = x1phi_rad / (2 * np.pi)
-            plt.plot(v - v[0], "m.-")
-
-        norm_x1C = lin_comp_d["x1C"] / np.sqrt(base_est_twoJx)
-        norm_y1C = lin_comp_d["y1C"] / np.sqrt(base_est_twoJy)
-        norm_x2C = lin_comp_d["x2C"] / np.sqrt(base_est_twoJy)
-        norm_y2C = lin_comp_d["y2C"] / np.sqrt(base_est_twoJx)
-
-        # Shift the phases so that the primary components of the first BPM will
-        # have always zero phase.
-        if tune_above_half["x"]:
-            phix_adj = np.exp(1j * (+x1phi_rad[0]))
-        else:
-            phix_adj = np.exp(1j * (-x1phi_rad[0]))
-        if tune_above_half["y"]:
-            phiy_adj = np.exp(1j * (+y1phi_rad[0]))
-        else:
-            phiy_adj = np.exp(1j * (-y1phi_rad[0]))
-        norm_x1C *= phix_adj
-        norm_y1C *= phiy_adj
-        norm_x2C *= phix_adj
-        norm_y2C *= phiy_adj
-        np.testing.assert_almost_equal(np.angle(norm_x1C[0]), 0.0, decimal=15)
-        np.testing.assert_almost_equal(np.angle(norm_y1C[0]), 0.0, decimal=15)
-        # np.angle(norm_x2C[0]) & np.angle(norm_y2C[0]) are unlikely to be zero.
-
-        # Because of duplicity of the first and last BPM for the primary amplitude
-        # (due to fxy1_closed=True) and zeroing of the primary phase for the first
-        # BPM means that the primary data at the first BPM is useless. So, removing
-        # this here.
-        norm_x1C = norm_x1C[1:]
-        norm_y1C = norm_y1C[1:]
-        # On the otherhand, the secondary components at the first BPM are not
-        # useless. So, we're retaining them here. This means:
-        assert norm_x1C.size == norm_y1C.size == nBPM
-        assert norm_x2C.size == norm_y2C.size == nBPM + 1
-
-        return dict(x1=norm_x1C, y1=norm_y1C, x2=norm_x2C, y2=norm_y2C)
-
-    @staticmethod
     def normalize_and_phase_diff_lin_freq_components(
         lin_comp_d, model_bpm_beta, tune_above_half
     ):
-        """Assuming `fxy1_closed=True`, i.e., the first and the last data in
-        `lin_comp_d` are both from the first BPM (the first data from the first
-        turn while the last data from the second turn)"""
+        """The first and the last data in `lin_comp_d` are assumed to be both from
+        the first BPM (the first data from the first turn while the last data from
+        the second turn)"""
 
         assert (nBPM := model_bpm_beta["x"].size) == model_bpm_beta["y"].size
 
@@ -1180,9 +1095,9 @@ class TbTLinOptCorrector:
         assert np.all(dphix1 > 0.0)
         assert np.all(dphiy1 > 0.0)
 
-        # Because of duplicity of the first and last BPM for the primary amplitude
-        # (due to fxy1_closed=True), the primary beta data at the last BPM is
-        # useless. So, removing this here.
+        # Because of duplicity of the first and last BPM for the primary amplitude,
+        # the primary amplitude data at the last BPM is redundant and useless. So,
+        # removing this here.
         beta_x1 = beta_x1[:-1]
         beta_y1 = beta_y1[:-1]
         beta_beat_x1 = beta_x1 / model_bpm_beta["x"] - 1
@@ -1212,15 +1127,12 @@ class TbTLinOptCorrector:
         tbt = self.calc_design_tbt()
 
         self.lin_comp["design"] = self.extract_lin_freq_components_from_multi_BPM_tbt(
-            tbt["x"], tbt["y"], fxy1_closed=True
+            tbt["x"], tbt["y"]
         )
 
         model_twi = self.twiss["design"]
         model_bpm_beta = model_twi["beta"]["bpms"]
-        if self.use_x1_y1_re_im:
-            normalizer = self.normalize_phase_adj_lin_freq_components
-        else:
-            normalizer = self.normalize_and_phase_diff_lin_freq_components
+        normalizer = self.normalize_and_phase_diff_lin_freq_components
         self.norm_lin_comp["design"] = normalizer(
             self.lin_comp["design"], model_bpm_beta, self.tune_above_half["design"]
         )
@@ -1237,15 +1149,12 @@ class TbTLinOptCorrector:
         tbt = self.calc_actual_tbt()
 
         self.lin_comp["actual"] = self.extract_lin_freq_components_from_multi_BPM_tbt(
-            tbt["x"], tbt["y"], fxy1_closed=True
+            tbt["x"], tbt["y"]
         )
 
         model_twi = self.twiss["design"]
         model_bpm_beta = model_twi["beta"]["bpms"]
-        if self.use_x1_y1_re_im:
-            normalizer = self.normalize_phase_adj_lin_freq_components
-        else:
-            normalizer = self.normalize_and_phase_diff_lin_freq_components
+        normalizer = self.normalize_and_phase_diff_lin_freq_components
         self.norm_lin_comp["actual"] = normalizer(
             self.lin_comp["actual"], model_bpm_beta, self.tune_above_half["actual"]
         )
@@ -1295,23 +1204,17 @@ class TbTLinOptCorrector:
         norm_lin_comp = self.norm_lin_comp["actual"]
         resp["_extra"] = dict(norm_lin_comp=norm_lin_comp)
 
-        if self.use_x1_y1_re_im:
-            resp["norm_lin_comp"] = {
-                comp: (norm_lin_comp[comp] - model_norm_lin_comp[comp]) / dK1
-                for comp in ["x1", "y1", "x2", "y2"]
-            }
-        else:
-            resp["norm_lin_comp"] = {
-                comp: (norm_lin_comp[comp] - model_norm_lin_comp[comp]) / dK1
-                for comp in ["x1_bbeat", "y1_bbeat", "x1_dphi", "y1_dphi", "x2", "y2"]
-            }
+        resp["norm_lin_comp"] = {
+            comp: (norm_lin_comp[comp] - model_norm_lin_comp[comp]) / dK1
+            for comp in ["x1_bbeat", "y1_bbeat", "x1_dphi", "y1_dphi", "x2", "y2"]
+        }
 
-            for plane in "xy":
-                comp = f"{plane}1_phi"
-                diff_rad = norm_lin_comp[comp] - model_norm_lin_comp[comp]
-                assert diff_rad.size == self.nBPM[plane] + 1
-                diff_rad_wo_1st_bpm = (diff_rad - diff_rad[0])[1:]
-                resp["norm_lin_comp"][comp] = diff_rad_wo_1st_bpm / dK1
+        for plane in "xy":
+            comp = f"{plane}1_phi"
+            diff_rad = norm_lin_comp[comp] - model_norm_lin_comp[comp]
+            assert diff_rad.size == self.nBPM[plane] + 1
+            diff_rad_wo_1st_bpm = (diff_rad - diff_rad[0])[1:]
+            resp["norm_lin_comp"][comp] = diff_rad_wo_1st_bpm / dK1
 
         # Reset the quad strength change
         if verbose == 1:
@@ -1522,82 +1425,56 @@ class TbTLinOptCorrector:
                 assert all([isinstance(v, str) for v in names])
                 quad_names_in_file[quad_type] = list(names)
 
-            if self.use_x1_y1_re_im:
-                for comp in ["x1", "y1", "x2", "y2"]:
-                    temp = defaultdict(list)
-                    for quad_type in ["normal", "skew"]:
+            mat_list = defaultdict(list)
+            for comp, bbeat_or_phi in product(["x1", "y1"], ["bbeat", "phi"]):
+                plane = comp[0]
+                obs_key = f"{comp}_{bbeat_or_phi}"
+                for quad_type in ["normal", "skew"]:
 
-                        if len(self.quad_col2names[quad_type]) == 0:
-                            continue
+                    if len(self.quad_col2names[quad_type]) == 0:
+                        continue
 
-                        src_q_names = quad_names_in_file[quad_type]
-                        src_C = f["M_lin_comp"][quad_type][comp][()]
+                    src_q_names = quad_names_in_file[quad_type]
+                    src_M = f["M_lin_comp"][quad_type][obs_key][()]
 
-                        actual_C_cols = []
-                        for name_set in self.quad_col2names[quad_type]:
-                            temp_col = np.zeros(src_C.shape[0], dtype=complex)
-                            for name in name_set:
-                                i = src_q_names.index(name)
-                                temp_col += src_C[:, i]
-                            actual_C_cols.append(temp_col)
-                        actual_C = np.vstack(actual_C_cols).T
+                    actual_cols = []
+                    for name_set in self.quad_col2names[quad_type]:
+                        temp_col = np.zeros(src_M.shape[0])
+                        for name in name_set:
+                            i = src_q_names.index(name)
+                            temp_col += src_M[:, i]
+                        actual_cols.append(temp_col)
 
-                        temp["re"].append(actual_C.real)
-                        temp["im"].append(actual_C.imag)
-                    for re_or_im, v in temp.items():
-                        self.RM[f"{comp}_{re_or_im}"] = np.hstack(v)
-            else:
+                    actual_mat = np.vstack(actual_cols).T
 
-                mat_list = defaultdict(list)
-                for comp, bbeat_or_phi in product(["x1", "y1"], ["bbeat", "phi"]):
-                    plane = comp[0]
-                    obs_key = f"{comp}_{bbeat_or_phi}"
-                    for quad_type in ["normal", "skew"]:
+                    mat_list[obs_key].append(actual_mat)
 
-                        if len(self.quad_col2names[quad_type]) == 0:
-                            continue
+            for obs_key, v in mat_list.items():
+                self.RM[obs_key] = np.hstack(v)
 
-                        src_q_names = quad_names_in_file[quad_type]
-                        src_M = f["M_lin_comp"][quad_type][obs_key][()]
+            for comp in ["x2", "y2"]:
+                temp = defaultdict(list)
+                for quad_type in ["normal", "skew"]:
 
-                        actual_cols = []
-                        for name_set in self.quad_col2names[quad_type]:
-                            temp_col = np.zeros(src_M.shape[0])
-                            for name in name_set:
-                                i = src_q_names.index(name)
-                                temp_col += src_M[:, i]
-                            actual_cols.append(temp_col)
+                    if len(self.quad_col2names[quad_type]) == 0:
+                        continue
 
-                        actual_mat = np.vstack(actual_cols).T
+                    src_q_names = quad_names_in_file[quad_type]
+                    src_C = f["M_lin_comp"][quad_type][comp][()]
 
-                        mat_list[obs_key].append(actual_mat)
+                    actual_C_cols = []
+                    for name_set in self.quad_col2names[quad_type]:
+                        temp_col = np.zeros(src_C.shape[0], dtype=complex)
+                        for name in name_set:
+                            i = src_q_names.index(name)
+                            temp_col += src_C[:, i]
+                        actual_C_cols.append(temp_col)
+                    actual_C = np.vstack(actual_C_cols).T
 
-                for obs_key, v in mat_list.items():
-                    self.RM[obs_key] = np.hstack(v)
-
-                for comp in ["x2", "y2"]:
-                    temp = defaultdict(list)
-                    for quad_type in ["normal", "skew"]:
-
-                        if len(self.quad_col2names[quad_type]) == 0:
-                            continue
-
-                        src_q_names = quad_names_in_file[quad_type]
-                        src_C = f["M_lin_comp"][quad_type][comp][()]
-
-                        actual_C_cols = []
-                        for name_set in self.quad_col2names[quad_type]:
-                            temp_col = np.zeros(src_C.shape[0], dtype=complex)
-                            for name in name_set:
-                                i = src_q_names.index(name)
-                                temp_col += src_C[:, i]
-                            actual_C_cols.append(temp_col)
-                        actual_C = np.vstack(actual_C_cols).T
-
-                        temp["re"].append(actual_C.real)
-                        temp["im"].append(actual_C.imag)
-                    for re_or_im, v in temp.items():
-                        self.RM[f"{comp}_{re_or_im}"] = np.hstack(v)
+                    temp["re"].append(actual_C.real)
+                    temp["im"].append(actual_C.imag)
+                for re_or_im, v in temp.items():
+                    self.RM[f"{comp}_{re_or_im}"] = np.hstack(v)
 
             eta = defaultdict(list)
             for plane in "xy":
@@ -1699,7 +1576,16 @@ class TbTLinOptCorrector:
                 v_actual = self.tbt_avg_nu["actual"][plane]
                 v_design = self.tbt_avg_nu["design"][plane]
             else:
-                if self.use_x1_y1_re_im:
+                if k in self.norm_lin_comp["actual"]:
+                    v_actual = self.norm_lin_comp["actual"][k]
+                    v_design = self.norm_lin_comp["design"][k]
+                    if k in ("x1_phi", "y1_phi"):
+                        plane = k[0]
+                        diff_rad = v_design - v_actual
+                        diff_rad_wo_1st_bpm = (diff_rad - diff_rad[0])[1:]
+                        v_design = diff_rad_wo_1st_bpm
+                        v_actual = np.zeros_like(v_design)
+                else:
                     xy12, re_or_im = k.split("_")
                     actual_C = self.norm_lin_comp["actual"][xy12]
                     design_C = self.norm_lin_comp["design"][xy12]
@@ -1709,26 +1595,6 @@ class TbTLinOptCorrector:
                     else:
                         v_actual = actual_C.imag
                         v_design = design_C.imag
-                else:
-                    if k in self.norm_lin_comp["actual"]:
-                        v_actual = self.norm_lin_comp["actual"][k]
-                        v_design = self.norm_lin_comp["design"][k]
-                        if k in ("x1_phi", "y1_phi"):
-                            plane = k[0]
-                            diff_rad = v_design - v_actual
-                            diff_rad_wo_1st_bpm = (diff_rad - diff_rad[0])[1:]
-                            v_design = diff_rad_wo_1st_bpm
-                            v_actual = np.zeros_like(v_design)
-                    else:
-                        xy12, re_or_im = k.split("_")
-                        actual_C = self.norm_lin_comp["actual"][xy12]
-                        design_C = self.norm_lin_comp["design"][xy12]
-                        if re_or_im == "re":
-                            v_actual = actual_C.real
-                            v_design = design_C.real
-                        else:
-                            v_actual = actual_C.imag
-                            v_design = design_C.imag
 
             obs_diff_list.append((v_design - v_actual) * w)
 
@@ -1780,31 +1646,25 @@ class TbTLinOptCorrector:
         actual = self.norm_lin_comp["actual"]
         design = self.norm_lin_comp["design"]
 
-        if self.use_x1_y1_re_im:
-            for plane, order in product("xy", "12"):
-                comp = f"{plane}{order}"
-                hist[f"{comp}_re"].append(actual[comp].real - design[comp].real)
-                hist[f"{comp}_im"].append(actual[comp].imag - design[comp].imag)
-        else:
-            order = 1
-            for plane in "xy":
-                comp = f"{plane}{order}"
-                obs_key = f"{comp}_bbeat"
-                hist[obs_key].append(actual[obs_key] - design[obs_key])
+        order = 1
+        for plane in "xy":
+            comp = f"{plane}{order}"
+            obs_key = f"{comp}_bbeat"
+            hist[obs_key].append(actual[obs_key] - design[obs_key])
 
-                obs_key = f"{comp}_dphi"  # not used for correction
-                hist[obs_key].append(actual[obs_key] / design[obs_key] - 1)
+            obs_key = f"{comp}_dphi"  # not used for correction
+            hist[obs_key].append(actual[obs_key] / design[obs_key] - 1)
 
-                obs_key = f"{comp}_phi"
-                diff_rad = actual[obs_key] - design[obs_key]
-                diff_rad_wo_1st_bpm = (diff_rad - diff_rad[0])[1:]
-                hist[obs_key].append(diff_rad_wo_1st_bpm)
+            obs_key = f"{comp}_phi"
+            diff_rad = actual[obs_key] - design[obs_key]
+            diff_rad_wo_1st_bpm = (diff_rad - diff_rad[0])[1:]
+            hist[obs_key].append(diff_rad_wo_1st_bpm)
 
-            order = 2
-            for plane in "xy":
-                comp = f"{plane}{order}"
-                hist[f"{comp}_re"].append(actual[comp].real - design[comp].real)
-                hist[f"{comp}_im"].append(actual[comp].imag - design[comp].imag)
+        order = 2
+        for plane in "xy":
+            comp = f"{plane}{order}"
+            hist[f"{comp}_re"].append(actual[comp].real - design[comp].real)
+            hist[f"{comp}_im"].append(actual[comp].imag - design[comp].imag)
 
     def plot_actual_design_diff(self, history=True):
         hist = self._actual_design_diff_history
@@ -1851,130 +1711,105 @@ class TbTLinOptCorrector:
             plt.xlabel(r"$\mathrm{Iteration}$", size="x-large")
             plt.tight_layout()
 
-        if self.use_x1_y1_re_im:
-            for plane, order in product("xy", "12"):
-                comp = f"{plane}{order}"
+        order = 1
+        for plane in "xy":
+            comp = f"{plane}{order}"
 
+            plt.figure(figsize=(8, 8))
+
+            plt.subplot(311)
+            if history:
+                plt.plot(np.array(hist[f"{comp}_bbeat"]).T * 1e2, ".-")
+                plt.legend(legends, loc="best")
+            else:
+                plt.plot(hist[f"{comp}_bbeat"][-1] * 1e2, ".-")
+            plt.axhline(0.0, color="k")
+            beta_beat_label = rf"$\Delta \beta_{plane} / \beta_{plane} [\%]$"
+            plt.ylabel(beta_beat_label, size="x-large")
+
+            plt.subplot(312)
+            if history:
+                plt.plot(np.array(hist[f"{comp}_dphi"]).T * 1e2, ".-")
+                plt.legend(legends, loc="best")
+            else:
+                plt.plot(hist[f"{comp}_dphi"][-1] * 1e2, ".-")
+            plt.axhline(0.0, color="k")
+            dphi_label = rf"$\Delta (\delta\phi_{plane}) [\%]$"
+            plt.ylabel(dphi_label, size="x-large")
+
+            plt.subplot(313)
+            if history:
+                plt.plot(np.array(hist[f"{comp}_phi"]).T / (2 * np.pi), ".-")
+                plt.legend(legends, loc="best")
+            else:
+                plt.plot(hist[f"{comp}_phi"][-1] / (2 * np.pi), ".-")
+            plt.axhline(0.0, color="k")
+            phi_label = rf"$\Delta \phi_{plane} [\nu]$"
+            plt.ylabel(phi_label, size="x-large")
+
+            plt.xlabel(r"$\mathrm{BPM\; Index}$", size="x-large")
+            plt.tight_layout()
+
+            if history:
                 plt.figure()
-
-                plt.subplot(211)
-                if history:
-                    plt.plot(np.array(hist[f"{comp}_re"]).T, ".-")
-                    plt.legend(legends, loc="best")
-                else:
-                    plt.plot(hist[f"{comp}_re"][-1], ".-")
-                plt.ylabel(rf"$\Re{{(\Delta {plane}_{order})}}$", size="x-large")
-
-                plt.subplot(212)
-                if history:
-                    plt.plot(np.array(hist[f"{comp}_im"]).T, ".-")
-                    plt.legend(legends, loc="best")
-                else:
-                    plt.plot(hist[f"{comp}_im"][-1], ".-")
-                plt.ylabel(rf"$\Im{{(\Delta {plane}_{order})}}$", size="x-large")
-
-                plt.xlabel(r"$\mathrm{BPM\; Index}$", size="x-large")
-                plt.tight_layout()
-        else:
-            order = 1
-            for plane in "xy":
-                comp = f"{plane}{order}"
-
-                plt.figure(figsize=(8, 8))
-
                 plt.subplot(311)
-                if history:
-                    plt.plot(np.array(hist[f"{comp}_bbeat"]).T * 1e2, ".-")
-                    plt.legend(legends, loc="best")
-                else:
-                    plt.plot(hist[f"{comp}_bbeat"][-1] * 1e2, ".-")
-                plt.axhline(0.0, color="k")
-                beta_beat_label = rf"$\Delta \beta_{plane} / \beta_{plane} [\%]$"
+                plt.plot(np.std(hist[f"{comp}_bbeat"], axis=1) * 1e2, ".-")
+                plt.ylim([0.0, plt.ylim()[1]])
                 plt.ylabel(beta_beat_label, size="x-large")
-
+                plt.title(r"$\mathrm{RMS}$", size="x-large")
                 plt.subplot(312)
-                if history:
-                    plt.plot(np.array(hist[f"{comp}_dphi"]).T * 1e2, ".-")
-                    plt.legend(legends, loc="best")
-                else:
-                    plt.plot(hist[f"{comp}_dphi"][-1] * 1e2, ".-")
-                plt.axhline(0.0, color="k")
-                dphi_label = rf"$\Delta (\delta\phi_{plane}) [\%]$"
+                plt.plot(np.std(hist[f"{comp}_dphi"], axis=1) * 1e2, ".-")
+                plt.ylim([0.0, plt.ylim()[1]])
                 plt.ylabel(dphi_label, size="x-large")
-
+                plt.tight_layout()
                 plt.subplot(313)
-                if history:
-                    plt.plot(np.array(hist[f"{comp}_phi"]).T / (2 * np.pi), ".-")
-                    plt.legend(legends, loc="best")
-                else:
-                    plt.plot(hist[f"{comp}_phi"][-1] / (2 * np.pi), ".-")
-                plt.axhline(0.0, color="k")
-                phi_label = rf"$\Delta \phi_{plane} [\nu]$"
+                plt.plot(np.std(hist[f"{comp}_phi"], axis=1) / (2 * np.pi), ".-")
+                plt.ylim([0.0, plt.ylim()[1]])
                 plt.ylabel(phi_label, size="x-large")
-
-                plt.xlabel(r"$\mathrm{BPM\; Index}$", size="x-large")
+                plt.xlabel(r"$\mathrm{Iteration}$", size="x-large")
                 plt.tight_layout()
 
-                if history:
-                    plt.figure()
-                    plt.subplot(311)
-                    plt.plot(np.std(hist[f"{comp}_bbeat"], axis=1) * 1e2, ".-")
-                    plt.ylim([0.0, plt.ylim()[1]])
-                    plt.ylabel(beta_beat_label, size="x-large")
-                    plt.title(r"$\mathrm{RMS}$", size="x-large")
-                    plt.subplot(312)
-                    plt.plot(np.std(hist[f"{comp}_dphi"], axis=1) * 1e2, ".-")
-                    plt.ylim([0.0, plt.ylim()[1]])
-                    plt.ylabel(dphi_label, size="x-large")
-                    plt.tight_layout()
-                    plt.subplot(313)
-                    plt.plot(np.std(hist[f"{comp}_phi"], axis=1) / (2 * np.pi), ".-")
-                    plt.ylim([0.0, plt.ylim()[1]])
-                    plt.ylabel(phi_label, size="x-large")
-                    plt.xlabel(r"$\mathrm{Iteration}$", size="x-large")
-                    plt.tight_layout()
+        order = 2
+        for plane in "xy":
+            comp = f"{plane}{order}"
 
-            order = 2
-            for plane in "xy":
-                comp = f"{plane}{order}"
+            plt.figure()
 
+            plt.subplot(211)
+            if history:
+                plt.plot(np.array(hist[f"{comp}_re"]).T, ".-")
+                plt.legend(legends, loc="best")
+            else:
+                plt.plot(hist[f"{comp}_re"][-1], ".-")
+            plt.ylabel(rf"$\Re{{(\Delta {plane}_{order})}}$", size="x-large")
+
+            plt.subplot(212)
+            if history:
+                plt.plot(np.array(hist[f"{comp}_im"]).T, ".-")
+                plt.legend(legends, loc="best")
+            else:
+                plt.plot(hist[f"{comp}_im"][-1], ".-")
+            plt.ylabel(rf"$\Im{{(\Delta {plane}_{order})}}$", size="x-large")
+
+            plt.xlabel(r"$\mathrm{BPM\; Index}$", size="x-large")
+            plt.tight_layout()
+
+            if history:
                 plt.figure()
-
                 plt.subplot(211)
-                if history:
-                    plt.plot(np.array(hist[f"{comp}_re"]).T, ".-")
-                    plt.legend(legends, loc="best")
-                else:
-                    plt.plot(hist[f"{comp}_re"][-1], ".-")
-                plt.ylabel(rf"$\Re{{(\Delta {plane}_{order})}}$", size="x-large")
-
+                plt.plot(np.std(hist[f"{comp}_re"], axis=1), ".-")
+                plt.ylabel(
+                    rf"$\mathrm{{RMS}}\; \Re{{(\Delta {plane}_{order})}}$",
+                    size="x-large",
+                )
                 plt.subplot(212)
-                if history:
-                    plt.plot(np.array(hist[f"{comp}_im"]).T, ".-")
-                    plt.legend(legends, loc="best")
-                else:
-                    plt.plot(hist[f"{comp}_im"][-1], ".-")
-                plt.ylabel(rf"$\Im{{(\Delta {plane}_{order})}}$", size="x-large")
-
-                plt.xlabel(r"$\mathrm{BPM\; Index}$", size="x-large")
+                plt.plot(np.std(hist[f"{comp}_im"], axis=1), ".-")
+                plt.ylabel(
+                    rf"$\mathrm{{RMS}}\; \Im{{(\Delta {plane}_{order})}}$",
+                    size="x-large",
+                )
+                plt.xlabel(r"$\mathrm{Iteration}$", size="x-large")
                 plt.tight_layout()
-
-                if history:
-                    plt.figure()
-                    plt.subplot(211)
-                    plt.plot(np.std(hist[f"{comp}_re"], axis=1), ".-")
-                    plt.ylabel(
-                        rf"$\mathrm{{RMS}}\; \Re{{(\Delta {plane}_{order})}}$",
-                        size="x-large",
-                    )
-                    plt.subplot(212)
-                    plt.plot(np.std(hist[f"{comp}_im"], axis=1), ".-")
-                    plt.ylabel(
-                        rf"$\mathrm{{RMS}}\; \Im{{(\Delta {plane}_{order})}}$",
-                        size="x-large",
-                    )
-                    plt.xlabel(r"$\mathrm{Iteration}$", size="x-large")
-                    plt.tight_layout()
 
     def plot_quad_change(self, history=True):
         hist = np.array(self._dK1s_history).T
