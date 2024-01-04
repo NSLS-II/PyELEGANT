@@ -333,7 +333,7 @@ class TbTLinOptCorrector:
         if self.use_x1_y1_re_im:
             self._avail_obs_keys = ["x1_re", "x1_im", "y1_re", "y1_im"]
         else:
-            self._avail_obs_keys = ["x1_bbeat", "x1_dphi", "y1_bbeat", "y1_dphi"]
+            self._avail_obs_keys = ["x1_bbeat", "x1_phi", "y1_bbeat", "y1_phi"]
         self._avail_obs_keys += [
             "x2_re",
             "x2_im",
@@ -1130,6 +1130,9 @@ class TbTLinOptCorrector:
             print(f"RMS est 2Jx = {base_est_twoJx_rms:.6g}")
             print(f"RMS est 2Jy = {base_est_twoJy_rms:.6g}")
 
+        beta_x1 = (lin_comp_d["x1amp"] ** 2) / base_est_twoJx
+        beta_y1 = (lin_comp_d["y1amp"] ** 2) / base_est_twoJy
+
         x1phi_rad = unwrap_montonically_increasing(
             lin_comp_d["x1phi"], tune_above_half=tune_above_half["x"]
         )
@@ -1145,24 +1148,24 @@ class TbTLinOptCorrector:
             v = x1phi_rad / (2 * np.pi)
             plt.plot(v - v[0], "m.-")
 
-        norm_x1C = lin_comp_d["x1C"] / np.sqrt(base_est_twoJx)
-        norm_y1C = lin_comp_d["y1C"] / np.sqrt(base_est_twoJy)
-        norm_x2C = lin_comp_d["x2C"] / np.sqrt(base_est_twoJy)
-        norm_y2C = lin_comp_d["y2C"] / np.sqrt(base_est_twoJx)
+        if tune_above_half["x"]:
+            norm_x1C = lin_comp_d["x1C"].conj() / np.sqrt(base_est_twoJx)
+            norm_x2C = lin_comp_d["x2C"].conj() / np.sqrt(base_est_twoJy)
+        else:
+            norm_x1C = lin_comp_d["x1C"] / np.sqrt(base_est_twoJx)
+            norm_x2C = lin_comp_d["x2C"] / np.sqrt(base_est_twoJy)
 
-        beta_x1 = (np.abs(lin_comp_d["x1C"]) ** 2) / base_est_twoJx
-        beta_y1 = (np.abs(lin_comp_d["y1C"]) ** 2) / base_est_twoJy
+        if tune_above_half["y"]:
+            norm_y1C = lin_comp_d["y1C"].conj() / np.sqrt(base_est_twoJy)
+            norm_y2C = lin_comp_d["y2C"].conj() / np.sqrt(base_est_twoJx)
+        else:
+            norm_y1C = lin_comp_d["y1C"] / np.sqrt(base_est_twoJy)
+            norm_y2C = lin_comp_d["y2C"] / np.sqrt(base_est_twoJx)
 
         # Shift the phases so that the primary components of the first BPM will
         # have always zero phase.
-        if tune_above_half["x"]:
-            phix_adj = np.exp(1j * (+x1phi_rad[0]))
-        else:
-            phix_adj = np.exp(1j * (-x1phi_rad[0]))
-        if tune_above_half["y"]:
-            phiy_adj = np.exp(1j * (+y1phi_rad[0]))
-        else:
-            phiy_adj = np.exp(1j * (-y1phi_rad[0]))
+        phix_adj = np.exp(1j * (-x1phi_rad[0]))
+        phiy_adj = np.exp(1j * (-y1phi_rad[0]))
         norm_x1C *= phix_adj
         norm_y1C *= phiy_adj
         norm_x2C *= phix_adj
@@ -1172,14 +1175,10 @@ class TbTLinOptCorrector:
         # np.angle(norm_x2C[0]) & np.angle(norm_y2C[0]) are unlikely to be zero.
 
         # Calculate phase diff.
-        phix1 = np.angle(norm_x1C)
-        phiy1 = np.angle(norm_y1C)
-        dphix1 = np.diff(phix1)
-        dphiy1 = np.diff(phiy1)
-        while not np.all(dphix1 > 0.0):
-            dphix1[dphix1 < 0.0] += 2 * np.pi
-        while not np.all(dphiy1 > 0.0):
-            dphiy1[dphiy1 < 0.0] += 2 * np.pi
+        dphix1 = np.diff(x1phi_rad)
+        dphiy1 = np.diff(y1phi_rad)
+        assert np.all(dphix1 > 0.0)
+        assert np.all(dphiy1 > 0.0)
 
         # Because of duplicity of the first and last BPM for the primary amplitude
         # (due to fxy1_closed=True), the primary beta data at the last BPM is
@@ -1192,14 +1191,19 @@ class TbTLinOptCorrector:
         # On the otherhand, the secondary components at the first BPM are not
         # useless. So, we're retaining them here. This means:
         assert beta_x1.size == beta_y1.size == dphix1.size == dphiy1.size == nBPM
+        assert x1phi_rad.size == y1phi_rad.size == nBPM + 1
         assert norm_x2C.size == norm_y2C.size == nBPM + 1
 
-        # `x1_dphi` and `y1_dphi` are in [rad]
+        # `x1_bbeat`, `y1_bbeat` [fraction]
+        # `x1_dphi`, `y1_dphi` [rad]
+        # `x1_phi`, `y1_phi` [rad]
         return dict(
             x1_bbeat=beta_beat_x1,
             x1_dphi=dphix1,
+            x1_phi=x1phi_rad,
             y1_bbeat=beta_beat_y1,
             y1_dphi=dphiy1,
+            y1_phi=y1phi_rad,
             x2=norm_x2C,
             y2=norm_y2C,
         )
@@ -1221,10 +1225,13 @@ class TbTLinOptCorrector:
             self.lin_comp["design"], model_bpm_beta, self.tune_above_half["design"]
         )
 
-        self.tbt_avg_nu["design"] = dict(
-            x=np.mean(self.lin_comp["design"]["nux"]),
-            y=np.mean(self.lin_comp["design"]["nuy"]),
-        )
+        raw_tbt_nus = {plane: self.lin_comp["design"][f"nu{plane}"] for plane in "xy"}
+        self.tbt_avg_nu["design"] = {
+            plane: 1 - np.mean(raw_tbt_nus[plane])
+            if self.tune_above_half["design"][plane]
+            else np.mean(raw_tbt_nus[plane])
+            for plane in "xy"
+        }
 
     def calc_actual_lin_comp(self):
         tbt = self.calc_actual_tbt()
@@ -1243,20 +1250,23 @@ class TbTLinOptCorrector:
             self.lin_comp["actual"], model_bpm_beta, self.tune_above_half["actual"]
         )
 
-        self.tbt_avg_nu["actual"] = dict(
-            x=np.mean(self.lin_comp["actual"]["nux"]),
-            y=np.mean(self.lin_comp["actual"]["nuy"]),
-        )
+        raw_tbt_nus = {plane: self.lin_comp["actual"][f"nu{plane}"] for plane in "xy"}
+        self.tbt_avg_nu["actual"] = {
+            plane: 1 - np.mean(raw_tbt_nus[plane])
+            if self.tune_above_half["actual"][plane]
+            else np.mean(raw_tbt_nus[plane])
+            for plane in "xy"
+        }
 
     def calc_response(self, quad_names, dK1, verbose=0):
         resp = {}
 
         if "design" not in self.lin_comp:
             self.calc_design_lin_comp()
+
         model_tbt_avg_nu = self.tbt_avg_nu["design"]
 
         model_twi = self.twiss["design"]
-        model_bpm_beta = model_twi["beta"]["bpms"]
         model_bpm_eta = model_twi["eta"]["bpms"]
 
         if verbose == 1:
@@ -1266,21 +1276,9 @@ class TbTLinOptCorrector:
         self.update_actual_twiss()
         twi = self.twiss["actual"]
 
-        tbt = self.calc_actual_tbt()
-        lin_comp = self.extract_lin_freq_components_from_multi_BPM_tbt(
-            tbt["x"], tbt["y"], fxy1_closed=True
-        )
+        self.calc_actual_lin_comp()
 
-        tbt_avg_nu = {plane: np.mean(lin_comp[f"nu{plane}"]) for plane in "xy"}
-        tbt_rms_nu = {plane: np.std(lin_comp[f"nu{plane}"]) for plane in "xy"}
-        if verbose == 1:
-            contents = ", ".join(
-                [
-                    f"{tbt_avg_nu['x']:.6f}+/-{tbt_rms_nu['x']:.3g}",
-                    f"{tbt_avg_nu['y']:.6f}+/-{tbt_rms_nu['y']:.3g}",
-                ]
-            )
-            print(f"TbT (nux, nuy) = ({contents})")
+        tbt_avg_nu = self.tbt_avg_nu["actual"]
 
         resp["nu_tbt"] = {}
         resp["nu_twi"] = {}
@@ -1293,25 +1291,27 @@ class TbTLinOptCorrector:
             _eta = twi["eta"]["bpms"][plane]
             resp["eta"][plane] = (_eta - _base_eta) / dK1
 
-        if self.use_x1_y1_re_im:
-            normalizer = self.normalize_phase_adj_lin_freq_components
-        else:
-            normalizer = self.normalize_and_phase_diff_lin_freq_components
-        norm_lin_comp = normalizer(
-            lin_comp, model_bpm_beta, self.tune_above_half["design"]
-        )
+        model_norm_lin_comp = self.norm_lin_comp["design"]
+        norm_lin_comp = self.norm_lin_comp["actual"]
         resp["_extra"] = dict(norm_lin_comp=norm_lin_comp)
 
         if self.use_x1_y1_re_im:
             resp["norm_lin_comp"] = {
-                comp: (norm_lin_comp[comp] - self.norm_lin_comp["design"][comp]) / dK1
+                comp: (norm_lin_comp[comp] - model_norm_lin_comp[comp]) / dK1
                 for comp in ["x1", "y1", "x2", "y2"]
             }
         else:
             resp["norm_lin_comp"] = {
-                comp: (norm_lin_comp[comp] - self.norm_lin_comp["design"][comp]) / dK1
+                comp: (norm_lin_comp[comp] - model_norm_lin_comp[comp]) / dK1
                 for comp in ["x1_bbeat", "y1_bbeat", "x1_dphi", "y1_dphi", "x2", "y2"]
             }
+
+            for plane in "xy":
+                comp = f"{plane}1_phi"
+                diff_rad = norm_lin_comp[comp] - model_norm_lin_comp[comp]
+                assert diff_rad.size == self.nBPM[plane] + 1
+                diff_rad_wo_1st_bpm = (diff_rad - diff_rad[0])[1:]
+                resp["norm_lin_comp"][comp] = diff_rad_wo_1st_bpm / dK1
 
         # Reset the quad strength change
         if verbose == 1:
@@ -1547,24 +1547,11 @@ class TbTLinOptCorrector:
                     for re_or_im, v in temp.items():
                         self.RM[f"{comp}_{re_or_im}"] = np.hstack(v)
             else:
-                model_twi = self.twiss["design"]
-                model_bpm_beta = model_twi["beta"]["bpms"]
-
-                model_bpm_phi = model_twi["phi"]["bpms"]
-                model_bpm_dphi_rad = {}
-                for plane in "xy":
-                    dphi = np.diff(
-                        np.append(
-                            model_bpm_phi[plane],
-                            model_twi[f"nu{plane}"] + model_bpm_phi[plane][0],
-                        )
-                    )
-                    model_bpm_dphi_rad[plane] = dphi * (2 * np.pi)
 
                 mat_list = defaultdict(list)
-                for comp, bbeat_or_dphi in product(["x1", "y1"], ["bbeat", "dphi"]):
+                for comp, bbeat_or_phi in product(["x1", "y1"], ["bbeat", "phi"]):
                     plane = comp[0]
-                    obs_key = f"{comp}_{bbeat_or_dphi}"
+                    obs_key = f"{comp}_{bbeat_or_phi}"
                     for quad_type in ["normal", "skew"]:
 
                         if len(self.quad_col2names[quad_type]) == 0:
@@ -1578,10 +1565,7 @@ class TbTLinOptCorrector:
                             temp_col = np.zeros(src_M.shape[0])
                             for name in name_set:
                                 i = src_q_names.index(name)
-                                if bbeat_or_dphi == "bbeat":
-                                    temp_col += src_M[:, i]
-                                else:
-                                    temp_col += src_M[:, i] / model_bpm_dphi_rad[plane]
+                                temp_col += src_M[:, i]
                             actual_cols.append(temp_col)
 
                         actual_mat = np.vstack(actual_cols).T
@@ -1729,6 +1713,12 @@ class TbTLinOptCorrector:
                     if k in self.norm_lin_comp["actual"]:
                         v_actual = self.norm_lin_comp["actual"][k]
                         v_design = self.norm_lin_comp["design"][k]
+                        if k in ("x1_phi", "y1_phi"):
+                            plane = k[0]
+                            diff_rad = v_design - v_actual
+                            diff_rad_wo_1st_bpm = (diff_rad - diff_rad[0])[1:]
+                            v_design = diff_rad_wo_1st_bpm
+                            v_actual = np.zeros_like(v_design)
                     else:
                         xy12, re_or_im = k.split("_")
                         actual_C = self.norm_lin_comp["actual"][xy12]
@@ -1801,8 +1791,14 @@ class TbTLinOptCorrector:
                 comp = f"{plane}{order}"
                 obs_key = f"{comp}_bbeat"
                 hist[obs_key].append(actual[obs_key] - design[obs_key])
-                obs_key = f"{comp}_dphi"
+
+                obs_key = f"{comp}_dphi"  # not used for correction
                 hist[obs_key].append(actual[obs_key] / design[obs_key] - 1)
+
+                obs_key = f"{comp}_phi"
+                diff_rad = actual[obs_key] - design[obs_key]
+                diff_rad_wo_1st_bpm = (diff_rad - diff_rad[0])[1:]
+                hist[obs_key].append(diff_rad_wo_1st_bpm)
 
             order = 2
             for plane in "xy":
@@ -1821,11 +1817,13 @@ class TbTLinOptCorrector:
         plt.figure()
         plt.subplot(211)
         plt.plot(hist["nux"], "b.-")
+        plt.axhline(0.0, color="k")
         plt.ylabel(r"$\Delta \nu_x$", size="x-large")
         plt.subplot(212)
         plt.plot(hist["nuy"], "b.-")
+        plt.axhline(0.0, color="k")
         plt.ylabel(r"$\Delta \nu_y$", size="x-large")
-        plt.xlabel(r"$\mathrm{Correction\; Index}$", size="x-large")
+        plt.xlabel(r"$\mathrm{Iteration}$", size="x-large")
         plt.tight_layout()
 
         plt.figure()
@@ -1839,6 +1837,19 @@ class TbTLinOptCorrector:
             plt.ylabel(rf"$\Delta \eta_{plane}\; [\mathrm{{mm}}]$", size="x-large")
         plt.xlabel(r"$\mathrm{BPM\; Index}$", size="x-large")
         plt.tight_layout()
+
+        if history:
+            plt.figure()
+            for plane, plot_ind in zip("xy", [211, 212]):
+                plt.subplot(plot_ind)
+                plt.plot(np.std(hist[f"eta{plane}"], axis=1) * 1e3, ".-")
+                plt.ylabel(
+                    rf"$\mathrm{{RMS}}\; \Delta \eta_{plane}\; [\mathrm{{mm}}]$",
+                    size="x-large",
+                )
+                plt.ylim([0.0, plt.ylim()[1]])
+            plt.xlabel(r"$\mathrm{Iteration}$", size="x-large")
+            plt.tight_layout()
 
         if self.use_x1_y1_re_im:
             for plane, order in product("xy", "12"):
@@ -1869,26 +1880,59 @@ class TbTLinOptCorrector:
             for plane in "xy":
                 comp = f"{plane}{order}"
 
-                plt.figure()
+                plt.figure(figsize=(8, 8))
 
-                plt.subplot(211)
+                plt.subplot(311)
                 if history:
                     plt.plot(np.array(hist[f"{comp}_bbeat"]).T * 1e2, ".-")
                     plt.legend(legends, loc="best")
                 else:
                     plt.plot(hist[f"{comp}_bbeat"][-1] * 1e2, ".-")
-                plt.ylabel(rf"$|\Delta {plane}_{order}| [\%]$", size="x-large")
+                plt.axhline(0.0, color="k")
+                beta_beat_label = rf"$\Delta \beta_{plane} / \beta_{plane} [\%]$"
+                plt.ylabel(beta_beat_label, size="x-large")
 
-                plt.subplot(212)
+                plt.subplot(312)
                 if history:
                     plt.plot(np.array(hist[f"{comp}_dphi"]).T * 1e2, ".-")
                     plt.legend(legends, loc="best")
                 else:
                     plt.plot(hist[f"{comp}_dphi"][-1] * 1e2, ".-")
-                plt.ylabel(rf"$\Delta \angle {plane}_{order} [\%]$", size="x-large")
+                plt.axhline(0.0, color="k")
+                dphi_label = rf"$\Delta (\delta\phi_{plane}) [\%]$"
+                plt.ylabel(dphi_label, size="x-large")
+
+                plt.subplot(313)
+                if history:
+                    plt.plot(np.array(hist[f"{comp}_phi"]).T / (2 * np.pi), ".-")
+                    plt.legend(legends, loc="best")
+                else:
+                    plt.plot(hist[f"{comp}_phi"][-1] / (2 * np.pi), ".-")
+                plt.axhline(0.0, color="k")
+                phi_label = rf"$\Delta \phi_{plane} [\nu]$"
+                plt.ylabel(phi_label, size="x-large")
 
                 plt.xlabel(r"$\mathrm{BPM\; Index}$", size="x-large")
                 plt.tight_layout()
+
+                if history:
+                    plt.figure()
+                    plt.subplot(311)
+                    plt.plot(np.std(hist[f"{comp}_bbeat"], axis=1) * 1e2, ".-")
+                    plt.ylim([0.0, plt.ylim()[1]])
+                    plt.ylabel(beta_beat_label, size="x-large")
+                    plt.title(r"$\mathrm{RMS}$", size="x-large")
+                    plt.subplot(312)
+                    plt.plot(np.std(hist[f"{comp}_dphi"], axis=1) * 1e2, ".-")
+                    plt.ylim([0.0, plt.ylim()[1]])
+                    plt.ylabel(dphi_label, size="x-large")
+                    plt.tight_layout()
+                    plt.subplot(313)
+                    plt.plot(np.std(hist[f"{comp}_phi"], axis=1) / (2 * np.pi), ".-")
+                    plt.ylim([0.0, plt.ylim()[1]])
+                    plt.ylabel(phi_label, size="x-large")
+                    plt.xlabel(r"$\mathrm{Iteration}$", size="x-large")
+                    plt.tight_layout()
 
             order = 2
             for plane in "xy":
@@ -1914,6 +1958,23 @@ class TbTLinOptCorrector:
 
                 plt.xlabel(r"$\mathrm{BPM\; Index}$", size="x-large")
                 plt.tight_layout()
+
+                if history:
+                    plt.figure()
+                    plt.subplot(211)
+                    plt.plot(np.std(hist[f"{comp}_re"], axis=1), ".-")
+                    plt.ylabel(
+                        rf"$\mathrm{{RMS}}\; \Re{{(\Delta {plane}_{order})}}$",
+                        size="x-large",
+                    )
+                    plt.subplot(212)
+                    plt.plot(np.std(hist[f"{comp}_im"], axis=1), ".-")
+                    plt.ylabel(
+                        rf"$\mathrm{{RMS}}\; \Im{{(\Delta {plane}_{order})}}$",
+                        size="x-large",
+                    )
+                    plt.xlabel(r"$\mathrm{Iteration}$", size="x-large")
+                    plt.tight_layout()
 
     def plot_quad_change(self, history=True):
         hist = np.array(self._dK1s_history).T
