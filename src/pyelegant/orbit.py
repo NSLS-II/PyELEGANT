@@ -1986,29 +1986,26 @@ class ClosedOrbitThreader:
 
             fin_kicks = dict(x=hkick_rads, y=vkick_rads)
 
-            if debug_plot:
-                clo_calc = ClosedOrbitCalculator(
-                    self.LTE.LTE_filepath,
-                    self.E_MeV,
-                    fixed_length=True,
-                    output_monitors_only=False,
-                    closed_orbit_accuracy=1e-12,  # 1e-9,
-                    closed_orbit_iterations=100,  # 200,
-                    iteration_fraction=0.9,
-                    n_turns=0,
-                    use_beamline=self.LTE.used_beamline_name,
-                    N_KICKS=self.N_KICKS,
-                )
-
-                clo_calc.select_kickers("x", self.cor_names["x"])
-                clo_calc.select_kickers("y", self.cor_names["y"])
-
-                clo_calc.set_kick_angles(hkick_rads, vkick_rads)
-
-                d = clo_calc.calc(run_local=True)
-                if False:
-                    plot_closed_orbit(d["columns"], d["params"])
-                cod_ele = d["columns"]
+            # Compute closed orbit with final kicks
+            clo_calc = ClosedOrbitCalculator(
+                self.LTE.LTE_filepath,
+                self.E_MeV,
+                fixed_length=True,
+                output_monitors_only=False,
+                closed_orbit_accuracy=1e-12,  # 1e-9,
+                closed_orbit_iterations=100,  # 200,
+                iteration_fraction=0.9,
+                n_turns=0,
+                use_beamline=self.LTE.used_beamline_name,
+                N_KICKS=self.N_KICKS,
+            )
+            clo_calc.select_kickers("x", self.cor_names["x"])
+            clo_calc.select_kickers("y", self.cor_names["y"])
+            clo_calc.set_kick_angles(hkick_rads, vkick_rads)
+            d = clo_calc.calc(run_local=True)
+            if False:
+                plot_closed_orbit(d["columns"], d["params"])
+            cod_ele = d["columns"]
 
             tEnd = time.perf_counter()
             print(f"* Took {tEnd-tStart:.1f} [s].")
@@ -2038,25 +2035,28 @@ class ClosedOrbitThreader:
                 plt.plot(fin_diff_orbs["y"], "b.-")
                 plt.tight_layout()
 
-                plt.figure()
-                plt.plot(self.cor_s["x"], hkick_rads * 1e3, "b.-", label="x")
-                plt.plot(self.cor_s["y"], vkick_rads * 1e3, "r.-", label="y")
-                leg = plt.legend(loc="best", prop=dict(size=18))
-                plt.ylabel(r"$\theta\; [\mathrm{mrad}]$", size="large")
-                plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
-                plt.tight_layout()
+            plt.figure()
+            plt.plot(self.cor_s["x"], hkick_rads * 1e3, "b.-", label="x")
+            plt.plot(self.cor_s["y"], vkick_rads * 1e3, "r.-", label="y")
+            leg = plt.legend(loc="best", prop=dict(size=18))
+            plt.ylabel(r"$\theta\; [\mathrm{mrad}]$", size="large")
+            plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
+            plt.tight_layout()
 
-                plt.figure()
-                plt.subplot(211)
-                plt.plot(self.bpm_s["x"], self.target_orbit["x"] * 1e6, "k^:")
-                plt.plot(cod_ele["s"], cod_ele["x"] * 1e6, "m-")
-                plt.ylabel(r"$x\; [\mu\mathrm{m}]$", size="large")
-                plt.subplot(212)
-                plt.plot(self.bpm_s["y"], self.target_orbit["y"] * 1e6, "k^:")
-                plt.plot(cod_ele["s"], cod_ele["y"] * 1e6, "m-")
-                plt.ylabel(r"$y\; [\mu\mathrm{m}]$", size="large")
-                plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
-                plt.tight_layout()
+            plt.figure()
+            plt.subplot(211)
+            plt.plot(
+                self.bpm_s["x"], self.target_orbit["x"] * 1e6, "k^:", label="Target"
+            )
+            plt.plot(cod_ele["s"], cod_ele["x"] * 1e6, "m-", label="COD")
+            plt.ylabel(r"$x\; [\mu\mathrm{m}]$", size="large")
+            plt.legend(loc="best")
+            plt.subplot(212)
+            plt.plot(self.bpm_s["y"], self.target_orbit["y"] * 1e6, "k^:")
+            plt.plot(cod_ele["s"], cod_ele["y"] * 1e6, "m-")
+            plt.ylabel(r"$y\; [\mu\mathrm{m}]$", size="large")
+            plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
+            plt.tight_layout()
 
         else:
             raise NotImplementedError
