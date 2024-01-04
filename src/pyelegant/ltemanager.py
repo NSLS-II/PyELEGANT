@@ -558,8 +558,27 @@ class Lattice:
 
         assert used_beamline_name in all_beamline_names
 
-        assert len(all_beamline_names) == len(np.unique(all_beamline_names))
-        assert len(all_elem_names) == len(np.unique(all_elem_names))
+        try:
+            assert len(all_beamline_names) == len(np.unique(all_beamline_names))
+        except AssertionError:
+            duplicate_names = [
+                name
+                for name in np.unique(all_beamline_names)
+                if all_beamline_names.count(name) != 1
+            ]
+            msg = f"Duplicate beamline defintions for {duplicate_names}"
+            raise AssertionError(msg)
+
+        try:
+            assert len(all_elem_names) == len(np.unique(all_elem_names))
+        except AssertionError:
+            duplicate_names = [
+                name
+                for name in np.unique(all_elem_names)
+                if all_elem_names.count(name) != 1
+            ]
+            msg = f"Duplicate element defintions for {duplicate_names}"
+            raise AssertionError(msg)
 
         actually_used_beamline_names = []  # placeholder
 
