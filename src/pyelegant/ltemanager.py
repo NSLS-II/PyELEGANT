@@ -40,10 +40,10 @@ class Lattice:
         LTEZIP_filepath: Union[Path, str] = "",
         used_beamline_name: str = "",
         tempdir_path: Union[Path, str, None] = None,
+        parallel: bool = False,
         del_tempdir_on_exit: bool = True,
-        verbose: bool = True,
+        verbose: int = 0,
     ):
-        """Constructor"""
 
         if used_beamline_name is None:
             used_beamline_name = ""
@@ -85,6 +85,8 @@ class Lattice:
 
         self.verbose = verbose
 
+        self.parallel = parallel  # ensure visibility of temp. directory, if set to True
+
         if (LTE_filepath != "") or (LTEZIP_filepath != ""):
             self.load_LTE(
                 LTE_filepath=LTE_filepath,
@@ -106,13 +108,30 @@ class Lattice:
 
     @staticmethod
     def temp_unzip_ltezip(
-        LTEZIP_filepath, tempdir_path=None, del_tempdir_on_exit=True, verbose=True
+        LTEZIP_filepath,
+        tempdir_path=None,
+        del_tempdir_on_exit: bool = True,
+        verbose: int = 0,
+        parallel: bool = False,
     ):
+        """If `parallel` is `True`, `tempdir_path` will be force-set to `Path.cwd()`
+        if it is `None`. This is done such that the tempoary folder in which the LTEZIP
+        file is extracted will be visible to parallel worker nodes.
+        """
         LTEZIP_filepath = Path(LTEZIP_filepath)
         assert LTEZIP_filepath.exists()
 
+        if parallel:
+            if tempdir_path is None:
+                tempdir_path = Path.cwd()
+                msg = (
+                    "Due to `parallel` being True, `tempdir_path` is changed into `Path.cwd()` "
+                    "to ensure file visibility to parallel worker nodes."
+                )
+                print(msg)
+
         tempdir = tempfile.TemporaryDirectory(prefix="tmpLteZip_", dir=tempdir_path)
-        if verbose:
+        if verbose >= 1:
             print(
                 f'\nTemporary directory "{tempdir.name}" has been created to unzip the LTEZIP file.'
             )
@@ -139,7 +158,7 @@ class Lattice:
             overwrite_suppl=True,
             verbose=verbose,
         )
-        if verbose:
+        if verbose >= 1:
             print(f'\nTemporary LTE file "{temp_lte_filepath}" has been created.')
 
         return dict(
@@ -204,6 +223,7 @@ class Lattice:
                 tempdir_path=tempdir_path,
                 del_tempdir_on_exit=del_tempdir_on_exit,
                 verbose=self.verbose,
+                parallel=self.parallel,
             )
             self.tempdir = temp_d["tempdir"]
             LTE_filepath = temp_d["LTE_filepath"]
@@ -818,7 +838,7 @@ class Lattice:
         overwrite_lte=False,
         overwrite_suppl=False,
         double_format="%.16g",
-        verbose=True,
+        verbose=0,
     ):
         """
         If "output_lte_filepath" is not specified, a new LTE file will be
@@ -922,7 +942,7 @@ class Lattice:
                             orig_abs_path
                         ].encode("latin-1")
                     )
-                    if verbose:
+                    if verbose >= 1:
                         print(f"* Created LTE supplementary file: {new_abs_path}")
                     _newly_created_suppl_filepaths[file_type].append(new_abs_path)
 
@@ -1587,3 +1607,209 @@ def get_ELEGANT_element_dictionary():
         ELEGANT_ELEM_DICT.update(d)
 
     return ELEGANT_ELEM_DICT
+
+
+class AbstractFacility:
+    def __init__(self, LTE: Lattice, lattice_type: str):
+
+        assert isinstance(LTE, Lattice)
+        self.LTE = LTE
+
+        self.lat_type = lattice_type
+
+        self.N_KICKS = {}
+
+
+class NSLS2(AbstractFacility):
+    def __init__(self, LTE: Lattice, lattice_type: str = "day1"):
+
+        super().__init__(LTE, lattice_type)
+
+        assert self.lat_type in ("day1", "C26_double_mini_beta")
+
+        self.E_MeV = 3e3
+        self.N_KICKS = dict(CSBEND=40, KQUAD=40, KSEXT=20, KOCT=20)
+
+    def get_regular_BPM_elem_inds(self):
+        """Get the element indexes for regular (arc) BPMs"""
+
+        LTE = self.LTE
+
+        inds = LTE.get_elem_inds_from_regex("^P[HLM]\w+$")
+        assert len(inds) == 180
+
+        return dict(x=inds.copy(), y=inds.copy())
+
+    def get_regular_BPM_names(self):
+        """Get the names for regular (arc) BPMs"""
+
+        inds_d = self.get_regular_BPM_elem_inds()
+        assert np.all(inds_d["x"] == inds_d["y"])
+
+        LTE = self.LTE
+
+        names = LTE.get_names_from_elem_inds(inds_d["x"])
+        assert len(names) == 180
+
+        return dict(x=names.copy(), y=names.copy())
+
+    def get_slow_corrector_elem_inds(self):
+        """Get the element indexes for slow orbit correctors"""
+        LTE = self.LTE
+
+        inds_x = LTE.get_elem_inds_from_regex("^C[HLM][1-2]XG[2-6]\w+$")
+        assert len(inds_x) == 180
+
+        inds_y = LTE.get_elem_inds_from_regex("^C[HLM][1-2]YG[2-6]\w+$")
+        assert len(inds_y) == 180
+
+        return dict(x=inds_x, y=inds_y)
+
+    def get_slow_corrector_names(self):
+        """Get the names for slow orbit correctors"""
+
+        inds_d = self.get_slow_corrector_elem_inds()
+
+        LTE = self.LTE
+
+        hcor_names = LTE.get_names_from_elem_inds(inds_d["x"])
+        assert len(hcor_names) == 180
+
+        vcor_names = LTE.get_names_from_elem_inds(inds_d["y"])
+        assert len(vcor_names) == 180
+
+        return dict(x=hcor_names, y=vcor_names)
+
+    def get_bend_elem_inds(self):
+        """Get the element indexes for bends"""
+
+        LTE = self.LTE
+        inds = LTE.get_elem_inds_from_regex("^B[12]\w+$")
+        assert len(inds) == 30 * 2
+        return inds
+
+    def get_bend_names(self):
+        """Get the names for bends"""
+
+        inds = self.get_bend_elem_inds()
+
+        LTE = self.LTE
+        names = LTE.get_names_from_elem_inds(inds)
+        assert len(names) == 30 * 2
+
+        return names
+
+    def get_quad_names(self, flat_skew_quad_names: bool = False):
+        LTE = self.LTE
+
+        inds = LTE.get_elem_inds_from_regex("^Q[HLM]\w+$")
+
+        if self.lat_type == "C26_double_mini_beta":
+            inds = np.append(inds, LTE.get_elem_inds_from_regex("^Q[FD]C26[AB]$"))
+            inds = np.sort(inds)
+
+        normal_quad_names = LTE.get_names_from_elem_inds(inds)
+        assert len(normal_quad_names) == len(np.unique(normal_quad_names))
+
+        if self.lat_type != "C26_double_mini_beta":
+            assert len(normal_quad_names) == 300
+        else:
+            assert len(normal_quad_names) == 300 + 3
+
+        inds = LTE.get_elem_inds_from_regex("^SQ[HM]\w+$")
+        skew_quad_names = LTE.get_names_from_elem_inds(inds)
+        assert (
+            len(skew_quad_names) == 30 * 2
+        )  # Skew quad elements are all split into half
+
+        if flat_skew_quad_names:
+            if len(skew_quad_names) == len(np.unique(skew_quad_names)):
+                # When skew quads are split in half, but each half piece is named differently
+                return dict(
+                    normal=normal_quad_names, skew=skew_quad_names, skew_lumped=False
+                )
+            else:
+                # When skew quads are split in half, with each half piece with the same name
+                flat_unique_skew_quad_names = []
+                for i, name in enumerate(skew_quad_names):
+                    if i % 2 == 0:
+                        assert name not in flat_unique_skew_quad_names
+                        flat_unique_skew_quad_names.append(name)
+                    else:
+                        assert name == flat_unique_skew_quad_names[-1]
+
+                return dict(
+                    normal=normal_quad_names,
+                    skew=np.array(flat_unique_skew_quad_names),
+                    skew_lumped=False,
+                )
+        else:
+            lumped_skew_quad_names = [
+                skew_quad_names[i * 2 : i * 2 + 2] for i in range(30)
+            ]
+            assert len(lumped_skew_quad_names) == 30
+
+            return dict(
+                normal=normal_quad_names, skew=lumped_skew_quad_names, skew_lumped=True
+            )
+
+    def get_sext_elem_inds(self):
+        """Get the element indexes for sextupoles"""
+
+        LTE = self.LTE
+
+        inds = LTE.get_elem_inds_from_regex("^S[HLM]\w+$")
+        assert len(inds) == 270
+
+        return inds
+
+    def get_sext_names(self):
+        """Get the names for sextupoles"""
+
+        inds = self.get_sext_elem_inds()
+
+        LTE = self.LTE
+        names = LTE.get_names_from_elem_inds(inds)
+        assert len(names) == 270
+
+        return names
+
+    def get_girder_marker_pairs(self):
+        LTE = self.LTE
+
+        gs_inds = LTE.get_elem_inds_from_regex("^GS\w+")
+        gs_names = LTE.get_names_from_elem_inds(gs_inds)
+        assert len(gs_names) == 180
+
+        ge_inds = LTE.get_elem_inds_from_regex("^GE\w+")
+        ge_names = LTE.get_names_from_elem_inds(ge_inds)
+        assert len(ge_names) == 180
+
+        g_paired_names = list(zip(gs_names[:-1], ge_names[1:]))
+        g_paired_inds = list(zip(gs_inds[:-1], ge_inds[1:]))
+        assert len(g_paired_inds) == 179
+
+        g_paired_names.append((gs_names[-1], ge_names[0]))
+        g_paired_inds.append((gs_inds[-1], ge_inds[0]))
+        assert len(g_paired_inds) == 180
+
+        for gs_name, ge_name in g_paired_names:
+            try:
+                assert gs_name[:2] == "GS"
+                assert ge_name[:2] == "GE"
+                if not gs_name.startswith("GSG4C"):
+                    assert gs_name[2:] == ge_name[2:]
+                else:
+                    assert gs_name[2:-1] == ge_name[2:-1]
+                    assert gs_name[-1] == "A"
+                    assert ge_name[-1] == "B"
+
+                # Check uniqueness of the element names
+                assert len(LTE.get_elem_inds_from_name(gs_name)) == 1
+                assert len(LTE.get_elem_inds_from_name(ge_name)) == 1
+            except AssertionError:
+                print(gs_name, ge_name)
+
+        gs_inds, ge_inds = [np.array(tup) for tup in zip(*g_paired_inds)]
+
+        return gs_inds, ge_inds

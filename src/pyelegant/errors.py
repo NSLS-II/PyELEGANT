@@ -11,22 +11,18 @@ from dataclasses import dataclass
 # be pickled!
 from enum import IntEnum
 from functools import partial
+import json
 from pathlib import Path
 import pickle
 import tempfile
+import time
 from typing import Dict, List, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import truncnorm
 
-if False:
-    from . import ltemanager, sdds
-else:
-    import pyelegant as pe
-
-    ltemanager = pe.ltemanager
-    sdds = pe.sdds
+from . import ltemanager, sdds
 
 SupportType = IntEnum("SupportType", ["section", "plinth", "girder"], start=0)
 
@@ -506,21 +502,21 @@ class Errors:
         self.elem_defs = d["elem_defs"]
         self.flat_used_elem_names = d["flat_used_elem_names"]
 
-        self.flat_LTE = self._individualize_families(
+        self.indiv_LTE = self._individualize_families(
             modified_name_prefix, modified_name_suffix
         )
 
         self.lengths, self.s_ends, self.C = self.calc_spos()
         self._init_support_offsets()
         self._init_support_rotations()
-        self.n_elems = len(self.flat_LTE.flat_used_elem_names) + 1  # +1 for __BEG__
+        self.n_elems = len(self.indiv_LTE.flat_used_elem_names) + 1  # +1 for __BEG__
 
         _flat_elem_names = [
-            self.flat_LTE.flat_used_elem_names[i - 1] if i != 0 else "__BEG__"
+            self.indiv_LTE.flat_used_elem_names[i - 1] if i != 0 else "__BEG__"
             for i in range(self.n_elems)
         ]
         self.ring = [
-            dict(name=name, elem_type=self.flat_LTE.get_elem_type_from_name(name))
+            dict(name=name, elem_type=self.indiv_LTE.get_elem_type_from_name(name))
             for name in _flat_elem_names
         ]
 
@@ -595,9 +591,12 @@ class Errors:
         # the new name will be truncated, which is not what you want to happen.
         new_flat_used_elem_names = np.array(self.flat_used_elem_names[:], dtype=object)
 
+        self._LTE_individualized = False
         for orig_name in sorted_orig_names:
             counts = kid_counts[orig_name]
             if counts >= 2:
+                self._LTE_individualized = True
+
                 elem_def = elem_defs_d[orig_name]
                 assert elem_def[0] == orig_name
                 matched_elem_inds = np.where(new_flat_used_elem_names == orig_name)[0]
@@ -623,7 +622,7 @@ class Errors:
         self.flat_used_elem_names.extend(new_flat_used_elem_names)
 
         tmp = tempfile.NamedTemporaryFile(
-            prefix=f"tmpLteFlat_", suffix=".lte", dir=None, delete=True
+            prefix=f"tmpLteIndiv_", suffix=".lte", dir=None, delete=True
         )
         new_LTE_filepath = Path(tmp.name)
 
@@ -634,22 +633,26 @@ class Errors:
             self.beamline_defs,
         )
 
-        flat_LTE = ltemanager.Lattice(
+        indiv_LTE = ltemanager.Lattice(
             new_LTE_filepath, used_beamline_name=self.used_beamline_name
         )
 
         tmp.close()
 
-        return flat_LTE
+        return indiv_LTE
+
+    def is_LTE_individualized(self):
+
+        return self._LTE_individualized
 
     def calc_spos(self):
-        elem_defs = self.flat_LTE.get_used_beamline_element_defs()["elem_defs"]
+        elem_defs = self.indiv_LTE.get_used_beamline_element_defs()["elem_defs"]
         all_elem_names = [name for name, *_ in elem_defs]
         Ls = [0.0]  # Add zero-length for __BEG__
-        for elem_name in self.flat_LTE.flat_used_elem_names:
+        for elem_name in self.indiv_LTE.flat_used_elem_names:
             i = all_elem_names.index(elem_name)
             prop_str = elem_defs[i][2]
-            L = self.flat_LTE.parse_elem_properties(prop_str).get("L", 0.0)
+            L = self.indiv_LTE.parse_elem_properties(prop_str).get("L", 0.0)
             Ls.append(L)
         Ls = np.array(Ls)
 
@@ -786,7 +789,7 @@ class Errors:
         self._bpms_dist.clear()
 
         for ei in np.sort(list(self.bpms)):
-            elem_name = self.flat_LTE.get_names_from_elem_inds(ei)
+            elem_name = self.indiv_LTE.get_names_from_elem_inds(ei)
 
             spec = self.bpms[ei]
 
@@ -835,7 +838,7 @@ class Errors:
             copy_errs = {}
 
             for (us_ei, ds_ei), spec in self.supports[_type].items():
-                us_elem_name, ds_elem_name = self.flat_LTE.get_names_from_elem_inds(
+                us_elem_name, ds_elem_name = self.indiv_LTE.get_names_from_elem_inds(
                     [us_ei, ds_ei]
                 )
 
@@ -954,7 +957,7 @@ class Errors:
         self._magnets_dist.clear()
 
         for ei in np.sort(list(self.magnets)):
-            elem_name = self.flat_LTE.get_names_from_elem_inds(ei)
+            elem_name = self.indiv_LTE.get_names_from_elem_inds(ei)
 
             magnet_err = MagnetError(elem_name)
             mpole_err = MultipoleError()
@@ -1284,14 +1287,14 @@ class Errors:
             ltemanager.write_modified_LTE(
                 output_LTE_filepath,
                 mods,
-                LTE_obj=self.flat_LTE,
+                LTE_obj=self.indiv_LTE,
             )
         elif output_LTEZIP_filepath != "":
             temp_LTE_filepath = ltemanager.write_temp_modified_LTE(
-                mods, LTE_obj=self.flat_LTE
+                mods, LTE_obj=self.indiv_LTE
             )
             new_LTE = ltemanager.Lattice(
-                temp_LTE_filepath, used_beamline_name=self.flat_LTE.used_beamline_name
+                temp_LTE_filepath, used_beamline_name=self.indiv_LTE.used_beamline_name
             )
 
             new_LTE.zip_lte(output_LTEZIP_filepath)
@@ -1541,10 +1544,10 @@ class Errors:
                 raise ValueError(err_type)
 
         temp_LTE_filepath = ltemanager.write_temp_modified_LTE(
-            mods, LTE_obj=self.flat_LTE
+            mods, LTE_obj=self.indiv_LTE
         )
         new_LTE = ltemanager.Lattice(
-            temp_LTE_filepath, used_beamline_name=self.flat_LTE.used_beamline_name
+            temp_LTE_filepath, used_beamline_name=self.indiv_LTE.used_beamline_name
         )
         new_LTE.zip_lte(output_LTEZIP_filepath)
         try:
@@ -1557,6 +1560,388 @@ class Errors:
                 fp.unlink()
             except:
                 pass
+
+
+class AbstractFacility:
+    def __init__(
+        self,
+        design_LTE: ltemanager.Lattice,
+        lattice_type: str,
+        indiv_design_LTEZIP_filepath: Union[Path, str],
+        error_LTEZIP_name_prefix: str,
+        seed: Union[int, None, np.random.Generator] = 42,
+    ):
+        """
+        Based on MATLAB SC (Simulated Commissioning).
+
+        `indiv_design_LTEZIP_filepath` will not be used if family individualization
+        is not necessary (i.e., when there is no duplicate name for any of the
+        elements). If individualization does occur, this individualized
+        LTEZIP file should be used (instead of the original design LTE or LTEZIP file)
+        as some magnet names may have been changed and cause mismatches during
+        response matrix construction when the original design file is used.
+
+        TODO: Must add "split-element" handling for multipole and alignment errors.
+        """
+        assert isinstance(design_LTE, ltemanager.Lattice)
+        self.design_LTE = design_LTE
+
+        self.lattice_type = lattice_type
+
+        self.indiv_design_LTEZIP_filepath = Path(indiv_design_LTEZIP_filepath)
+
+        self.error_LTEZIP_name_prefix = error_LTEZIP_name_prefix
+
+        self._inst_record = []
+
+        rng = self.change_rng(seed)
+
+        self.err = Errors(design_LTE, rng=rng)
+
+        if self.err.is_LTE_individualized():
+            self.err.generate_LTE_file_wo_errors(
+                output_LTEZIP_filepath=self.indiv_design_LTEZIP_filepath
+            )
+
+    def change_rng(self, seed: Union[int, None, np.random.Generator]):
+        if seed is None:
+            rng = np.random.default_rng()
+            self._seed_str = "NA"
+        elif isinstance(seed, int):
+            rng = np.random.default_rng(seed=seed)
+            self._seed_str = f"{seed}"
+        elif isinstance(seed, np.random.Generator):
+            rng = seed
+            self._seed_str = "NA"
+        else:
+            raise TypeError(rng)
+
+        self._inst_record.append(
+            dict(ini_rng_state=self._get_rng_state_json_str(rng), rng_states=[])
+        )
+
+        try:
+            self.err.rng = rng
+        except AttributeError:
+            return rng
+
+    @staticmethod
+    def _get_rng_state_json_str(rng: np.random.Generator):
+        return json.dumps(rng.bit_generator.state)
+
+    def get_default_instance_LTEZIP_filepath(self, inst_num: int):
+        prefix = self.error_LTEZIP_name_prefix
+        seed = self._seed_str
+        inst_num = len(self._inst_record[-1]["rng_states"]) + 1
+        return Path(f"{prefix}_s{seed}_e{inst_num:03d}.ltezip")
+
+    def instantiate(
+        self, output_LTEZIP_filepath: Union[Path, str] = "", verbose: int = 0
+    ):
+
+        t0 = time.perf_counter()
+
+        if output_LTEZIP_filepath == "":
+            inst_num = len(self._inst_record[-1]["rng_states"]) + 1
+            output_LTEZIP_filepath = self.get_default_instance_LTEZIP_filepath(inst_num)
+        output_LTEZIP_filepath = Path(output_LTEZIP_filepath)
+
+        state = self._get_rng_state_json_str(self.err.rng)
+        self.err.apply_errors()
+        self._inst_record[-1]["rng_states"].append(state)
+
+        self.err.generate_LTE_file(output_LTEZIP_filepath)
+
+        if verbose >= 1:
+            print(f"Generated an error instantce file '{output_LTEZIP_filepath}'.")
+            print(f"Instantiation took {time.perf_counter()-t0:.1f} [s]")
+
+        return output_LTEZIP_filepath
+
+    def cleanup_tempdirs(self):
+        self.design_LTE.remove_tempdir()
+
+
+class NSLS2(AbstractFacility):
+    def __init__(
+        self,
+        design_LTE: ltemanager.Lattice,
+        lattice_type: str,
+        indiv_design_LTEZIP_filepath: Union[Path, str],
+        error_LTEZIP_name_prefix: str,
+        seed: Union[int, None, np.random.Generator] = 42,
+    ):
+
+        super().__init__(
+            design_LTE,
+            lattice_type,
+            indiv_design_LTEZIP_filepath,
+            error_LTEZIP_name_prefix,
+            seed=seed,
+        )
+
+        # "fsdb" stands for "(f)acility-(s)pecific (d)ata(b)ase"
+        self.fsdb = ltemanager.NSLS2(self.err.indiv_LTE, lattice_type=self.lattice_type)
+
+        self.elem_inds = self._get_elem_inds()
+
+        self.register_BPMs()
+        self.register_bends()
+        self.register_quads_sexts()
+        self.register_girders()
+
+    def _get_elem_inds(self):
+
+        LTE = self.err.indiv_LTE
+        fsdb = self.fsdb
+
+        elem_inds = {}
+
+        _inds = fsdb.get_regular_BPM_elem_inds()
+        assert len(_inds["x"]) == len(_inds["y"]) == 180
+        assert np.all(_inds["x"] == _inds["y"])
+        elem_inds["BPM"] = _inds["x"]
+
+        elem_inds["BEND"] = fsdb.get_bend_elem_inds()
+        assert len(elem_inds["BEND"]) == 60
+
+        if self.lattice_type == "day1":
+            elem_inds["QUAD"] = np.sort(
+                np.hstack(
+                    [
+                        LTE.get_elem_inds_from_regex("^Q[HL]\w+$"),
+                        LTE.get_elem_inds_from_regex("^QM1\w+$"),
+                    ]
+                )
+            )
+            assert len(elem_inds["QUAD"]) == 240
+        elif self.lattice_type == "C26_double_mini_beta":
+            elem_inds["QUAD"] = np.sort(
+                np.hstack(
+                    [
+                        LTE.get_elem_inds_from_regex("^Q[HL]\w+$"),
+                        LTE.get_elem_inds_from_regex("^QM1\w+$"),
+                        LTE.get_elem_inds_from_regex("^Q[DF]C26\w+$"),
+                    ]
+                )
+            )
+            assert len(elem_inds["QUAD"]) == 240 + 3
+        else:
+            raise NotImplementedError
+
+        elem_inds["HIQUAD"] = LTE.get_elem_inds_from_regex("^QM2\w+$")
+        assert len(elem_inds["HIQUAD"]) == 60
+
+        elem_inds["SEXT"] = np.sort(
+            np.hstack(
+                [
+                    LTE.get_elem_inds_from_regex("^S[HL]\w+$"),
+                    LTE.get_elem_inds_from_regex("^SM1\w+$"),
+                ]
+            )
+        )
+        assert len(elem_inds["SEXT"]) == 240
+
+        elem_inds["HISEXT"] = LTE.get_elem_inds_from_regex("^SM2\w+$")
+        assert len(elem_inds["HISEXT"]) == 30
+
+        return elem_inds
+
+    @staticmethod
+    def get_multipole_err_specs():
+        """
+        Based on "~/git_repos/nsls2scripts3/SDDS_multipoles/mpole_err_spec/CD3_mpole_spec.txt"
+
+        Same data in the following SDDS files under "~/git_repos/nsls2scripts3/SDDS_multipoles/mpole_err_spec"
+
+        "quad" in "CD3_mpole_spec.txt":
+        CD3-SYSMULT.QUAD
+        CD3-RDMMULT.QUAD
+
+        "QM2" in "CD3_mpole_spec.txt":
+        CD3-SYSMULT.HIQUAD
+        CD3-RDMMULT.HIQUAD
+
+        "sext" in "CD3_mpole_spec.txt":
+        CD3-SYSMULT.SEXT
+        CD3-RDMMULT.SEXT
+
+        "SM2" in "CD3_mpole_spec.txt":
+        CD3-SYSMULT.HISEXT
+        CD3-RDMMULT.HISEXT
+
+        ELEGANT: normal = "an", skew = "bn"
+        Tracy: normal = "Bn", skew = "An"
+        (Note that the sign of "An" is opposite from the sign of "bn".)
+        """
+
+        mp_err_specs = {}
+
+        common = dict(secondary_ref_radius=25e-3, secondary_cutoff=2.0)  # [m]
+
+        # QUAD
+        n_main_poles = 4
+        main_normal = True
+        spec = MultipoleErrorSpec(n_main_poles, main_normal, **common)
+        spec.set_secondary_norm(6, 2e-4)
+        spec.set_secondary_skew(6, 2e-4)
+        spec.set_secondary_norm(8, 2e-4)
+        spec.set_secondary_skew(8, 1e-4)
+        for n_poles in [10, 14, 16, 18]:
+            spec.set_secondary_norm(n_poles, 1e-4)
+            spec.set_secondary_skew(n_poles, 1e-4)
+        for n_poles in [22, 24, 26, 30]:
+            spec.set_secondary_norm(n_poles, 0.5e-4)
+            spec.set_secondary_skew(n_poles, 0.5e-4)
+        for n_poles in [12, 20, 28]:
+            spec.set_secondary_norm(n_poles, 0.0, systematic=3e-4)
+            spec.set_secondary_skew(n_poles, 1e-4)
+        mp_err_specs["QUAD"] = spec
+
+        # HIQUAD (QM2)
+        n_main_poles = 4
+        main_normal = True
+        spec = MultipoleErrorSpec(n_main_poles, main_normal, **common)
+        spec.set_secondary_norm(6, 3e-4)
+        spec.set_secondary_skew(6, 1.5e-4)
+        spec.set_secondary_norm(8, 2e-4)
+        spec.set_secondary_skew(8, 1e-4)
+        spec.set_secondary_norm(10, 0.3e-4)
+        spec.set_secondary_skew(10, 0.1e-4)
+        for n_poles in [14, 16, 18, 22, 24, 26, 30]:
+            spec.set_secondary_norm(n_poles, 0.1e-4)
+            spec.set_secondary_skew(n_poles, 0.11e-4)
+        for n_poles, systematic in [(12, 0.5e-4), (20, 0.5e-4), (28, 0.1e-4)]:
+            spec.set_secondary_norm(n_poles, 0.0, systematic=systematic)
+            spec.set_secondary_skew(n_poles, 0.1e-4)
+        mp_err_specs["HIQUAD"] = spec
+
+        # SEXT
+        n_main_poles = 6
+        main_normal = True
+        spec = MultipoleErrorSpec(n_main_poles, main_normal, **common)
+        spec.set_secondary_norm(2, 30e-4)
+        spec.set_secondary_skew(2, 15e-4)
+        spec.set_secondary_norm(8, 2.5e-4)
+        spec.set_secondary_skew(8, 1e-4)
+        for n_poles in [10, 12, 14, 16]:
+            spec.set_secondary_norm(n_poles, 1e-4)
+            spec.set_secondary_skew(n_poles, 1e-4)
+        spec.set_secondary_norm(18, 0.0, systematic=2e-4)
+        spec.set_secondary_skew(18, 1e-4)
+        for n_poles in [20, 22, 24, 26, 28]:
+            spec.set_secondary_norm(n_poles, 0.5e-4)
+            spec.set_secondary_skew(n_poles, 0.5e-4)
+        spec.set_secondary_norm(30, 0.0, systematic=1e-4)
+        spec.set_secondary_skew(30, 0.5e-4)
+        mp_err_specs["SEXT"] = spec
+
+        # HISEXT (SM2)
+        n_main_poles = 6
+        main_normal = True
+        spec = MultipoleErrorSpec(n_main_poles, main_normal, **common)
+        spec.set_secondary_norm(2, 15e-4)
+        spec.set_secondary_skew(2, 10e-4)
+        spec.set_secondary_norm(8, 3e-4)
+        spec.set_secondary_skew(8, 3e-4)
+        spec.set_secondary_norm(10, 1e-4)
+        spec.set_secondary_skew(10, 1e-4)
+        spec.set_secondary_norm(12, 1e-4)
+        spec.set_secondary_skew(12, 0.5e-4)
+        for n_poles in [14, 16]:
+            spec.set_secondary_norm(n_poles, 0.5e-4)
+            spec.set_secondary_skew(n_poles, 0.5e-4)
+        spec.set_secondary_norm(18, 0.0, systematic=0.5e-4)
+        spec.set_secondary_skew(18, 0.2e-4)
+        for n_poles in [20, 22]:
+            spec.set_secondary_norm(n_poles, 0.1e-4)
+            spec.set_secondary_skew(n_poles, 0.2e-4)
+        for n_poles in [24, 26, 28]:
+            spec.set_secondary_norm(n_poles, 0.1e-4)
+            spec.set_secondary_skew(n_poles, 0.1e-4)
+        spec.set_secondary_norm(30, 0.0, systematic=0.5e-4)
+        spec.set_secondary_skew(30, 0.1e-4)
+        mp_err_specs["HISEXT"] = spec
+
+        return mp_err_specs
+
+    def register_BPMs(self):
+
+        # Some (not all) based on NSLS-II PDR Table 3.1.4
+        offset_spec = TGES(rms=100e-6, rms_unit="m")
+        gain_spec = TGES(rms=5e-2, rms_unit="")
+        tbt_noise_spec = TGES(rms=3e-6, rms_unit="m")
+        co_noise_spec = TGES(rms=0.1e-6, rms_unit="m")
+
+        spec = BPMErrorSpec(
+            offset=OffsetSpec2D(x=offset_spec, y=offset_spec),
+            gain=GainSpec(x=gain_spec, y=gain_spec),
+            rot=RotationSpec1D(roll=TGES(rms=0.2e-3, rms_unit="rad")),
+            tbt_noise=NoiseSpec(x=tbt_noise_spec, y=tbt_noise_spec),
+            co_noise=NoiseSpec(x=co_noise_spec, y=co_noise_spec),
+        )
+
+        self.err.register_BPMs(self.elem_inds["BPM"], err_spec=spec)
+
+    def register_bends(self):
+
+        # Based on NSLS-II PDR Table 3.1.8 (and 3.1.4)
+        offset_spec = TGES(rms=100e-6, rms_unit="m")
+        roll_spec = TGES(rms=0.5e-3, rms_unit="rad")
+        n_main_poles = 2
+        main_normal = True
+
+        spec = MagnetErrorSpec(
+            multipole=MultipoleErrorSpec(n_main_poles, main_normal),
+            offset=OffsetSpec2D(x=offset_spec, y=offset_spec),
+            rot=RotationSpec1D(roll=roll_spec),
+        )
+
+        self.err.register_magnets(self.elem_inds["BEND"], err_spec=spec)
+
+    def register_quads_sexts(self):
+
+        mp_err_specs = self.get_multipole_err_specs()
+
+        for mag_type, v in mp_err_specs.items():
+            # Based on NSLS-II PDR Table 3.1.9
+            if "QUAD" in mag_type:
+                main_err_spec = MainMultipoleErrorSpec(fse=TGES(rms=2.5e-4))
+            elif "SEXT" in mag_type:
+                main_err_spec = MainMultipoleErrorSpec(fse=TGES(rms=5e-4))
+            else:
+                raise ValueError(mag_type)
+            v.set_main_error_spec(main_err_spec)
+
+        # Based on NSLS-II PDR Table 3.1.8 (and 3.1.4)
+        offset_spec = TGES(rms=30e-6, rms_unit="m")
+        roll_spec = TGES(rms=0.2e-3, rms_unit="rad")
+        for mp_type, mp_err_spec in mp_err_specs.items():
+            spec = MagnetErrorSpec(
+                multipole=mp_err_spec,
+                offset=OffsetSpec2D(x=offset_spec, y=offset_spec),
+                rot=RotationSpec1D(roll=roll_spec),
+            )
+
+            self.err.register_magnets(self.elem_inds[mp_type], err_spec=spec)
+
+    def register_girders(self):
+
+        fsdb = self.fsdb
+
+        gs_inds, ge_inds = fsdb.get_girder_marker_pairs()
+
+        # Based on NSLS-II PDR Table 3.1.8
+        offset_spec = TGES(rms=100e-6, rms_unit="m")
+        spec = SupportErrorSpec1DRoll(
+            us_offset=OffsetSpec3D(x=offset_spec, y=offset_spec, z=None),
+            ds_offset=OffsetSpec3D(x=offset_spec, y=offset_spec, z=None),
+            rot=RotationSpec1D(roll=TGES(rms=0.5e-3, rms_unit="rad")),
+        )
+
+        self.err.register_supports(
+            SupportType.girder, gs_inds, ge_inds, spec, overwrite=False
+        )
 
 
 if __name__ == "__main__":

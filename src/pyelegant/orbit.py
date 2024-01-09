@@ -857,7 +857,9 @@ class ClosedOrbitCalculatorViaTraj:
             else:
                 tempdir_path = str(tempdir_path)
 
-        self.tempdir = tempfile.TemporaryDirectory(prefix="tmpCOThr_", dir=tempdir_path)
+        self.tempdir = tempfile.TemporaryDirectory(
+            prefix="tmpCOTraj_", dir=tempdir_path
+        )
 
         self._write_ele_files()
 
@@ -1778,7 +1780,12 @@ class ClosedOrbitThreader:
         self._uncommited_cor_change = False
 
     def start_fixed_length_orbit_correction(
-        self, method=1, init_inj_coords=None, debug_print=True, debug_plot=False
+        self,
+        method=1,
+        init_inj_coords=None,
+        debug_print=True,
+        debug_plot=False,
+        plot=True,
     ):
         """Fixed-length COD (closed orbit distortion) correction.
 
@@ -2007,6 +2014,8 @@ class ClosedOrbitThreader:
                 plot_closed_orbit(d["columns"], d["params"])
             cod_ele = d["columns"]
 
+            clo_calc.remove_tempdir()
+
             tEnd = time.perf_counter()
             print(f"* Took {tEnd-tStart:.1f} [s].")
             sys.stdout.flush()
@@ -2035,28 +2044,29 @@ class ClosedOrbitThreader:
                 plt.plot(fin_diff_orbs["y"], "b.-")
                 plt.tight_layout()
 
-            plt.figure()
-            plt.plot(self.cor_s["x"], hkick_rads * 1e3, "b.-", label="x")
-            plt.plot(self.cor_s["y"], vkick_rads * 1e3, "r.-", label="y")
-            leg = plt.legend(loc="best", prop=dict(size=18))
-            plt.ylabel(r"$\theta\; [\mathrm{mrad}]$", size="large")
-            plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
-            plt.tight_layout()
+            if plot:
+                plt.figure()
+                plt.plot(self.cor_s["x"], hkick_rads * 1e3, "b.-", label="x")
+                plt.plot(self.cor_s["y"], vkick_rads * 1e3, "r.-", label="y")
+                leg = plt.legend(loc="best", prop=dict(size=18))
+                plt.ylabel(r"$\theta\; [\mathrm{mrad}]$", size="large")
+                plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
+                plt.tight_layout()
 
-            plt.figure()
-            plt.subplot(211)
-            plt.plot(
-                self.bpm_s["x"], self.target_orbit["x"] * 1e6, "k^:", label="Target"
-            )
-            plt.plot(cod_ele["s"], cod_ele["x"] * 1e6, "m-", label="COD")
-            plt.ylabel(r"$x\; [\mu\mathrm{m}]$", size="large")
-            plt.legend(loc="best")
-            plt.subplot(212)
-            plt.plot(self.bpm_s["y"], self.target_orbit["y"] * 1e6, "k^:")
-            plt.plot(cod_ele["s"], cod_ele["y"] * 1e6, "m-")
-            plt.ylabel(r"$y\; [\mu\mathrm{m}]$", size="large")
-            plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
-            plt.tight_layout()
+                plt.figure()
+                plt.subplot(211)
+                plt.plot(
+                    self.bpm_s["x"], self.target_orbit["x"] * 1e6, "k^:", label="Target"
+                )
+                plt.plot(cod_ele["s"], cod_ele["x"] * 1e6, "m-", label="COD")
+                plt.ylabel(r"$x\; [\mu\mathrm{m}]$", size="large")
+                plt.legend(loc="best")
+                plt.subplot(212)
+                plt.plot(self.bpm_s["y"], self.target_orbit["y"] * 1e6, "k^:")
+                plt.plot(cod_ele["s"], cod_ele["y"] * 1e6, "m-")
+                plt.ylabel(r"$y\; [\mu\mathrm{m}]$", size="large")
+                plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
+                plt.tight_layout()
 
         else:
             raise NotImplementedError
@@ -3587,22 +3597,29 @@ def generate_TRM_file(
     bpm_y_elem_inds,
     cor_x_elem_inds,
     cor_y_elem_inds,
-    n_turns=2,
-    N_KICKS=None,
+    n_turns: int = 2,
+    N_KICKS: Union[None, Dict] = None,
+    output_h5_filepath: Union[Path, str] = "",
 ):
     if LTE.LTEZIP_filepath:
         LTE_source = dict(
             LTEZIP_filepath=str(LTE.LTEZIP_filepath.resolve()),
             hash_val=util.calculate_file_hash(LTE.LTEZIP_filepath),
         )
-        trm_filepath = f"{LTE.LTEZIP_filepath.stem}_TRM.h5"
+        if output_h5_filepath == "":
+            trm_filepath = Path(f"{LTE.LTEZIP_filepath.stem}_TRM.h5")
+        else:
+            trm_filepath = Path(output_h5_filepath)
     else:
         LTE_source = dict(
             LTE_filepath=str(LTE.LTE_filepath.resolve()),
             used_beamline_name=LTE.used_beamline_name,
             hash_val=util.calculate_file_hash(LTE.LTE_filepath),
         )
-        trm_filepath = f"{LTE.LTE_filepath.stem}_TRM.h5"
+        if output_h5_filepath == "":
+            trm_filepath = Path(f"{LTE.LTE_filepath.stem}_TRM.h5")
+        else:
+            trm_filepath = Path(output_h5_filepath)
 
     out = calc_numerical_inj_phase_space_TRM(
         LTE,
@@ -3702,3 +3719,5 @@ def generate_TRM_file(
         g = f.create_group("LTE_source")
         for k, v in LTE_source.items():
             g[k] = v
+
+    return trm_filepath
