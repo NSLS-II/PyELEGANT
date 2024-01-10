@@ -165,7 +165,6 @@ class TbTLinOptCorrector:
         self.remove_tempdir()
 
     def cleanup_tempdirs(self):
-
         self.remove_tempdir()
 
         self._co_calculator.remove_tempdir()
@@ -842,17 +841,17 @@ class TbTLinOptCorrector:
 
         if tune_above_half["x"]:
             norm_x1C = lin_comp_d["x1C"].conj() / np.sqrt(base_est_twoJx)
-            norm_x2C = lin_comp_d["x2C"].conj() / np.sqrt(base_est_twoJy)
+            norm_y2C = lin_comp_d["y2C"].conj() / np.sqrt(base_est_twoJx)
         else:
             norm_x1C = lin_comp_d["x1C"] / np.sqrt(base_est_twoJx)
-            norm_x2C = lin_comp_d["x2C"] / np.sqrt(base_est_twoJy)
+            norm_y2C = lin_comp_d["y2C"] / np.sqrt(base_est_twoJx)
 
         if tune_above_half["y"]:
             norm_y1C = lin_comp_d["y1C"].conj() / np.sqrt(base_est_twoJy)
-            norm_y2C = lin_comp_d["y2C"].conj() / np.sqrt(base_est_twoJx)
+            norm_x2C = lin_comp_d["x2C"].conj() / np.sqrt(base_est_twoJy)
         else:
             norm_y1C = lin_comp_d["y1C"] / np.sqrt(base_est_twoJy)
-            norm_y2C = lin_comp_d["y2C"] / np.sqrt(base_est_twoJx)
+            norm_x2C = lin_comp_d["x2C"] / np.sqrt(base_est_twoJy)
 
         # Shift the phases so that the primary components of the first BPM will
         # have always zero phase.
@@ -860,8 +859,8 @@ class TbTLinOptCorrector:
         phiy_adj = np.exp(1j * (-y1phi_rad[0]))
         norm_x1C *= phix_adj
         norm_y1C *= phiy_adj
-        norm_x2C *= phix_adj
-        norm_y2C *= phiy_adj
+        norm_x2C *= phiy_adj
+        norm_y2C *= phix_adj
         np.testing.assert_almost_equal(np.angle(norm_x1C[0]), 0.0, decimal=15)
         np.testing.assert_almost_equal(np.angle(norm_y1C[0]), 0.0, decimal=15)
         # np.angle(norm_x2C[0]) & np.angle(norm_y2C[0]) are unlikely to be zero.
@@ -872,18 +871,18 @@ class TbTLinOptCorrector:
         assert np.all(dphix1 > 0.0)
         assert np.all(dphiy1 > 0.0)
 
-        # Because of duplicity of the first and last BPM for the primary amplitude,
-        # the primary amplitude data at the last BPM is redundant and useless. So,
-        # removing this here.
+        # The first and last data for the primary amplitude are both for the first
+        # BPM (1st turn for the first one and 2nd turn for the last one).
+        # Since they are redundant information and thus useless, removing the last
+        # data here.
         beta_x1 = beta_x1[:-1]
         beta_y1 = beta_y1[:-1]
         beta_beat_x1 = beta_x1 / model_bpm_beta["x"] - 1
         beta_beat_y1 = beta_y1 / model_bpm_beta["y"] - 1
-        # The phase diff. of the primary components are already donwn by 1.
-        # On the otherhand, the secondary components at the first BPM are not
-        # useless. So, we're retaining them here. This means:
-        assert beta_x1.size == beta_y1.size == dphix1.size == dphiy1.size == nBPM
+
+        assert beta_x1.size == beta_y1.size == nBPM
         assert x1phi_rad.size == y1phi_rad.size == nBPM + 1
+        assert dphix1.size == dphiy1.size == nBPM
         assert norm_x2C.size == norm_y2C.size == nBPM + 1
 
         # `x1_bbeat`, `y1_bbeat` [fraction]
@@ -1379,6 +1378,11 @@ class TbTLinOptCorrector:
 
         dK1s = self._M_pinv @ dv
 
+        if False:
+            plt.figure()
+            plt.plot(dv, "b.-")
+            plt.plot(self._M @ dK1s, "r.-")
+
         dK1s *= cor_frac
 
         self._dK1s_history.append(dK1s)
@@ -1575,12 +1579,14 @@ class TbTLinOptCorrector:
                 plt.figure()
                 plt.subplot(211)
                 plt.plot(np.std(hist[f"{comp}_re"], axis=1), ".-")
+                plt.ylim([0.0, plt.ylim()[1]])
                 plt.ylabel(
                     rf"$\mathrm{{RMS}}\; \Re{{(\Delta {plane}_{order})}}$",
                     size="x-large",
                 )
                 plt.subplot(212)
                 plt.plot(np.std(hist[f"{comp}_im"], axis=1), ".-")
+                plt.ylim([0.0, plt.ylim()[1]])
                 plt.ylabel(
                     rf"$\mathrm{{RMS}}\; \Im{{(\Delta {plane}_{order})}}$",
                     size="x-large",
@@ -1595,22 +1601,23 @@ class TbTLinOptCorrector:
         dK1s_skew = hist[self.nQUAD["normal"] :, :]
 
         if integ_strength:
+            if dK1s_normal.shape[0] != 0:
+                dK1Ls_normal = []
+                assert len(self.quad_col2names["normal"]) == dK1s_normal.shape[0]
+                for i, names in enumerate(self.quad_col2names["normal"]):
+                    _dK1s = dK1s_normal[i, :]
+                    _Ls = np.array([self.quad_Ls["normal"][name] for name in names])
+                    dK1Ls_normal.append(np.array([_dK1s * _L for _L in _Ls]))
+                dK1s_normal = np.vstack(dK1Ls_normal)
 
-            dK1Ls_normal = []
-            assert len(self.quad_col2names["normal"]) == dK1s_normal.shape[0]
-            for i, names in enumerate(self.quad_col2names["normal"]):
-                _dK1s = dK1s_normal[i, :]
-                _Ls = np.array([self.quad_Ls["normal"][name] for name in names])
-                dK1Ls_normal.append(np.array([_dK1s * _L for _L in _Ls]))
-            dK1s_normal = np.vstack(dK1Ls_normal)
-
-            dK1Ls_skew = []
-            assert len(self.quad_col2names["skew"]) == dK1s_skew.shape[0]
-            for i, names in enumerate(self.quad_col2names["skew"]):
-                _dK1s = dK1s_skew[i, :]
-                _Ls = np.array([self.quad_Ls["skew"][name] for name in names])
-                dK1Ls_skew.append(np.array([_dK1s * _L for _L in _Ls]))
-            dK1s_skew = np.vstack(dK1Ls_skew)
+            if dK1s_skew.shape[0] != 0:
+                dK1Ls_skew = []
+                assert len(self.quad_col2names["skew"]) == dK1s_skew.shape[0]
+                for i, names in enumerate(self.quad_col2names["skew"]):
+                    _dK1s = dK1s_skew[i, :]
+                    _Ls = np.array([self.quad_Ls["skew"][name] for name in names])
+                    dK1Ls_skew.append(np.array([_dK1s * _L for _L in _Ls]))
+                dK1s_skew = np.vstack(dK1Ls_skew)
 
             strength_str = "K_1 L"
             strength_unit = r"\mathrm{m}^{-1}"
@@ -1698,7 +1705,6 @@ class AbstractFacility:
         self.optcor = None
 
     def show_avail_quad_configs(self):
-
         msg = (
             "All available quad (knob) configuration set keys for "
             "linear optics/coupling correction:"
@@ -1713,7 +1719,6 @@ class AbstractFacility:
                 raise TypeError("Knob config key must be an integer or a string.")
 
     def show_avail_BPM_configs(self):
-
         msg = (
             "All available BPM (observable) configuration set keys for "
             "linear optics/coupling correction:"
@@ -2167,7 +2172,7 @@ class AbstractFacility:
             x2_im=1.0,
             y2_re=1.0,
             y2_im=1.0,
-            etay=10.0,
+            etay=50.0,
         )
         if obs_weights is None:
             obs_weights = default_obs_weights.copy()
@@ -2226,7 +2231,6 @@ class AbstractFacility:
         self.optcor.correct(cor_frac=cor_frac)
 
     def plot_history(self, integ_strength=True, pdf_filepath=""):
-
         self.plot_sv()
 
         self.optcor.plot_actual_design_diff(history=True)
@@ -2244,7 +2248,6 @@ class AbstractFacility:
         self.optcor.save_current_lattice_to_LTEZIP_file(new_LTEZIP_filepath)
 
     def cleanup_tempdirs(self):
-
         self.design_LTE.remove_tempdir()
 
         if self.optcor is not None:
@@ -2274,7 +2277,6 @@ class NSLS2(AbstractFacility):
         return self.get_BPM_elem_inds_for_linopt_cor("all")
 
     def get_quad_elem_inds_for_linopt_RM(self):
-
         names_d = self.fsdb.get_quad_names(flat_skew_quad_names=True)
 
         LTE = self.LTE
@@ -2285,7 +2287,6 @@ class NSLS2(AbstractFacility):
         )
 
     def get_BPM_elem_inds_for_linopt_cor(self, config_key: Union[int, str] = "all"):
-
         assert config_key in self.config_descr["bpm"]
 
         if config_key == "all":
@@ -2294,7 +2295,6 @@ class NSLS2(AbstractFacility):
             raise ValueError(f"Invalid `config_key` value: '{config_key}'")
 
     def get_quad_elem_inds_for_linopt_cor(self, config_key: Union[int, str]):
-
         assert config_key in self.config_descr["quad"]
 
         names_d = self.fsdb.get_quad_names(flat_skew_quad_names=False)
