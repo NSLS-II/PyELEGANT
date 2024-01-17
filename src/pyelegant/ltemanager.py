@@ -44,7 +44,6 @@ class Lattice:
         del_tempdir_on_exit: bool = True,
         verbose: int = 0,
     ):
-
         if used_beamline_name is None:
             used_beamline_name = ""
 
@@ -1040,6 +1039,9 @@ class Lattice:
 
             return f'{sep} &\n{" " * indent}'.join(new_line_list)
 
+    def get_all_names_ordered_by_s(self):
+        return self._elem_names.copy()
+
     def get_all_elem_def_dict(self):
         return self._elem_props
 
@@ -1464,7 +1466,6 @@ class Lattice:
                     def_line += f", {prop_str}"
                 lines.append(Lattice.get_wrapped_line(def_line))
         else:
-
             double_format = double_format.replace("%", ":")
 
             for elem_name, d in elem_defs.items():
@@ -1611,7 +1612,6 @@ def get_ELEGANT_element_dictionary():
 
 class AbstractFacility:
     def __init__(self, LTE: Lattice, lattice_type: str):
-
         assert isinstance(LTE, Lattice)
         self.LTE = LTE
 
@@ -1622,7 +1622,6 @@ class AbstractFacility:
 
 class NSLS2(AbstractFacility):
     def __init__(self, LTE: Lattice, lattice_type: str = "day1"):
-
         super().__init__(LTE, lattice_type)
 
         assert self.lat_type in ("day1", "C26_double_mini_beta")
@@ -1705,7 +1704,7 @@ class NSLS2(AbstractFacility):
         inds = LTE.get_elem_inds_from_regex("^Q[HLM]\w+$")
 
         if self.lat_type == "C26_double_mini_beta":
-            inds = np.append(inds, LTE.get_elem_inds_from_regex("^Q[FD]C26[AB]$"))
+            inds = np.append(inds, LTE.get_elem_inds_from_regex("^Q[FD]H*C26[AB]$"))
             inds = np.sort(inds)
 
         normal_quad_names = LTE.get_names_from_elem_inds(inds)
@@ -1714,7 +1713,10 @@ class NSLS2(AbstractFacility):
         if self.lat_type != "C26_double_mini_beta":
             assert len(normal_quad_names) == 300
         else:
-            assert len(normal_quad_names) == 300 + 3
+            assert len(normal_quad_names) in (
+                300 + 3,  # QF not split in half
+                300 + 4,  # QF split in half
+            )
 
         inds = LTE.get_elem_inds_from_regex("^SQ[HM]\w+$")
         skew_quad_names = LTE.get_names_from_elem_inds(inds)
