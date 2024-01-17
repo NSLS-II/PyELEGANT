@@ -292,3 +292,95 @@ def get_M66(
         M = M_fin @ np.linalg.inv(M_ini)
 
     return M
+
+
+def get_one_turn_M_via_tracking(
+    LTE_filepath: Union[Path, str] = "",
+    LTEZIP_filepath: Union[Path, str] = "",
+    used_beamline_name: str = "",
+    N_KICKS: Union[None, Dict] = None,
+):
+
+    import scipy
+
+    from . import disable_stdout, ltemanager, nonlin, util
+
+    LTE = ltemanager.Lattice(
+        LTE_filepath=LTE_filepath,
+        LTEZIP_filepath=LTEZIP_filepath,
+        used_beamline_name=used_beamline_name,
+    )
+
+    actual_LTE_filepath = LTE.LTE_filepath
+
+    output_filepath = LTE_filepath.with_suffix(".pgz")
+
+    speed_of_light = scipy.constants.c
+    E_MeV = 3e3
+    n_turns = 3
+    output_coordinates = ("x", "xp", "y", "yp", "dt", "delta")
+
+    delta_vals = [1e-6, 1e-6, 1e-6, 1e-6, 0.0, 1e-6]
+    M = np.zeros((6, 6))
+
+    disable_stdout()
+
+    for iCoord, dv in enumerate(delta_vals):
+        v_in = np.zeros(6)
+        v_in[iCoord] = dv
+
+        nonlin.track(
+            str(output_filepath),
+            str(LTE_filepath),
+            E_MeV,
+            n_turns,
+            x0=v_in[0],
+            xp0=v_in[1],
+            y0=v_in[2],
+            yp0=v_in[3],
+            t0=v_in[4],
+            delta0=v_in[5],
+            output_coordinates=output_coordinates,
+            use_beamline=LTE.used_beamline_name,
+            N_KICKS=N_KICKS,
+        )
+
+        d = util.load_pgz_file(output_filepath)
+
+        v_out_mult_turns = np.array(
+            [d[coord].flatten() for coord in output_coordinates]
+        )
+        v_out = v_out_mult_turns[:, 1]
+
+        if iCoord in (0, 1, 2, 3):
+            assert v_out[5] == 0.0
+            v_out[4] *= speed_of_light
+            M[:, iCoord] = v_out / dv
+        elif iCoord == 4:
+            assert v_out[5] == 0.0
+
+            diff = v_out_mult_turns[:, 1] - v_out_mult_turns[:, 0]
+            if False:
+                assert np.all(diff[:4] == 0.0)
+
+            dt = v_out_mult_turns[iCoord, :]
+            assert dt[0] == 0.0
+            assert np.abs(dt[1]) < 1e-16
+            v_out[4] = 1.0
+            M[:, iCoord] = v_out
+        elif iCoord == 5:
+            v_out[4] *= speed_of_light
+            M[:, iCoord] = v_out / dv
+
+            if False:
+                np.testing.assert_almost_equal(M[5, 5], 1.0, decimal=12)
+                M[5, 5] = 1.0
+        else:
+            raise ValueError
+
+    try:
+        output_filepath.unlink()
+    except:
+        pass
+
+    return M
