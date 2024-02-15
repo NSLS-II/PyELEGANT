@@ -838,6 +838,7 @@ class Lattice:
         overwrite_suppl=False,
         double_format="%.16g",
         verbose=0,
+        throw: bool = True,
     ):
         """
         If "output_lte_filepath" is not specified, a new LTE file will be
@@ -856,7 +857,7 @@ class Lattice:
 
         If a file already exists where a file supplementary to the LTE file file
         will be written, it will throw an error if "overwrite_suppl" is False
-        (default).
+        (default) and "throw" is True (default).
         """
 
         double_format = double_format.replace("%", ":")
@@ -928,22 +929,31 @@ class Lattice:
                 new_abs_path = new_rel_path.resolve()
 
                 if new_abs_path not in _newly_created_suppl_filepaths[file_type]:
-                    if new_abs_path.exists() and (not overwrite_suppl):
-                        raise FileExistsError(
-                            (
-                                f"Cannot write a new LTE supplementary file "
-                                f'to "{new_abs_path}"'
-                            )
-                        )
+                    if new_abs_path.exists():
+                        if overwrite_suppl:
+                            _write = True
+                        else:
+                            if throw:
+                                raise FileExistsError(
+                                    (
+                                        f"Cannot write a new LTE supplementary file "
+                                        f'to "{new_abs_path}"'
+                                    )
+                                )
 
-                    new_abs_path.write_bytes(
-                        suppl_contents[file_type]["file_contents"][
-                            orig_abs_path
-                        ].encode("latin-1")
-                    )
-                    if verbose >= 1:
-                        print(f"* Created LTE supplementary file: {new_abs_path}")
-                    _newly_created_suppl_filepaths[file_type].append(new_abs_path)
+                            _write = False
+                    else:
+                        _write = True
+
+                    if _write:
+                        new_abs_path.write_bytes(
+                            suppl_contents[file_type]["file_contents"][
+                                orig_abs_path
+                            ].encode("latin-1")
+                        )
+                        if verbose >= 1:
+                            print(f"* Created LTE supplementary file: {new_abs_path}")
+                        _newly_created_suppl_filepaths[file_type].append(new_abs_path)
 
                 if file_type == "km":
                     filepath_prop_name = "INPUT_FILE"
