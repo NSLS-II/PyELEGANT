@@ -1402,10 +1402,10 @@ class Lattice:
         spos_us = spos_ds - self._lengths
         spos_mid = (spos_us + spos_ds) / 2
 
-        # 0.0 inserted at the beginning for "__BEG__"
-        self._spos_ds = np.append(0.0, spos_ds)
-        self._spos_us = np.append(0.0, spos_us)
-        self._spos_mid = np.append(0.0, spos_mid)
+        # "__BEG__" is already included in "spos_*"
+        self._spos_ds = spos_ds
+        self._spos_us = spos_us
+        self._spos_mid = spos_mid
 
         self._circumf = spos_ds[-1]
 
