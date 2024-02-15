@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyelegant"
-version = "0.10.0"
+version = "0.11.0"
 description = "Python Interface to the 6D Accelerator Program ELEGANT (ELEctron Generation ANd Tracking)"
 authors = ["Yoshiteru Hidaka <yhidaka@bnl.gov>"]
 maintainers = ["Yoshiteru Hidaka <yhidaka@bnl.gov>"]
