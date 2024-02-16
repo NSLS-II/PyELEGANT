@@ -1,6 +1,7 @@
 from collections import defaultdict
 import contextlib
 from copy import deepcopy
+import json
 import os
 from pathlib import Path
 from subprocess import PIPE, Popen
@@ -2735,6 +2736,8 @@ class ClosedOrbitThreader:
             inj_coords = np.zeros(n_inj_coords)
         assert inj_coords.shape == (n_inj_coords,)
 
+        self._save_backup(inj_coords)
+
         i_iter_partial_traj_cor = 0
         while i_iter_partial_traj_cor < n_iter_max:
             if debug_print:
@@ -2755,6 +2758,7 @@ class ClosedOrbitThreader:
 
             _partial_opts = self.iter_opts["fixed_energy"]["partial_traj"]
             orig_obs_incl_dxy_thresh = _partial_opts["obs_incl_dxy_thresh"]
+            need_restore = False
             while (
                 (survived_inds["x"] < self.nBPM["x"] + self.second_turn_n_bpms)
                 and (survived_inds["x"] == incl_nObs["x"])
@@ -2762,6 +2766,8 @@ class ClosedOrbitThreader:
                 (survived_inds["y"] < self.nBPM["y"] + self.second_turn_n_bpms)
                 and (survived_inds["y"] == incl_nObs["y"])
             ):
+                need_restore = True
+
                 _partial_opts["obs_incl_dxy_thresh"] /= 2
 
                 msg = "* Bad correction detected. Temporarily reducing the RMS "
@@ -2779,6 +2785,9 @@ class ClosedOrbitThreader:
 
             assert survived_inds["x"] >= incl_nObs["x"]
             assert survived_inds["y"] >= incl_nObs["y"]
+
+            if need_restore:
+                inj_coords = self._restore_backup()
 
             if debug_print:
                 survived_str = {}
@@ -2857,6 +2866,8 @@ class ClosedOrbitThreader:
 
             dI_inj = dI[:n_inj_coords]
             dI_cor = dI[n_inj_coords:]
+
+            self._save_backup(inj_coords)
 
             for _i, _dI in enumerate(dI_inj):
                 inj_coords[_i] += _dI
@@ -2979,6 +2990,15 @@ class ClosedOrbitThreader:
     ):
         self.cor_props[plane][elem_name]["value"] += delta_value
         self._uncommited_cor_change = True
+
+    def _save_backup(self, inj_coords):
+        self._backup = dict(
+            cor_props=json.dumps(self.cor_props), inj_coords=inj_coords.copy()
+        )
+
+    def _restore_backup(self):
+        self.cor_props = json.loads(self._backup["cor_props"])
+        return self._backup["inj_coords"]
 
 
 def _get_twiss_for_analytical_resp_mat(
