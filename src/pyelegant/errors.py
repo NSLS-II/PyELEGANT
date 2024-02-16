@@ -1632,7 +1632,6 @@ class AbstractFacility:
     def get_default_instance_LTEZIP_filepath(self, inst_num: int):
         prefix = self.error_LTEZIP_name_prefix
         seed = self._seed_str
-        inst_num = len(self._inst_record[-1]["rng_states"]) + 1
         return Path(f"{prefix}_s{seed}_e{inst_num:03d}.ltezip")
 
     def instantiate(
