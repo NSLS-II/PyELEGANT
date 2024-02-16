@@ -1498,7 +1498,7 @@ class Errors:
                         dict(
                             elem_name=elem_name,
                             prop_name="FSE",
-                            prop_val=f'{fse:.9e}"',
+                            prop_val=f"{fse:.9e}",
                         )
                     )
 
