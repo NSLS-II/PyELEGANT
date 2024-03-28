@@ -1108,7 +1108,7 @@ class Lattice:
             elem_inds = np.array(elem_inds)
 
         if output_type == OutputType.NumPy:
-            return self._elem_names[elem_inds]
+            return self._elem_names[elem_inds.tolist()]
         else:
             return self._elem_names[elem_inds].tolist()
 
