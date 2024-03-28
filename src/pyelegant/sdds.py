@@ -707,13 +707,17 @@ def dicts2sdds(
                 if isinstance(v, float):
                     s = f"{v:.16g}"
                     if iRow != 0:
-                        assert column_type_list[iCol] == "double"
+                        try:
+                            assert column_type_list[iCol] == "double"
+                        except AssertionError:
+                            assert column_type_list[iCol] == "long"
+                            column_type_list[iCol] = "long"
                     else:
                         column_type_list.append("double")
                 elif isinstance(v, (int, np.integer)):
                     s = f"{v:d}"
                     if iRow != 0:
-                        assert column_type_list[iCol] == "long"
+                        assert column_type_list[iCol] in ("long", "double")
                     else:
                         column_type_list.append("long")
                 elif isinstance(v, str):
