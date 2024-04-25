@@ -1451,9 +1451,9 @@ class TbTLinOptCorrector:
         hist = self._actual_design_diff_history
 
         if history:
-            legends = ["Initial"]
+            legends = ["$\mathrm{Initial}$"]
             for i in range(len(hist["nux"]))[1:]:
-                legends.append(f"Iter. {i}")
+                legends.append(f"$\mathrm{{Iter.\, {i}}}$")
 
         plt.figure()
         plt.subplot(211)
@@ -1472,7 +1472,9 @@ class TbTLinOptCorrector:
             plt.subplot(plot_ind)
             if history:
                 plt.plot(np.array(hist[f"eta{plane}"]).T * 1e3, ".-")
-                plt.legend(legends, loc="best")
+
+                if plane == "x":
+                    _add_top_legend_adaptive_ncol(legends, fontsize="medium")
             else:
                 plt.plot(hist[f"eta{plane}"][-1] * 1e3, ".-")
             plt.ylabel(rf"$\Delta \eta_{plane}\; [\mathrm{{mm}}]$", size="x-large")
@@ -1483,10 +1485,17 @@ class TbTLinOptCorrector:
             plt.figure()
             for plane, plot_ind in zip("xy", [211, 212]):
                 plt.subplot(plot_ind)
-                plt.plot(np.std(hist[f"eta{plane}"], axis=1) * 1e3, ".-")
+                _rms_mm = np.std(hist[f"eta{plane}"], axis=1) * 1e3
+                _ini_val = _rms_mm[0]
+                _fin_val = _rms_mm[-1]
+                plt.plot(_rms_mm, ".-")
                 plt.ylabel(
                     rf"$\mathrm{{RMS}}\; \Delta \eta_{plane}\; [\mathrm{{mm}}]$",
                     size="x-large",
+                )
+                # plt.title(rf"$\mathrm{{RMS}}\; (\Delta \eta_x, \Delta \eta_y) = ({_ini_val['x']:.3g}, {_ini_val['y']:.3g}) \Rightarrow ({_fin_val['x']:.3g}, {_fin_val['y']:.3g}) \; [\mathrm{{mm}}]$")
+                plt.title(
+                    rf"$\mathrm{{RMS}}\; \Delta \eta_{plane} = {_ini_val:.3g} \Rightarrow {_fin_val:.3g} \; [\mathrm{{mm}}]$"
                 )
                 plt.ylim([0.0, plt.ylim()[1]])
             plt.xlabel(r"$\mathrm{Iteration}$", size="x-large")
@@ -1501,7 +1510,7 @@ class TbTLinOptCorrector:
             plt.subplot(311)
             if history:
                 plt.plot(np.array(hist[f"{comp}_bbeat"]).T * 1e2, ".-")
-                plt.legend(legends, loc="best")
+                _add_top_legend_adaptive_ncol(legends, fontsize="medium")
             else:
                 plt.plot(hist[f"{comp}_bbeat"][-1] * 1e2, ".-")
             plt.axhline(0.0, color="k")
@@ -1511,7 +1520,6 @@ class TbTLinOptCorrector:
             plt.subplot(312)
             if history:
                 plt.plot(np.array(hist[f"{comp}_dphi"]).T / (2 * np.pi), ".-")
-                plt.legend(legends, loc="best")
             else:
                 plt.plot(hist[f"{comp}_dphi"][-1] / (2 * np.pi), ".-")
             plt.axhline(0.0, color="k")
@@ -1521,7 +1529,6 @@ class TbTLinOptCorrector:
             plt.subplot(313)
             if history:
                 plt.plot(np.array(hist[f"{comp}_phi"]).T / (2 * np.pi), ".-")
-                plt.legend(legends, loc="best")
             else:
                 plt.plot(hist[f"{comp}_phi"][-1] / (2 * np.pi), ".-")
             plt.axhline(0.0, color="k")
@@ -1534,10 +1541,16 @@ class TbTLinOptCorrector:
             if history:
                 plt.figure()
                 plt.subplot(311)
-                plt.plot(np.std(hist[f"{comp}_bbeat"], axis=1) * 1e2, ".-")
+                _rms_bbeat = np.std(hist[f"{comp}_bbeat"], axis=1) * 1e2
+                plt.plot(_rms_bbeat, ".-")
                 plt.ylim([0.0, plt.ylim()[1]])
                 plt.ylabel(beta_beat_label, size="x-large")
                 plt.title(r"$\mathrm{RMS}$", size="x-large")
+                _ini_val = _rms_bbeat[0]
+                _fin_val = _rms_bbeat[-1]
+                plt.title(
+                    rf"$\mathrm{{RMS}}\; \Delta \beta_{plane} / \beta_{plane} = {_ini_val:.3g} \Rightarrow {_fin_val:.3g} [\%]$"
+                )
                 plt.subplot(312)
                 plt.plot(np.std(hist[f"{comp}_dphi"], axis=1) / (2 * np.pi), ".-")
                 plt.ylim([0.0, plt.ylim()[1]])
@@ -1559,7 +1572,7 @@ class TbTLinOptCorrector:
             plt.subplot(211)
             if history:
                 plt.plot(np.array(hist[f"{comp}_re"]).T, ".-")
-                plt.legend(legends, loc="best")
+                _add_top_legend_adaptive_ncol(legends, fontsize="medium")
             else:
                 plt.plot(hist[f"{comp}_re"][-1], ".-")
             plt.ylabel(rf"$\Re{{(\Delta {plane}_{order})}}$", size="x-large")
@@ -1567,7 +1580,6 @@ class TbTLinOptCorrector:
             plt.subplot(212)
             if history:
                 plt.plot(np.array(hist[f"{comp}_im"]).T, ".-")
-                plt.legend(legends, loc="best")
             else:
                 plt.plot(hist[f"{comp}_im"][-1], ".-")
             plt.ylabel(rf"$\Im{{(\Delta {plane}_{order})}}$", size="x-large")
@@ -1628,13 +1640,13 @@ class TbTLinOptCorrector:
         if history:
             legends = []
             for i in range(hist.shape[1]):
-                legends.append(f"Iter. {i+1}")
+                legends.append(f"$\mathrm{{Iter.\, {i}}}$")
 
         plt.figure()
         plt.subplot(211)
         if history:
             plt.plot(dK1s_normal, ".-")
-            plt.legend(legends, loc="best")
+            _add_top_legend_adaptive_ncol(legends, fontsize="medium")
         else:
             plt.plot(dK1s_normal[:, -1], ".-")
         plt.ylabel(rf"$\Delta {strength_str}\; [{strength_unit}]$", size="x-large")
@@ -1642,7 +1654,6 @@ class TbTLinOptCorrector:
         plt.subplot(212)
         if history:
             plt.plot(dK1s_skew, ".-")
-            plt.legend(legends, loc="best")
         else:
             plt.plot(dK1s_skew[:, -1], ".-")
         plt.ylabel(rf"$\Delta {strength_str}\; [{strength_unit}]$", size="x-large")
@@ -1656,7 +1667,7 @@ class TbTLinOptCorrector:
         plt.subplot(211)
         if history:
             plt.plot(cum_dK1s_normal, ".-")
-            plt.legend(legends, loc="best")
+            _add_top_legend_adaptive_ncol(legends, fontsize="medium")
         else:
             plt.plot(cum_dK1s_normal[:, -1], ".-")
         plt.ylabel(
@@ -1667,7 +1678,6 @@ class TbTLinOptCorrector:
         plt.subplot(212)
         if history:
             plt.plot(cum_dK1s_skew, ".-")
-            plt.legend(legends, loc="best")
         else:
             plt.plot(cum_dK1s_skew[:, -1], ".-")
         plt.ylabel(
@@ -1843,9 +1853,12 @@ class AbstractFacility:
         )
 
         if not self.parallel:
-            # Reduce the number for testing
-            quad_names["normal"] = list(quad_names["normal"])[100:102]  # [:2] #[3:5]
-            quad_names["skew"] = list(quad_names["skew"])[:2]
+            if False:
+                # Reduce the number for testing
+                quad_names["normal"] = list(quad_names["normal"])[
+                    100:102
+                ]  # [:2] #[3:5]
+                quad_names["skew"] = list(quad_names["skew"])[:2]
 
             resp_list = _calc_linopt_resp(
                 list(quad_names["normal"]) + list(quad_names["skew"]),
@@ -1990,6 +2003,8 @@ class AbstractFacility:
         zero_orbit_type="BBA",
         BBA_elem_type="KQUAD",
         BBA_elem_names=None,
+        iter_opts=None,
+        rcond=1e-4,
         plot=False,
     ):
         fsdb = self.fsdb
@@ -2048,10 +2063,11 @@ class AbstractFacility:
             BBA_elem_type=BBA_elem_type,
             BBA_elem_names=BBA_elem_names,
             TRM_filepath=self.TRM_filepath,
+            iter_opts=iter_opts,
         )
 
         out = threader.start_fixed_energy_orbit_correction(
-            debug_print=True, debug_plot=False
+            rcond=rcond, debug_print=True, debug_plot=False
         )
 
         try:
@@ -2069,8 +2085,8 @@ class AbstractFacility:
         # the circumference by adjusting the beam energy.
         init_inj_coords = inj_coords_list[-1]
         out = threader.start_fixed_length_orbit_correction(
-            method=1,
             init_inj_coords=init_inj_coords,
+            rcond=rcond,
             debug_print=True,
             debug_plot=False,
             plot=plot,
@@ -2341,3 +2357,31 @@ def _calc_linopt_resp(quad_names, dK1, args_optcor, kwargs_optcor):
         resp_list.append(optcor.calc_response(name, dK1))
 
     return resp_list
+
+
+def _add_top_legend_adaptive_ncol(legends, fontsize="medium"):
+
+    loc = "lower left"
+
+    fig = plt.gcf()
+    norm_fac = dict(h=fig.dpi * fig.get_figheight(), w=fig.dpi * fig.get_figwidth())
+
+    for ncol in np.arange(len(legends))[::-1]:
+        ncol += 1
+        leg = plt.legend(
+            legends, loc=loc, ncol=ncol, fontsize=fontsize, bbox_to_anchor=(-0.05, 1.0)
+        )
+        fig.canvas.draw()
+        win = leg.get_window_extent()
+        norm_w = win.width / norm_fac["w"]
+        if norm_w <= 0.9:
+            leg.remove()
+            break
+        else:
+            leg.remove()
+
+    leg = plt.legend(
+        legends, loc=loc, ncol=ncol, fontsize=fontsize, bbox_to_anchor=(-0.05, 1.0)
+    )
+
+    return leg
