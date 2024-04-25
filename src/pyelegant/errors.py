@@ -251,7 +251,9 @@ class MultipoleErrorSpec:
         main_normal: bool,
         secondary_ref_radius: Union[float, None] = None,
         secondary_cutoff: float = 2.0,
-        main_error: Union[MainMultipoleErrorSpec, None] = None,
+        main_error: Union[
+            MainMultipoleErrorSpec, Dict[int, MainMultipoleErrorSpec], None
+        ] = None,
     ) -> None:
         self._fields = []
 
@@ -273,20 +275,33 @@ class MultipoleErrorSpec:
         self.secondary_cutoff = secondary_cutoff
         self._fields.append("secondary_cutoff")
 
+        self.main_errors = {}
         self.set_main_error_spec(main_error)
-        self._fields.append("main_error")
+        self._fields.append("main_errors")
 
         self.secondary_normal = {}
         self.secondary_skew = {}
         self._fields.append("secondary_normal")
         self._fields.append("secondary_skew")
 
-    def set_main_error_spec(self, main_error_spec: Union[MainMultipoleErrorSpec, None]):
+    def set_main_error_spec(
+        self,
+        main_error_spec: Union[
+            MainMultipoleErrorSpec, Dict[int, MainMultipoleErrorSpec], None
+        ],
+    ):
         if main_error_spec is None:
-            self.main_error = MainMultipoleErrorSpec()
+            self.main_errors[self.n_main_poles] = MainMultipoleErrorSpec()
+        elif isinstance(main_error_spec, MainMultipoleErrorSpec):
+            self.main_errors[self.n_main_poles] = main_error_spec
+        elif isinstance(main_error_spec, dict):
+            for n_poles, spec in main_error_spec.items():
+                assert isinstance(n_poles, int)
+                assert n_poles % 2 == 0
+                assert isinstance(spec, MainMultipoleErrorSpec)
+                self.main_errors[n_poles] = spec
         else:
-            assert isinstance(main_error_spec, MainMultipoleErrorSpec)
-            self.main_error = main_error_spec
+            raise NotImplementedError
 
     def set_secondary_norm(self, n_poles, rms, cutoff=None, systematic=0.0):
         assert n_poles % 2 == 0
@@ -313,7 +328,9 @@ class MultipoleError:
         main_normal: Union[bool, None] = None,
         secondary_ref_radius: Union[float, None] = None,
         secondary_cutoff: Union[float, None] = 2.0,
-        main_error: Union[MainMultipoleError, None] = None,
+        main_error: Union[
+            MainMultipoleError, Dict[int, MainMultipoleError], None
+        ] = None,
         secondary_normal_error: Union[Dict, None] = None,
         secondary_skew_error: Union[Dict, None] = None,
     ) -> None:
@@ -343,11 +360,12 @@ class MultipoleError:
             self.secondary_cutoff = secondary_cutoff
         self._fields.append("secondary_cutoff")
 
+        self.main_errors = {}
         if main_error is not None:
             self.set_main_error(main_error)
         else:
-            self.main_error = MainMultipoleError()
-        self._fields.append("main_error")
+            self.main_errors[self.n_main_poles] = MainMultipoleError()
+        self._fields.append("main_errors")
 
         if secondary_normal_error is not None:
             self.set_secondary_normal_error(secondary_normal_error)
@@ -384,9 +402,19 @@ class MultipoleError:
         assert cutoff > 0.0
         self.secondary_cutoff = cutoff
 
-    def set_main_error(self, main_error: MainMultipoleError):
-        assert isinstance(main_error, MainMultipoleError)
-        self.main_error = main_error
+    def set_main_error(
+        self, main_error: Union[MainMultipoleError, Dict[int, MainMultipoleError]]
+    ):
+        if isinstance(main_error, MainMultipoleError):
+            self.main_errors[self.n_main_poles] = main_error
+        elif isinstance(main_error, dict):
+            for n_poles, err in main_error.items():
+                assert isinstance(n_poles, int)
+                assert n_poles % 2 == 0
+                assert isinstance(err, MainMultipoleError)
+                self.main_errors[n_poles] = err
+        else:
+            raise NotImplementedError
 
     def set_secondary_normal_error_dict(self, normal_error: Dict):
         assert isinstance(normal_error, Dict)
@@ -959,12 +987,12 @@ class Errors:
         for ei in np.sort(list(self.magnets)):
             elem_name = self.indiv_LTE.get_names_from_elem_inds(ei)
 
+            spec = self.magnets[ei]
+
             magnet_err = MagnetError(elem_name)
-            mpole_err = MultipoleError()
+            mpole_err = MultipoleError(n_main_poles=spec.multipole.n_main_poles)
             magnet_err.set_multipole_error(mpole_err)
             self.ring[ei]["magnet"] = magnet_err
-
-            spec = self.magnets[ei]
 
             for prop_name in spec.fields():
                 # print(prop_name)
@@ -973,19 +1001,28 @@ class Errors:
                     if spec2 is None:  # No multipole error specified
                         continue
                     for prop2_name in spec2.fields():
-                        if prop2_name == "main_error":
-                            main_err_spec = getattr(spec2, prop2_name)
-                            assert isinstance(main_err_spec, MainMultipoleErrorSpec)
-                            for fld in dc.fields(main_err_spec):
-                                prop3_name = fld.name
-                                spec4 = getattr(main_err_spec, prop3_name)
-                                prop_path = [prop_name, prop2_name, prop3_name]
-                                assert isinstance(spec4, TGES)
-                                unit = spec4.rms_unit
-                                assert unit == ""
-                                self._magnets_dist[
-                                    (spec4.rms, spec4.cutoff, spec4.mean)
-                                ].append((ei, elem_name, prop_path))
+                        if prop2_name == "main_errors":
+                            main_err_spec_d = getattr(spec2, prop2_name)
+                            for n_poles, main_err_spec in main_err_spec_d.items():
+                                assert isinstance(main_err_spec, MainMultipoleErrorSpec)
+                                for fld in dc.fields(main_err_spec):
+                                    prop3_name = fld.name
+                                    spec4 = getattr(main_err_spec, prop3_name)
+                                    prop_path = [
+                                        prop_name,
+                                        prop2_name,
+                                        n_poles,
+                                        prop3_name,
+                                    ]
+                                    assert isinstance(spec4, TGES)
+                                    unit = spec4.rms_unit
+                                    assert unit == ""
+                                    self._magnets_dist[
+                                        (spec4.rms, spec4.cutoff, spec4.mean)
+                                    ].append((ei, elem_name, prop_path))
+                                magnet_err.multipole.main_errors[
+                                    n_poles
+                                ] = MainMultipoleError()
                         elif prop2_name in (
                             "n_main_poles",
                             "main_normal",
@@ -1084,6 +1121,8 @@ class Errors:
                         sec_err_setter = obj.set_secondary_normal_error
                     elif prop == "secondary_skew":
                         sec_err_setter = obj.set_secondary_skew_error
+                    elif prop in (2, 4, 6, 8):
+                        obj = obj[prop]
                     else:
                         obj = getattr(obj, prop)
 
@@ -1492,15 +1531,42 @@ class Errors:
                         )
                     )
 
-                fse = mpole_err.main_error.fse
-                if fse != 0.0:
-                    mods.append(
-                        dict(
-                            elem_name=elem_name,
-                            prop_name="FSE",
-                            prop_val=f"{fse:.9e}",
+                if mpole_err.n_main_poles == 2:
+                    for n_poles, main_err in mpole_err.main_errors.items():
+                        fse = main_err.fse
+                        if fse == 0.0:
+                            continue
+
+                        if n_poles == 2:
+                            # Don't know what exactly "FSE_DIPOLE" does yet
+                            # actual_prop_name = "FSE_DIPOLE"
+                            raise NotImplementedError
+                        elif n_poles == 4:
+                            actual_prop_name = "FSE_QUADRUPOLE"
+                        else:
+                            raise NotImplementedError
+
+                        mods.append(
+                            dict(
+                                elem_name=elem_name,
+                                prop_name=actual_prop_name,
+                                prop_val=f"{fse:.9e}",
+                            )
                         )
-                    )
+                elif mpole_err.n_main_poles in (4, 6, 8):
+                    for n_poles, main_err in mpole_err.main_errors.items():
+                        assert n_poles == mpole_err.n_main_poles
+                        fse = main_err.fse
+                        if fse != 0.0:
+                            mods.append(
+                                dict(
+                                    elem_name=elem_name,
+                                    prop_name="FSE",
+                                    prop_val=f"{fse:.9e}",
+                                )
+                            )
+                else:
+                    raise NotImplementedError
 
                 norm_err_d = mpole_err.secondary_normal_error
                 skew_err_d = mpole_err.secondary_skew_error
