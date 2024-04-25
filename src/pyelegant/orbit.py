@@ -1203,6 +1203,18 @@ class ClosedOrbitCalculatorViaTraj:
         return dict(COD_converged=COD_converged, inj_COD=inj_COD)
 
 
+def parse_nested_dict_opts(key, d, d_custom):
+
+    if key not in d_custom:
+        return
+
+    if isinstance(d[key], dict):
+        for k in d[key].keys():
+            parse_nested_dict_opts(k, d[key], d_custom[key])
+    else:
+        d[key] = d_custom[key]
+
+
 class ClosedOrbitThreader:
     def __init__(
         self,
@@ -1218,6 +1230,7 @@ class ClosedOrbitThreader:
         TRM_filepath: Union[Path, str] = "",
         N_KICKS: Optional[Dict] = None,
         tempdir_path: Union[None, Path, str] = None,
+        iter_opts: Union[None, Dict] = None,
         print_stdout=False,
         print_stderr=True,
     ) -> None:
@@ -1282,12 +1295,22 @@ class ClosedOrbitThreader:
             ),
         }
         self.iter_opts["fixed_length"] = {
+            "method": 1,
             "method1": dict(
                 dp_cor_frac=0.8,
                 dp_change_thresh=1e-7,
                 full_traj=self.iter_opts["fixed_energy"]["full_traj"].copy(),
-            )
+            ),
+            "method2": dict(
+                dp_cor_frac=0.9,
+                dp_change_thresh=1e-7,
+                use_svd=True,
+                full_traj=self.iter_opts["fixed_energy"]["full_traj"].copy(),
+            ),
         }
+        if iter_opts is not None:
+            for k in self.iter_opts.keys():
+                parse_nested_dict_opts(k, self.iter_opts, iter_opts)
 
         self.make_tempdir(tempdir_path=tempdir_path)
 
@@ -1582,11 +1605,75 @@ class ClosedOrbitThreader:
 
         ed.write()
 
+    def _write_coords_inj_pt_calc_ele(self):
+        ed = elebuilder.EleDesigner(
+            self.coords_inj_pt_calc_ele_path, double_format=".16g"
+        )
+
+        ed.add_block(
+            "run_setup",
+            lattice=str(self.LTE_filepath),
+            p_central_mev=self.E_MeV,
+            use_beamline=self.LTE.used_beamline_name,
+        )
+
+        ed.add_newline()
+
+        watch_pathobj = self.coords_inj_pt_calc_ele_path.with_suffix(".wc_inj")
+        temp_watch_elem_name = "ELEGANT_WATCH_inj"
+        watch_filepath = watch_pathobj.resolve()
+        temp_watch_elem_def = (
+            f'{temp_watch_elem_name}: WATCH, FILENAME="{watch_filepath}", '
+            "MODE=coordinate"
+        )
+        name = self.LTE.flat_used_elem_names[0]
+        assert self.LTE.is_unique_elem_name(name)
+        ed.add_block(
+            "insert_elements",
+            name=name,
+            element_def=temp_watch_elem_def,
+        )
+
+        ed.add_newline()
+
+        if self.N_KICKS is not None:
+            elebuilder.add_N_KICKS_alter_elements_blocks(ed, self.N_KICKS)
+
+            ed.add_newline()
+
+        load_parameters = dict(
+            change_defined_values=True,
+            allow_missing_elements=True,
+            allow_missing_parameters=True,
+            filename=str(self.cor_setpoints_path.resolve()),
+        )
+        ed.add_block("load_parameters", **load_parameters)
+
+        ed.add_block("run_control", n_passes=self.n_turns)
+
+        ed.add_newline()
+
+        centroid = {}
+        centroid[0] = "<x0>"
+        centroid[1] = "<xp0>"
+        centroid[2] = "<y0>"
+        centroid[3] = "<yp0>"
+        centroid[5] = "<dp0>"
+        #
+        ed.add_block("bunched_beam", n_particles_per_bunch=1, centroid=centroid)
+
+        ed.add_newline()
+
+        ed.add_block("track")
+
+        ed.write()
+
     def _write_ele_files(self):
         """
         Write ELE files for
         1) computing trajectory
         2) saving LTE file that includes horizontal/vertical kicks after correction
+        3) computing 2nd turn coordinates at injection point
         """
         tmp = tempfile.NamedTemporaryFile(
             dir=self.tempdir.name, delete=False, prefix="tmpTraj_", suffix=".ele"
@@ -1600,10 +1687,17 @@ class ClosedOrbitThreader:
         self.lte_save_ele_path = Path(tmp.name).resolve()
         tmp.close()
 
+        tmp = tempfile.NamedTemporaryFile(
+            dir=self.tempdir.name, delete=False, prefix="tmpCoordsInjPt_", suffix=".ele"
+        )
+        self.coords_inj_pt_calc_ele_path = Path(tmp.name).resolve()
+        tmp.close()
+
         self.cor_setpoints_path = self.traj_calc_ele_path.with_suffix(".corsp")
 
         self._write_traj_calc_ele()
         self._write_lte_save_ele()
+        self._write_coords_inj_pt_calc_ele()
 
     def save_current_lattice_to_LTE_file(self, new_LTE_filepath: Union[Path, str]):
         new_LTE_filepath = Path(new_LTE_filepath).resolve()
@@ -1646,6 +1740,46 @@ class ClosedOrbitThreader:
             new_LTE_filepath.unlink()
         except:
             pass
+
+    def calc_2nd_turn_coords_at_inj_point(
+        self, x0=0.0, y0=0.0, xp0=0.0, yp0=0.0, dp0=0.0, dt=False
+    ):
+
+        if self._uncommited_cor_change:
+            self._write_cor_setpoints_file()
+
+        t0 = time.perf_counter()
+
+        run(
+            self.coords_inj_pt_calc_ele_path,
+            print_cmd=False,
+            macros=dict(
+                x0=f"{x0:.16g}",
+                y0=f"{y0:.16g}",
+                xp0=f"{xp0:.16g}",
+                yp0=f"{yp0:.16g}",
+                dp0=f"{dp0:.16g}",
+            ),
+            print_stdout=std_print_enabled["out"],
+            print_stderr=std_print_enabled["err"],
+        )
+
+        t1 = time.perf_counter()
+
+        inj_coords_turn2 = {}
+        watch_pathobj = self.coords_inj_pt_calc_ele_path.with_suffix(".wc_inj")
+        with nostdout():
+            output, _ = sdds.sdds2dicts(watch_pathobj)
+
+        key_list = ["x", "xp", "y", "yp"]
+        if dt:
+            key_list.append("dt")
+        for k in key_list:
+            inj_coords_turn2[k] = output["columns"][k][1]
+
+        t2 = time.perf_counter()
+
+        return inj_coords_turn2
 
     def calc_traj(
         self, x0=0.0, y0=0.0, xp0=0.0, yp0=0.0, dp0=0.0, dt=False, debug_print=False
@@ -1782,8 +1916,8 @@ class ClosedOrbitThreader:
 
     def start_fixed_length_orbit_correction(
         self,
-        method=1,
         init_inj_coords=None,
+        rcond=1e-4,
         debug_print=True,
         debug_plot=False,
         plot=True,
@@ -1804,6 +1938,8 @@ class ClosedOrbitThreader:
         """
 
         tStart = time.perf_counter()
+
+        method = self.iter_opts["fixed_length"]["method"]
 
         if method == 0:
             raise NotImplementedError
@@ -1839,9 +1975,9 @@ class ClosedOrbitThreader:
             dp_cor_frac = opts["dp_cor_frac"]
             dp_change_thresh = opts["dp_change_thresh"]
 
-            n_iter_max = opts["full_traj"]["n_iter_max"]
+            full_traj_cor_opts = opts["full_traj"]
 
-            full_traj_cor_opts = deepcopy(self.iter_opts["fixed_energy"]["full_traj"])
+            n_iter_max = full_traj_cor_opts["n_iter_max"]
 
             i_iter = 0
             cod_calc_failed = False
@@ -1881,7 +2017,7 @@ class ClosedOrbitThreader:
                         _thresh = full_traj_cor_opts["rms_thresh"]
 
                         # If the "rms_thresh" for self._full_traj_correction() is too high,
-                        # dt vs. dp plot will be like a saw tooth with the each tooth slope
+                        # dt vs. dp plot will be like a saw tooth with each tooth slope
                         # direction being the opposite of the general trend. This results,
                         # in non-converging beheavior for energy adjustment.
                         # It appears RMS threshold of 100 nm is too high. 10 nm should be good enough.
@@ -1897,7 +2033,8 @@ class ClosedOrbitThreader:
                             inj_coords=inj_coords,
                             iter_opts=full_traj_cor_opts,
                             dp0=cor_dp,  # adjust energy
-                            debug_print=False,
+                            rcond=rcond,
+                            debug_print=debug_print,
                             debug_plot=False,
                         )
 
@@ -1939,8 +2076,9 @@ class ClosedOrbitThreader:
                     inj_coords=inj_coords,
                     iter_opts=full_traj_cor_opts,
                     dp0=cor_dp,  # adjust energy
-                    debug_print=False,
-                    debug_plot=False,
+                    rcond=rcond,
+                    debug_print=debug_print,
+                    debug_plot=debug_plot,
                 )
 
                 if not out["success"]:
@@ -1980,97 +2118,211 @@ class ClosedOrbitThreader:
                     f"\n* Finished fixed-length closed orbit corrections ({fixed_len_cod_cor_tElapsed:.1f} [s])."
                 )
 
-            traj_1st = {plane: traj[plane][: self.nBPM[plane]] for plane in "xy"}
-            traj_2nd = {plane: traj[plane][self.nBPM[plane] :] for plane in "xy"}
+        elif method == 2:
+            assert init_inj_coords is not None
 
-            cod = {
-                plane: np.mean([traj_1st[plane], traj_2nd[plane]], axis=0)
-                for plane in "xy"
-            }
+            if debug_print:
+                print("\n* Starting fixed-length closed orbit corrections...")
 
-            fin_diff_orbs = {
-                plane: cod[plane] - self.target_orbit[plane] for plane in "xy"
-            }
+            tStart_fixed_len = time.perf_counter()
 
-            fin_kicks = dict(x=hkick_rads, y=vkick_rads)
+            opts = self.iter_opts["fixed_length"]["method2"]
 
-            # Compute closed orbit with final kicks
-            clo_calc = ClosedOrbitCalculator(
-                self.LTE.LTE_filepath,
-                self.E_MeV,
-                fixed_length=True,
-                output_monitors_only=False,
-                closed_orbit_accuracy=1e-12,  # 1e-9,
-                closed_orbit_iterations=100,  # 200,
-                iteration_fraction=0.9,
-                n_turns=0,
-                use_beamline=self.LTE.used_beamline_name,
-                N_KICKS=self.N_KICKS,
+            dp_cor_frac = opts["dp_cor_frac"]
+            dp_change_thresh = opts["dp_change_thresh"]
+            use_svd = opts["use_svd"]
+
+            full_traj_cor_opts = opts["full_traj"]
+
+            init_dp = 0.0
+            cod = self.calc_fixed_len_COD(
+                init_inj_coords,
+                init_dp=init_dp,
+                dp_cor_frac=dp_cor_frac,
+                dp_change_thresh=dp_change_thresh,
+                use_svd=use_svd,
             )
-            clo_calc.select_kickers("x", self.cor_names["x"])
-            clo_calc.select_kickers("y", self.cor_names["y"])
-            clo_calc.set_kick_angles(hkick_rads, vkick_rads)
-            d = clo_calc.calc(run_local=True)
+
+            inj_coords = cod["inj_coords"]
+            dp = cod["dp"]
+
             if False:
-                plot_closed_orbit(d["columns"], d["params"])
-            cod_ele = d["columns"]
-
-            clo_calc.remove_tempdir()
-
-            tEnd = time.perf_counter()
-            print(f"* Took {tEnd-tStart:.1f} [s].")
-            sys.stdout.flush()
-
-            if debug_plot:
-                plt.figure()
-                plt.plot(np.array(cor_dp_hist), ".-")
-
-                plt.figure()
-                plt.plot(np.array(inj_coords_hist), ".-")
-
-                plt.figure()
-                plt.plot(np.array(dt_diffs_hist), ".-")
-
-                plt.figure()
-                plt.subplot(211)
-                plt.plot(traj_2nd["x"] - traj_1st["x"], "b.-")
-                plt.subplot(212)
-                plt.plot(traj_2nd["y"] - traj_1st["y"], "b.-")
-                plt.tight_layout()
-
-                plt.figure()
-                plt.subplot(211)
-                plt.plot(fin_diff_orbs["x"], "b.-")
-                plt.subplot(212)
-                plt.plot(fin_diff_orbs["y"], "b.-")
-                plt.tight_layout()
-
-            if plot:
-                plt.figure()
-                plt.plot(self.cor_s["x"], hkick_rads * 1e3, "b.-", label="x")
-                plt.plot(self.cor_s["y"], vkick_rads * 1e3, "r.-", label="y")
-                leg = plt.legend(loc="best", prop=dict(size=18))
-                plt.ylabel(r"$\theta\; [\mathrm{mrad}]$", size="large")
-                plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
-                plt.tight_layout()
-
-                plt.figure()
-                plt.subplot(211)
-                plt.plot(
-                    self.bpm_s["x"], self.target_orbit["x"] * 1e6, "k^:", label="Target"
+                traj = self.calc_traj(
+                    x0=inj_coords[0],
+                    xp0=inj_coords[1],
+                    y0=inj_coords[2],
+                    yp0=inj_coords[3],
+                    dp0=dp,
+                    dt=True,
+                    debug_print=debug_print,
                 )
-                plt.plot(cod_ele["s"], cod_ele["x"] * 1e6, "m-", label="COD")
-                plt.ylabel(r"$x\; [\mu\mathrm{m}]$", size="large")
-                plt.legend(loc="best")
-                plt.subplot(212)
-                plt.plot(self.bpm_s["y"], self.target_orbit["y"] * 1e6, "k^:")
-                plt.plot(cod_ele["s"], cod_ele["y"] * 1e6, "m-")
-                plt.ylabel(r"$y\; [\mu\mathrm{m}]$", size="large")
-                plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
-                plt.tight_layout()
+
+                traj_dt_1st = traj["dt"][: self.nBPM["xy"]]
+                traj_dt_2nd = traj["dt"][self.nBPM["xy"] :]
+
+                plt.figure()
+                plt.plot(traj_dt_1st, "b.-")
+                plt.plot(traj_dt_2nd, "r.-")
+
+                plt.figure()
+                plt.plot(traj["x"][: self.nBPM["xy"]], "b.-")
+                plt.plot(traj["x"][self.nBPM["xy"] :], "r.-")
+
+                plt.figure()
+                plt.plot(traj["y"][: self.nBPM["xy"]], "b.-")
+                plt.plot(traj["y"][self.nBPM["xy"] :], "r.-")
+
+            cod_calc_failed = False
+
+            while True:
+
+                out = self._full_traj_correction(
+                    inj_coords=inj_coords,
+                    iter_opts=full_traj_cor_opts,
+                    dp0=dp,  # adjust energy
+                    rcond=rcond,
+                    debug_print=debug_print,
+                    debug_plot=debug_plot,
+                )
+
+                if not out["success"]:
+                    cod_calc_failed = True
+                    break
+
+                inj_coords_list = out["inj_coords_list"]
+                hkick_rads = out["hkicks_hist"][-1]
+                vkick_rads = out["vkicks_hist"][-1]
+
+                if False:
+                    plt.figure()
+                    plt.plot(hkick_rads, "b.-")
+                    plt.plot(vkick_rads, "r.-")
+
+                inj_coords = inj_coords_list[-1]
+
+                cod = self.calc_fixed_len_COD(
+                    inj_coords,
+                    init_dp=dp,
+                    dp_cor_frac=dp_cor_frac,
+                    dp_change_thresh=dp_change_thresh,
+                    use_svd=use_svd,
+                )
+
+                print(f"dp: {dp:+.6e} => {cod['dp']:+.6e}")
+
+                if np.abs(cod["dp"] - dp) < dp_change_thresh:
+                    break
+
+                inj_coords = cod["inj_coords"]
+                dp = cod["dp"]
+
+            traj = self.calc_traj(
+                x0=inj_coords[0],
+                xp0=inj_coords[1],
+                y0=inj_coords[2],
+                yp0=inj_coords[3],
+                dp0=dp,
+                dt=True,
+                debug_print=debug_print,
+            )
+
+            tEnd_fixed_len = time.perf_counter()
+            fixed_len_cod_cor_tElapsed = tEnd_fixed_len - tStart_fixed_len
+
+            if debug_print:
+                print(
+                    f"\n* Finished fixed-length closed orbit corrections ({fixed_len_cod_cor_tElapsed:.1f} [s])."
+                )
 
         else:
             raise NotImplementedError
+
+        traj_1st = {plane: traj[plane][: self.nBPM[plane]] for plane in "xy"}
+        traj_2nd = {plane: traj[plane][self.nBPM[plane] :] for plane in "xy"}
+
+        cod = {
+            plane: np.mean([traj_1st[plane], traj_2nd[plane]], axis=0) for plane in "xy"
+        }
+
+        fin_diff_orbs = {plane: cod[plane] - self.target_orbit[plane] for plane in "xy"}
+
+        fin_kicks = dict(x=hkick_rads, y=vkick_rads)
+
+        # Compute closed orbit with final kicks
+        clo_calc = ClosedOrbitCalculator(
+            self.LTE.LTE_filepath,
+            self.E_MeV,
+            fixed_length=True,
+            output_monitors_only=False,
+            closed_orbit_accuracy=1e-12,  # 1e-9,
+            closed_orbit_iterations=100,  # 200,
+            iteration_fraction=0.9,
+            n_turns=0,
+            use_beamline=self.LTE.used_beamline_name,
+            N_KICKS=self.N_KICKS,
+        )
+        clo_calc.select_kickers("x", self.cor_names["x"])
+        clo_calc.select_kickers("y", self.cor_names["y"])
+        clo_calc.set_kick_angles(hkick_rads, vkick_rads)
+        d = clo_calc.calc(run_local=True)
+        if False:
+            plot_closed_orbit(d["columns"], d["params"])
+        cod_ele = d["columns"]
+        actual_dp = d["params"]["delta"]
+
+        clo_calc.remove_tempdir()
+
+        tEnd = time.perf_counter()
+        print(f"* Took {tEnd-tStart:.1f} [s].")
+        sys.stdout.flush()
+
+        if debug_plot:
+            plt.figure()
+            plt.plot(np.array(cor_dp_hist), ".-")
+
+            plt.figure()
+            plt.plot(np.array(inj_coords_hist), ".-")
+
+            plt.figure()
+            plt.plot(np.array(dt_diffs_hist), ".-")
+
+            plt.figure()
+            plt.subplot(211)
+            plt.plot(traj_2nd["x"] - traj_1st["x"], "b.-")
+            plt.subplot(212)
+            plt.plot(traj_2nd["y"] - traj_1st["y"], "b.-")
+            plt.tight_layout()
+
+            plt.figure()
+            plt.subplot(211)
+            plt.plot(fin_diff_orbs["x"], "b.-")
+            plt.subplot(212)
+            plt.plot(fin_diff_orbs["y"], "b.-")
+            plt.tight_layout()
+
+        if plot:
+            plt.figure()
+            plt.plot(self.cor_s["x"], hkick_rads * 1e3, "b.-", label="x")
+            plt.plot(self.cor_s["y"], vkick_rads * 1e3, "r.-", label="y")
+            leg = plt.legend(loc="best", prop=dict(size=18))
+            plt.ylabel(r"$\theta\; [\mathrm{mrad}]$", size="large")
+            plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
+            plt.tight_layout()
+
+            plt.figure()
+            plt.subplot(211)
+            plt.plot(
+                self.bpm_s["x"], self.target_orbit["x"] * 1e6, "k^:", label="Target"
+            )
+            plt.plot(cod_ele["s"], cod_ele["x"] * 1e6, "m-", label="COD")
+            plt.ylabel(r"$x\; [\mu\mathrm{m}]$", size="large")
+            plt.legend(loc="best")
+            plt.subplot(212)
+            plt.plot(self.bpm_s["y"], self.target_orbit["y"] * 1e6, "k^:")
+            plt.plot(cod_ele["s"], cod_ele["y"] * 1e6, "m-")
+            plt.ylabel(r"$y\; [\mu\mathrm{m}]$", size="large")
+            plt.xlabel(r"$s\; [\mathrm{m}]$", size="large")
+            plt.tight_layout()
 
         result = dict(
             cod_calc_failed=cod_calc_failed,
@@ -2079,17 +2331,206 @@ class ClosedOrbitThreader:
             elapsed={"fixed_len_cod_cor": fixed_len_cod_cor_tElapsed},
         )
 
-        if method == 1:
+        if method in (1, 2):
             result["fin_inj_coords"] = inj_coords
-            result["fin_dp"] = cor_dp
+
+        result["fin_dp"] = actual_dp
 
         return result
+
+    def _goal_closed_inj_coords(self, inj_coords, dp0):
+        inj_coords_2nd = self.calc_2nd_turn_coords_at_inj_point(
+            x0=inj_coords[0],
+            xp0=inj_coords[1],
+            y0=inj_coords[2],
+            yp0=inj_coords[3],
+            dp0=dp0,
+        )
+
+        obj = (inj_coords_2nd["x"] - inj_coords[0]) ** 2
+        obj += (inj_coords_2nd["xp"] - inj_coords[1]) ** 2
+        obj += (inj_coords_2nd["y"] - inj_coords[2]) ** 2
+        obj += (inj_coords_2nd["yp"] - inj_coords[3]) ** 2
+
+        return obj
+
+    def calc_fixed_len_COD(
+        self,
+        init_inj_coords,
+        init_dp=0.0,
+        dp_cor_frac=0.9,
+        dp_change_thresh=1e-7,
+        use_svd=True,
+    ):
+
+        print("\n** Starting fixed-length COD finding...")
+
+        alphac = self._alphac
+        circumf = self.LTE.get_circumference()
+        c = constants.c  # speed of light [m/s]
+
+        tStart_cod_find = time.perf_counter()
+        if not use_svd:
+            dp = init_dp
+            inj_coords = init_inj_coords.copy()
+            while True:
+                res = optimize.fmin(
+                    self._goal_closed_inj_coords,
+                    inj_coords,
+                    args=(dp,),
+                    xtol=1e-9,
+                    ftol=1e-18,
+                    maxiter=500,
+                    disp=0,
+                )
+
+                inj_coords_2nd = self.calc_2nd_turn_coords_at_inj_point(
+                    x0=res[0],
+                    xp0=res[1],
+                    y0=res[2],
+                    yp0=res[3],
+                    dp0=dp,
+                    dt=True,
+                )
+                assert np.abs(inj_coords_2nd["x"] - res[0]) < 1e-9
+                assert np.abs(inj_coords_2nd["xp"] - res[1]) < 1e-9
+                assert np.abs(inj_coords_2nd["y"] - res[2]) < 1e-9
+                assert np.abs(inj_coords_2nd["yp"] - res[3]) < 1e-9
+
+                dC_over_C = (c * inj_coords_2nd["dt"]) / circumf
+                full_dp_change = dC_over_C / alphac
+                print(full_dp_change)
+
+                if np.abs(full_dp_change) < dp_change_thresh:
+                    break
+
+                dp += -full_dp_change * dp_cor_frac
+                inj_coords = np.array(
+                    [
+                        inj_coords_2nd["x"],
+                        inj_coords_2nd["xp"],
+                        inj_coords_2nd["y"],
+                        inj_coords_2nd["yp"],
+                    ]
+                )
+        else:
+            dx0 = dy0 = 1e-6  # [m]
+            dxp0 = dyp0 = 1e-6  # [rad]
+
+            inj_coords_2nd = {}
+            for k, delta_inj_coords in [
+                ("ref", np.zeros(4)),
+                ("dx", np.array([dx0, 0.0, 0.0, 0.0])),
+                ("dxp", np.array([0.0, dxp0, 0.0, 0.0])),
+                ("dy", np.array([0.0, 0.0, dy0, 0.0])),
+                ("dyp", np.array([0.0, 0.0, 0.0, dyp0])),
+            ]:
+                inj_coords = init_inj_coords + delta_inj_coords
+                inj_coords_2nd[k] = self.calc_2nd_turn_coords_at_inj_point(
+                    x0=inj_coords[0],
+                    xp0=inj_coords[1],
+                    y0=inj_coords[2],
+                    yp0=inj_coords[3],
+                    dp0=init_dp,
+                    dt=False,
+                )
+            coords = ["x", "xp", "y", "yp"]
+            M_inj = np.array(
+                [
+                    np.array(
+                        [
+                            inj_coords_2nd["dx"][coord] - inj_coords_2nd["ref"][coord]
+                            for coord in coords
+                        ]
+                    )
+                    / dx0,
+                    np.array(
+                        [
+                            inj_coords_2nd["dxp"][coord] - inj_coords_2nd["ref"][coord]
+                            for coord in coords
+                        ]
+                    )
+                    / dxp0,
+                    np.array(
+                        [
+                            inj_coords_2nd["dy"][coord] - inj_coords_2nd["ref"][coord]
+                            for coord in coords
+                        ]
+                    )
+                    / dy0,
+                    np.array(
+                        [
+                            inj_coords_2nd["dyp"][coord] - inj_coords_2nd["ref"][coord]
+                            for coord in coords
+                        ]
+                    )
+                    / dyp0,
+                ]
+            ).T
+
+            U, sv, Vt = calcSVD(M_inj)
+            if False:
+                plt.figure()
+                plt.semilogy(sv / sv[0], ".-")
+            Sinv_trunc = calcTruncSVMatrix(sv, rcond=1e-4, nsv=None, disp=0)
+            M_inj_inv = Vt.T @ Sinv_trunc @ U.T
+
+            dp = init_dp
+            inj_coords = init_inj_coords.copy()
+            cod_cor_frac = 0.9
+            cod_find_thresh = 1e-9  # [m] or [rad]
+            dp_adj_counter = 0
+            while True:
+                dp_adj_counter += 1
+
+                cod_counter = 0
+                while True:
+                    cod_counter += 1
+                    inj_coords_2nd = self.calc_2nd_turn_coords_at_inj_point(
+                        x0=inj_coords[0],
+                        xp0=inj_coords[1],
+                        y0=inj_coords[2],
+                        yp0=inj_coords[3],
+                        dp0=dp,
+                        dt=True,
+                    )
+
+                    delta_inj = np.array(
+                        [
+                            inj_coords_2nd["x"] - inj_coords[0],
+                            inj_coords_2nd["xp"] - inj_coords[1],
+                            inj_coords_2nd["y"] - inj_coords[2],
+                            inj_coords_2nd["yp"] - inj_coords[3],
+                        ]
+                    )
+
+                    if np.all(np.abs(delta_inj) < cod_find_thresh):
+                        break
+
+                    inj_coords -= (M_inj_inv @ delta_inj) * cod_cor_frac
+
+                dC_over_C = (c * inj_coords_2nd["dt"]) / circumf
+                full_dp_change = dC_over_C / alphac
+                print(f"COD #iter = {cod_counter}, {full_dp_change = :+.6e}")
+
+                if np.abs(full_dp_change) < dp_change_thresh:
+                    break
+
+                dp += -full_dp_change * dp_cor_frac
+
+        tEnd_cod_find = time.perf_counter()
+        print(
+            f"** Fixed-length COD finding took {tEnd_cod_find - tStart_cod_find:.1f} [s] (dp_adj_counter = {dp_adj_counter})"
+        )
+
+        return dict(dp=dp, inj_coords=inj_coords)
 
     def _full_traj_correction(
         self,
         inj_coords=None,
         iter_opts: Union[Dict, None] = None,
         dp0: float = 0.0,
+        rcond: float = 1e-4,
         debug_print: bool = False,
         debug_plot: bool = False,
     ):
@@ -2123,6 +2564,7 @@ class ClosedOrbitThreader:
 
         i_iter = 0
         i_loss = 0
+        prev_dx = prev_dy = None
         while i_iter < n_iter_max:
             if debug_print:
                 print(f"Iteration #{i_iter+1}/{n_iter_max}")
@@ -2152,14 +2594,17 @@ class ClosedOrbitThreader:
 
             survived_inds = self._get_survived_inds(traj)
 
-            dx_rms = np.std(
+            dx = (
                 self.target_traj["x"][: survived_inds["x"]]
                 - traj["x"][: survived_inds["x"]]
             )
-            dy_rms = np.std(
+            dy = (
                 self.target_traj["y"][: survived_inds["y"]]
                 - traj["y"][: survived_inds["y"]]
             )
+
+            dx_rms = np.std(dx)
+            dy_rms = np.std(dy)
 
             if debug_print:
                 print(f"Residual RMS (x,y) [um] = ({dx_rms*1e6:.3f}, {dy_rms*1e6:.3f})")
@@ -2197,10 +2642,8 @@ class ClosedOrbitThreader:
                 if False:
                     plt.figure()
                     plt.semilogy(sv / sv[0], ".-")
-                assert np.all(sv / sv[0] > 1e-4)
 
-                # Use all singular values by setting "rcond=1e-4"
-                Sinv_trunc = calcTruncSVMatrix(sv, rcond=1e-4, nsv=None, disp=0)
+                Sinv_trunc = calcTruncSVMatrix(sv, rcond=rcond, nsv=None, disp=0)
 
                 M_full_inv = Vt.T @ Sinv_trunc @ U.T
 
@@ -2212,6 +2655,19 @@ class ClosedOrbitThreader:
                         print("Corrections converged.")
                     success = True
                     break
+
+                if prev_dx is not None:
+                    no_improve_thresh = 1e-9  # [m]
+                    if (np.max(np.abs(dx - prev_dx)) < no_improve_thresh) and (
+                        np.max(np.abs(dy - prev_dy)) < no_improve_thresh
+                    ):
+                        if debug_print:
+                            print("No more improvement. Stopping correction.")
+                        success = True
+                        break
+
+                prev_dx = dx
+                prev_dy = dy
 
                 i_loss = 0
 
@@ -2395,7 +2851,9 @@ class ClosedOrbitThreader:
 
         return survived_inds
 
-    def start_fixed_energy_orbit_correction(self, debug_print=False, debug_plot=False):
+    def start_fixed_energy_orbit_correction(
+        self, rcond=1e-4, debug_print=False, debug_plot=False
+    ):
         """
         Fixed-energy trajectory correction using first- and second-turn trajctories
 
@@ -2489,6 +2947,7 @@ class ClosedOrbitThreader:
                     inj_coords=inj_coords,
                     iter_opts=self.iter_opts["fixed_energy"]["full_traj"],
                     dp0=0.0,  # "fixed-energy" at ref. energy in this function
+                    rcond=rcond,
                     debug_print=debug_print,
                     debug_plot=debug_plot,
                 )
@@ -2535,10 +2994,16 @@ class ClosedOrbitThreader:
 
         return incl_nObs, incl_nKnobs
 
-    def _construct_TRM_for_next_bpm_cor_pair(
+    def _construct_TRM_for_next_bpm_cor_pair_v1(
         self, incl_nObs: Dict[str, int], incl_nKnobs: Dict[str, int]
     ) -> np.ndarray:
-        """ " TRM for the next pair of BPM and corrector right after the
+        """---- DO NOT USE THIS ---- This algorithm could lead to
+        "infinite-loop", undoing the previous partial trajectory correction,
+        if there are more than one BPM between the corrector being adjusted here
+        and the next corrector. Use `self._construct_TRM_for_next_bpm_cor_pair_v2()`
+        instead.
+
+        TRM for the next pair of BPM and corrector right after the
         BPMs and correctors included in the current iteration."""
 
         # `M_cor` are assumed to contain 2 full turns.
@@ -2609,10 +3074,10 @@ class ClosedOrbitThreader:
             ).T
 
             assert M_next.shape == (2, 2)
-        elif cor_x_comb_i:
-            M_next = np.vstack(([M_cor[bpm_x_comb_i, cor_x_comb_i]])).T
+        # elif cor_x_comb_i:
+        #     M_next = np.vstack(([M_cor[bpm_x_comb_i, cor_x_comb_i]])).T
 
-            assert M_next.shape == (1, 1)
+        #     assert M_next.shape == (1, 1)
         elif cor_x_comb_i:
             M_next = np.array([M_cor[bpm_x_comb_i, cor_x_comb_i]]).reshape((1, 1))
         elif cor_y_comb_i:
@@ -2629,6 +3094,140 @@ class ClosedOrbitThreader:
         return dict(
             M=M_next,
             next_bpm_index={"x": bpm_x_i, "y": bpm_y_i},
+            next_cor_index={"x": cor_x_i, "y": cor_y_i},
+        )
+
+    def _construct_TRM_for_next_bpm_cor_pair_v2(
+        self, incl_nObs: Dict[str, int], incl_nKnobs: Dict[str, int]
+    ) -> np.ndarray:
+        """ " TRM for the next pair of BPM(s) and corrector right after the
+        BPMs and correctors included in the current iteration."""
+
+        # `M_cor` are assumed to contain 2 full turns.
+        M_cor = self._M_cor
+
+        nBPM = self.nBPM
+        nCOR = self.nCOR
+        n_turns = 2
+
+        bpm_x_i = incl_nObs["x"]
+        bpm_y_i = incl_nObs["y"]
+
+        bpm_x_comb_i = bpm_x_i
+        bpm_y_comb_i = nBPM["x"] * n_turns + bpm_y_i
+
+        if incl_nKnobs["x"] < nCOR["x"]:
+            cor_x_i = incl_nKnobs["x"]
+            cor_x_comb_i = cor_x_i
+            while M_cor[bpm_x_comb_i, cor_x_comb_i] == 0.0:
+                # Since this corrector is downstream of the BPM,
+                # go back by one corrector
+                cor_x_i -= 1
+
+                cor_x_comb_i = cor_x_i
+
+                if cor_x_i < 0:
+                    raise RuntimeError(
+                        f"No horiz. corrector that can correct horiz. BPM index #{bpm_x_i} was found."
+                    )
+
+            # Now check if there are extra BPMs between this selected corrector
+            # and the corrector after it. If so, those extra BPMs need to be included.
+            next_cor_x_i = cor_x_i + 1
+            if next_cor_x_i >= nCOR["x"]:
+                pass  # No more corrector after `cor_x_i`
+            else:
+                bpm_x_inds = [bpm_x_i]
+                bpm_x_comb_inds = [bpm_x_comb_i]
+                while True:
+                    next_bpm_i = bpm_x_inds[-1] + 1
+                    if next_bpm_i >= nBPM["x"]:
+                        break
+
+                    if self.bpm_s["x"][next_bpm_i] < self.cor_s["x"][next_cor_x_i]:
+                        bpm_x_inds.append(next_bpm_i)
+                        bpm_x_comb_inds.append(next_bpm_i)
+                    else:
+                        break
+
+        elif incl_nKnobs["x"] == nCOR["x"]:
+            # There is no next corrector. Partial traj. corr. is done in this plane.
+            cor_x_i = cor_x_comb_i = None
+            bpm_x_inds = None
+        else:
+            raise RuntimeError("This should not be reached")
+
+        if incl_nKnobs["y"] < nCOR["y"]:
+            cor_y_i = incl_nKnobs["y"]
+            cor_y_comb_i = nCOR["x"] + cor_y_i
+            while M_cor[bpm_y_comb_i, cor_y_comb_i] == 0.0:
+                # Since this corrector is downstream of the BPM,
+                # go back by one corrector
+                cor_y_i -= 1
+
+                cor_y_comb_i = nCOR["x"] + cor_y_i
+
+                if cor_y_i < 0:
+                    raise RuntimeError(
+                        f"No vert. corrector that can correct vert. BPM index #{bpm_y_i} was found."
+                    )
+
+            # Now check if there are extra BPMs between this selected corrector
+            # and the corrector after it. If so, those extra BPMs need to be included.
+            next_cor_y_i = cor_y_i + 1
+            if next_cor_y_i >= nCOR["y"]:
+                pass  # No more corrector after `cor_y_i`
+            else:
+                bpm_y_inds = [bpm_y_i]
+                bpm_y_comb_inds = [bpm_y_comb_i]
+                while True:
+                    next_bpm_i = bpm_y_inds[-1] + 1
+                    if next_bpm_i >= nBPM["y"]:
+                        break
+
+                    if self.bpm_s["y"][next_bpm_i] < self.cor_s["y"][next_cor_y_i]:
+                        bpm_y_inds.append(next_bpm_i)
+                        bpm_y_comb_inds.append(nBPM["x"] * n_turns + next_bpm_i)
+                    else:
+                        break
+        elif incl_nKnobs["y"] == nCOR["y"]:
+            # There is no next corrector. Partial traj. corr. is done in this plane.
+            cor_y_i = cor_y_comb_i = None
+            bpm_y_inds = None
+        else:
+            raise RuntimeError("This should not be reached")
+
+        if cor_x_comb_i and cor_y_comb_i:
+            M_next = np.vstack(
+                [
+                    np.append(
+                        M_cor[bpm_x_comb_inds, [cor_x_comb_i]],
+                        M_cor[bpm_y_comb_inds, [cor_x_comb_i]],
+                    ),
+                    np.append(
+                        M_cor[bpm_x_comb_inds, [cor_y_comb_i]],
+                        M_cor[bpm_y_comb_inds, [cor_y_comb_i]],
+                    ),
+                ]
+            ).T
+
+            assert M_next.shape == (len(bpm_x_comb_inds) + len(bpm_y_comb_inds), 2)
+        elif cor_x_comb_i:
+            M_next = M_cor[bpm_x_comb_inds, [cor_x_comb_i]].reshape((-1, 1))
+        elif cor_y_comb_i:
+            M_next = M_cor[bpm_y_comb_inds, [cor_y_comb_i]].reshape((-1, 1))
+        else:
+            raise RuntimeError(
+                (
+                    "All of both horiz. and vert. correctors are included in correction, "
+                    "which means partial traj. correction should have been terminated "
+                    "before reaching this point."
+                )
+            )
+
+        return dict(
+            M=M_next,
+            next_bpm_indexes={"x": bpm_x_inds, "y": bpm_y_inds},
             next_cor_index={"x": cor_x_i, "y": cor_y_i},
         )
 
@@ -2725,7 +3324,13 @@ class ClosedOrbitThreader:
         return dict(M=M)
 
     def _partial_traj_correction(
-        self, traj, inj_coords=None, n_iter_max=100, debug_print=False, debug_plot=False
+        self,
+        traj,
+        inj_coords=None,
+        n_iter_max=100,
+        rcond=1e-4,
+        debug_print=False,
+        debug_plot=False,
     ):
         opts = self.iter_opts["fixed_energy"]["partial_traj"]
         n_iter_max = opts["n_iter_max"]
@@ -2737,6 +3342,9 @@ class ClosedOrbitThreader:
         assert inj_coords.shape == (n_inj_coords,)
 
         self._save_backup(inj_coords)
+
+        _partial_opts = self.iter_opts["fixed_energy"]["partial_traj"]
+        ini_obs_incl_dxy_thresh = _partial_opts["obs_incl_dxy_thresh"]
 
         i_iter_partial_traj_cor = 0
         while i_iter_partial_traj_cor < n_iter_max:
@@ -2847,10 +3455,12 @@ class ClosedOrbitThreader:
             if False:
                 plt.figure()
                 plt.semilogy(sv / sv[0], ".-")
-            assert np.all(sv / sv[0] > 1e-4)
 
-            # Use all singular values by setting "rcond=1e-4"
-            Sinv_trunc = calcTruncSVMatrix(sv, rcond=1e-4, nsv=None, disp=0)
+            # assert np.all(sv / sv[0] > 1e-4)
+            if not np.all(sv / sv[0] > rcond):
+                print(f"{np.sum(sv / sv[0] < rcond)} singular values will be cut.")
+
+            Sinv_trunc = calcTruncSVMatrix(sv, rcond=rcond, nsv=None, disp=0)
 
             _Minv = Vt.T @ Sinv_trunc @ U.T
 
@@ -2859,7 +3469,7 @@ class ClosedOrbitThreader:
                 plt.figure(figsize=(18, 6))
                 plt.subplot(231)
                 plt.plot(dI, ".-")
-                plt.ylabel(r"$\Delta_I$", size="large")
+                plt.ylabel(r"$\Delta I [\mathrm{rad}]$", size="large")
                 plt.tight_layout()
 
             dI *= cor_frac
@@ -2926,46 +3536,135 @@ class ClosedOrbitThreader:
             # next horizontal and vertical BPMs is corrected such that a good
             # trajectory direction is established for next iteration.
 
-            _d = self._construct_TRM_for_next_bpm_cor_pair(incl_nObs, incl_nKnobs)
-            M_next = _d["M"]
-            next_bpm_index = _d["next_bpm_index"]
-            next_cor_index = _d["next_cor_index"]
-
-            U, sv, Vt = calcSVD(M_next)
             if False:
-                plt.figure()
-                plt.semilogy(sv / sv[0], ".-")
-            assert np.all(sv / sv[0] > 1e-4)
+                _d = self._construct_TRM_for_next_bpm_cor_pair_v1(
+                    incl_nObs, incl_nKnobs
+                )
+                M_next = _d["M"]
+                next_bpm_index = _d["next_bpm_index"]
+                next_cor_index = _d["next_cor_index"]
 
-            Sinv_trunc = calcTruncSVMatrix(sv, rcond=1e-4, nsv=None, disp=0)
+                U, sv, Vt = calcSVD(M_next)
+                if False:
+                    plt.figure()
+                    plt.semilogy(sv / sv[0], ".-")
+                assert np.all(sv / sv[0] > 1e-4)
 
-            _Mnext_inv = Vt.T @ Sinv_trunc @ U.T
+                Sinv_trunc = calcTruncSVMatrix(sv, rcond=1e-4, nsv=None, disp=0)
 
-            next_bpm_dv = {}
-            for plane, cor_i in next_cor_index.items():
-                if cor_i is None:
-                    continue
+                _Mnext_inv = Vt.T @ Sinv_trunc @ U.T
 
-                bpm_i = next_bpm_index[plane]
-                next_bpm_dv[plane] = self.target_traj[plane][bpm_i] - traj[plane][bpm_i]
+                next_bpm_dv = {}
+                for plane, cor_i in next_cor_index.items():
+                    if cor_i is None:
+                        continue
 
-            dI_next = _Mnext_inv @ np.array(list(next_bpm_dv.values()))
-            dI_next *= cor_frac
+                    bpm_i = next_bpm_index[plane]
+                    next_bpm_dv[plane] = (
+                        self.target_traj[plane][bpm_i] - traj[plane][bpm_i]
+                    )
 
-            assert len(next_bpm_dv) == dI_next.size
+                dI_next = _Mnext_inv @ np.array(list(next_bpm_dv.values()))
+                dI_next *= cor_frac
 
-            for plane, _dI in zip(list(next_bpm_dv), dI_next):
-                elem_name = self.cor_names[plane][next_cor_index[plane]]
-                self.change_corrector_setpoint_by(elem_name, plane, _dI)
+                assert len(next_bpm_dv) == dI_next.size
 
-            traj = self.calc_traj(
-                x0=inj_coords[0],
-                xp0=inj_coords[1],
-                y0=inj_coords[2],
-                yp0=inj_coords[3],
-                dp0=0.0,
-                debug_print=debug_print,
-            )
+                for plane, _dI in zip(list(next_bpm_dv), dI_next):
+                    elem_name = self.cor_names[plane][next_cor_index[plane]]
+                    self.change_corrector_setpoint_by(elem_name, plane, _dI)
+
+            else:
+                _d = self._construct_TRM_for_next_bpm_cor_pair_v2(
+                    incl_nObs, incl_nKnobs
+                )
+                M_next = _d["M"]
+                next_bpm_indexes = _d["next_bpm_indexes"]
+                next_cor_index = _d["next_cor_index"]
+
+                U, sv, Vt = calcSVD(M_next)
+                if False:
+                    plt.figure()
+                    plt.semilogy(sv / sv[0], ".-")
+                if not np.all(sv / sv[0] > rcond):
+                    print(f"{np.sum(sv / sv[0] < rcond)} singular values will be cut.")
+
+                Sinv_trunc = calcTruncSVMatrix(sv, rcond=rcond, nsv=None, disp=0)
+
+                _Mnext_inv = Vt.T @ Sinv_trunc @ U.T
+
+                next_bpm_dv = []
+                plane_list = []
+                for plane, cor_i in next_cor_index.items():
+                    if cor_i is None:
+                        continue
+
+                    bpm_inds = next_bpm_indexes[plane]
+                    next_bpm_dv.extend(
+                        (
+                            self.target_traj[plane][bpm_inds] - traj[plane][bpm_inds]
+                        ).tolist()
+                    )
+                    plane_list.append(plane)
+
+                dI_next = _Mnext_inv @ np.array(next_bpm_dv)
+                dI_next *= cor_frac
+
+                try:
+                    _dI_next_x = dI_next[plane_list.index("x")]
+                except ValueError or IndexError:
+                    _dI_next_x = None
+                try:
+                    _dI_next_y = dI_next[plane_list.index("y")]
+                except ValueError or IndexError:
+                    _dI_next_y = None
+                try:
+                    if next_cor_index["x"] is None:
+                        _last_dtheta_x = None
+                    else:
+                        _last_dtheta_x = dtheta_H[next_cor_index["x"]]
+                except IndexError:
+                    _last_dtheta_x = None
+                try:
+                    if next_cor_index["y"] is None:
+                        _last_dtheta_y = None
+                    else:
+                        _last_dtheta_y = dtheta_V[next_cor_index["y"]]
+                except IndexError:
+                    _last_dtheta_y = None
+
+                repeat_thresh = 100e-9
+                _increase_obs_incl_dxy_thresh = False
+
+                if (_last_dtheta_x is not None) and (_dI_next_x is not None):
+                    if np.abs(_last_dtheta_x + _dI_next_x) < repeat_thresh:
+                        _increase_obs_incl_dxy_thresh = True
+                if (_last_dtheta_y is not None) and (_dI_next_y is not None):
+                    if np.abs(_last_dtheta_y + _dI_next_y) < repeat_thresh:
+                        _increase_obs_incl_dxy_thresh = True
+
+                _partial_opts = self.iter_opts["fixed_energy"]["partial_traj"]
+                if _increase_obs_incl_dxy_thresh:
+                    _partial_opts["obs_incl_dxy_thresh"] *= 2
+                    print(
+                        f"\n* Expanding `obs_incl_dxy_thresh` to {_partial_opts['obs_incl_dxy_thresh']*1e3:.6g} [mm]"
+                    )
+                else:
+                    _partial_opts["obs_incl_dxy_thresh"] = ini_obs_incl_dxy_thresh
+
+                assert len(plane_list) == dI_next.size
+
+                for plane, _dI in zip(plane_list, dI_next):
+                    elem_name = self.cor_names[plane][next_cor_index[plane]]
+                    self.change_corrector_setpoint_by(elem_name, plane, _dI)
+
+                traj = self.calc_traj(
+                    x0=inj_coords[0],
+                    xp0=inj_coords[1],
+                    y0=inj_coords[2],
+                    yp0=inj_coords[3],
+                    dp0=0.0,
+                    debug_print=debug_print,
+                )
 
             if debug_plot:
                 plt.subplot(233)
