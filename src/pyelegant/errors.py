@@ -2009,6 +2009,254 @@ class NSLS2(AbstractFacility):
         )
 
 
+class NSLS2U(AbstractFacility):
+    def __init__(
+        self,
+        design_LTE: ltemanager.Lattice,
+        lattice_type: str,
+        indiv_design_LTEZIP_filepath: Union[Path, str],
+        error_LTEZIP_name_prefix: str,
+        seed: Union[int, None, np.random.Generator] = 42,
+    ):
+
+        super().__init__(
+            design_LTE,
+            lattice_type,
+            indiv_design_LTEZIP_filepath,
+            error_LTEZIP_name_prefix,
+            seed=seed,
+        )
+
+        # "fsdb" stands for "(f)acility-(s)pecific (d)ata(b)ase"
+        self.fsdb = ltemanager.NSLS2U(
+            self.err.indiv_LTE, lattice_type=self.lattice_type
+        )
+
+        self.elem_inds = self._get_elem_inds()
+
+        self.register_BPMs()
+        self.register_bends()
+        self.register_quads_sexts()
+        self.register_girders()
+
+    def _get_elem_inds(self):
+
+        LTE = self.err.indiv_LTE
+        fsdb = self.fsdb
+
+        elem_inds = {}
+
+        _inds = fsdb.get_regular_BPM_elem_inds()
+        assert len(_inds["x"]) == len(_inds["y"]) == 330
+        assert np.all(_inds["x"] == _inds["y"])
+        elem_inds["BPM"] = _inds["x"]
+
+        elem_inds["PMQ"] = fsdb.get_comb_func_mag_elem_inds()
+        assert len(elem_inds["PMQ"]) == 900
+
+        if self.lattice_type.startswith("20231218"):
+            elem_inds["EM_QUAD"] = np.sort(
+                np.hstack(
+                    [
+                        LTE.get_elem_inds_from_regex("^Q[SL]\w+$"),
+                        LTE.get_elem_inds_from_regex("^Q[DF]\w+$"),
+                    ]
+                )
+            )
+            assert len(elem_inds["EM_QUAD"]) == 360
+        else:
+            raise NotImplementedError
+
+        elem_inds["SEXT"] = np.sort(
+            np.hstack(
+                [
+                    LTE.get_elem_inds_from_regex("^S[HL]\w+$"),
+                    LTE.get_elem_inds_from_regex("^S[DF]\w+$"),
+                ]
+            )
+        )
+        if self.lattice_type == "20231218":
+            assert len(elem_inds["SEXT"]) == 420
+        elif self.lattice_type in (
+            "20231218_nonsplitSF1",
+            "20231218_nonsplitSF1_w_skew",
+            "20231218_nonsplitSF1_w_skew_v2",
+        ):
+            assert len(elem_inds["SEXT"]) == 360
+        else:
+            raise NotImplementedError
+
+        elem_inds["OCT"] = np.sort(
+            np.hstack(
+                [
+                    LTE.get_elem_inds_from_regex("^OCT\w+$"),
+                ]
+            )
+        )
+        assert len(elem_inds["OCT"]) == 180
+
+        return elem_inds
+
+    @staticmethod
+    def get_multipole_err_specs():
+        """
+        ELEGANT: normal = "an", skew = "bn"
+        Tracy: normal = "Bn", skew = "An"
+        (Note that the sign of "An" is opposite from the sign of "bn".)
+        """
+
+        mp_err_specs = {}
+
+        common = dict(secondary_ref_radius=25e-3, secondary_cutoff=1.0)  # [m]
+
+        # PMQ
+        n_main_poles = 2
+        main_normal = True
+        spec = MultipoleErrorSpec(n_main_poles, main_normal, **common)
+        if False:  # TO-BE-DETERMINED
+            pass
+        mp_err_specs["PMQ"] = spec
+
+        # EM-QUAD
+        n_main_poles = 4
+        main_normal = True
+        spec = MultipoleErrorSpec(n_main_poles, main_normal, **common)
+        if False:  # TO-BE-DETERMINED
+            spec.set_secondary_norm(6, 2e-4)
+            spec.set_secondary_skew(6, 2e-4)
+            spec.set_secondary_norm(8, 2e-4)
+            spec.set_secondary_skew(8, 1e-4)
+            for n_poles in [10, 14, 16, 18]:
+                spec.set_secondary_norm(n_poles, 1e-4)
+                spec.set_secondary_skew(n_poles, 1e-4)
+            for n_poles in [22, 24, 26, 30]:
+                spec.set_secondary_norm(n_poles, 0.5e-4)
+                spec.set_secondary_skew(n_poles, 0.5e-4)
+            for n_poles in [12, 20, 28]:
+                spec.set_secondary_norm(n_poles, 0.0, systematic=3e-4)
+                spec.set_secondary_skew(n_poles, 1e-4)
+        mp_err_specs["EM_QUAD"] = spec
+
+        # SEXT
+        n_main_poles = 6
+        main_normal = True
+        spec = MultipoleErrorSpec(n_main_poles, main_normal, **common)
+        if False:  # TO-BE-DETERMINED
+            spec.set_secondary_norm(2, 30e-4)
+            spec.set_secondary_skew(2, 15e-4)
+            spec.set_secondary_norm(8, 2.5e-4)
+            spec.set_secondary_skew(8, 1e-4)
+            for n_poles in [10, 12, 14, 16]:
+                spec.set_secondary_norm(n_poles, 1e-4)
+                spec.set_secondary_skew(n_poles, 1e-4)
+            spec.set_secondary_norm(18, 0.0, systematic=2e-4)
+            spec.set_secondary_skew(18, 1e-4)
+            for n_poles in [20, 22, 24, 26, 28]:
+                spec.set_secondary_norm(n_poles, 0.5e-4)
+                spec.set_secondary_skew(n_poles, 0.5e-4)
+            spec.set_secondary_norm(30, 0.0, systematic=1e-4)
+            spec.set_secondary_skew(30, 0.5e-4)
+        mp_err_specs["SEXT"] = spec
+
+        # OCT
+        n_main_poles = 8
+        main_normal = True
+        spec = MultipoleErrorSpec(n_main_poles, main_normal, **common)
+        if False:  # TO-BE-DETERMINED
+            raise NotImplementedError
+        mp_err_specs["OCT"] = spec
+
+        return mp_err_specs
+
+    def register_BPMs(self):
+
+        # Some (not all) based on NSLS-II PDR Table 3.1.4
+        offset_spec = TGES(rms=100e-6, rms_unit="m", cutoff=1.0)
+        gain_spec = TGES(rms=5e-2, rms_unit="", cutoff=1.0)
+        tbt_noise_spec = TGES(rms=3e-6, rms_unit="m", cutoff=1.0)
+        co_noise_spec = TGES(rms=0.1e-6, rms_unit="m", cutoff=1.0)
+
+        spec = BPMErrorSpec(
+            offset=OffsetSpec2D(x=offset_spec, y=offset_spec),
+            gain=GainSpec(x=gain_spec, y=gain_spec),
+            rot=RotationSpec1D(roll=TGES(rms=0.2e-3, rms_unit="rad", cutoff=1.0)),
+            tbt_noise=NoiseSpec(x=tbt_noise_spec, y=tbt_noise_spec),
+            co_noise=NoiseSpec(x=co_noise_spec, y=co_noise_spec),
+        )
+
+        self.err.register_BPMs(self.elem_inds["BPM"], err_spec=spec)
+
+    def register_bends(self):
+
+        if False:
+            offset_spec = TGES(rms=50e-6, rms_unit="m", cutoff=1.0)
+            roll_spec = TGES(rms=0.25e-3, rms_unit="rad", cutoff=1.0)
+        else:
+            offset_spec = TGES(rms=15e-6, rms_unit="m", cutoff=1.0)
+            roll_spec = TGES(rms=0.1e-3, rms_unit="rad", cutoff=1.0)
+
+        mp_err_specs = self.get_multipole_err_specs()
+        main_err_specs = {4: MainMultipoleErrorSpec(fse=TGES(rms=1e-3, cutoff=1.0))}
+        mp_err_specs["PMQ"].set_main_error_spec(main_err_specs)
+
+        spec = MagnetErrorSpec(
+            multipole=mp_err_specs["PMQ"],
+            offset=OffsetSpec2D(x=offset_spec, y=offset_spec),
+            rot=RotationSpec1D(roll=roll_spec),
+        )
+
+        self.err.register_magnets(self.elem_inds["PMQ"], err_spec=spec)
+
+    def register_quads_sexts(self):
+
+        mp_err_specs = self.get_multipole_err_specs()
+
+        excl_mag_types = ["PMQ"]
+
+        for mag_type, v in mp_err_specs.items():
+            if mag_type == "EM_QUAD":
+                main_err_spec = MainMultipoleErrorSpec(fse=TGES(rms=2.5e-4, cutoff=1.0))
+            elif mag_type == "SEXT":
+                main_err_spec = MainMultipoleErrorSpec(fse=TGES(rms=5e-4, cutoff=1.0))
+            elif mag_type == "OCT":
+                main_err_spec = MainMultipoleErrorSpec(fse=TGES(rms=0.0, cutoff=1.0))
+            elif mag_type in excl_mag_types:
+                continue
+            else:
+                raise ValueError(mag_type)
+            v.set_main_error_spec(main_err_spec)
+
+        offset_spec = TGES(rms=30e-6, rms_unit="m", cutoff=1.0)
+        roll_spec = TGES(rms=0.2e-3, rms_unit="rad", cutoff=1.0)
+        for mag_type, mp_err_spec in mp_err_specs.items():
+            if mag_type in excl_mag_types:
+                continue
+            spec = MagnetErrorSpec(
+                multipole=mp_err_spec,
+                offset=OffsetSpec2D(x=offset_spec, y=offset_spec),
+                rot=RotationSpec1D(roll=roll_spec),
+            )
+
+            self.err.register_magnets(self.elem_inds[mag_type], err_spec=spec)
+
+    def register_girders(self):
+
+        fsdb = self.fsdb
+
+        gs_inds, ge_inds = fsdb.get_girder_marker_pairs()
+
+        offset_spec = TGES(rms=100e-6, rms_unit="m", cutoff=1.0)
+        spec = SupportErrorSpec1DRoll(
+            us_offset=OffsetSpec3D(x=offset_spec, y=offset_spec, z=None),
+            ds_offset=OffsetSpec3D(x=offset_spec, y=offset_spec, z=None),
+            rot=RotationSpec1D(roll=TGES(rms=0.5e-3, rms_unit="rad", cutoff=1.0)),
+        )
+
+        self.err.register_supports(
+            SupportType.girder, gs_inds, ge_inds, spec, overwrite=False
+        )
+
+
 if __name__ == "__main__":
 
     import sys

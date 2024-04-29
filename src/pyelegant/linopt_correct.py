@@ -924,8 +924,27 @@ class TbTLinOptCorrector:
     def calc_actual_lin_comp(self):
         tbt = self.calc_actual_tbt()
 
+        expected_frac_nu = {}
+        for plane in ("x", "y"):
+            expected_frac_nu[plane] = self.twiss["actual"][f"nu{plane}"]
+            expected_frac_nu[plane] -= np.floor(expected_frac_nu[plane])
+
+            if self.tune_above_half["actual"][plane]:
+                expected_frac_nu[plane] = 1 - expected_frac_nu[plane]
+
+        exp_mid_frac_nu = (expected_frac_nu["x"] + expected_frac_nu["y"]) / 2
+        if exp_mid_frac_nu > expected_frac_nu["x"]:
+            nux0_range = [0.0, exp_mid_frac_nu]
+            nuy0_range = [exp_mid_frac_nu + 1e-12, 0.5]
+        else:
+            nux0_range = [exp_mid_frac_nu + 1e-12, 0.5]
+            nuy0_range = [0.0, exp_mid_frac_nu]
+
         self.lin_comp["actual"] = self.extract_lin_freq_components_from_multi_BPM_tbt(
-            tbt["x"], tbt["y"]
+            tbt["x"],
+            tbt["y"],
+            nux0_range=nux0_range,
+            nuy0_range=nuy0_range,
         )
 
         model_twi = self.twiss["design"]
@@ -1387,10 +1406,22 @@ class TbTLinOptCorrector:
 
         self._dK1s_history.append(dK1s)
 
+        self._back_up_quad_setpoints()
+
         quad_names_list = self.quad_col2names["normal"] + self.quad_col2names["skew"]
         assert len(quad_names_list) == len(dK1s)
         for quad_names, dK1 in zip(quad_names_list, dK1s):
             self.change_K1_setpoint_by(quad_names, dK1)
+
+    def _back_up_quad_setpoints(self):
+        self._backup_quad_setpoints = pickle.dumps(self.quad_props)
+
+    def restore_backed_up_quad_setpoints(self):
+
+        self._dK1s_history.pop()
+
+        self.quad_props = pickle.loads(self._backup_quad_setpoints)
+        self._uncommited_quad_change = True
 
     def observe(self):
         if "design" not in self.tbt_avg_nu:
@@ -1781,8 +1812,14 @@ class AbstractFacility:
     def generate_linopt_numRM_file(
         self,
         remote_opts: Union[None, Dict] = None,
+        normal_quad_inds: Union[None, List] = None,
+        skew_quad_inds: Union[None, List] = None,
     ):
-        """Generate response matrices for linear optics / coupling correction."""
+        """Generate response matrices for linear optics / coupling correction.
+
+        normal_quad_inds, skew_quad_inds:
+           `None` means all normal/skew quads will be included.
+        """
 
         fsdb = self.fsdb
 
@@ -1853,15 +1890,20 @@ class AbstractFacility:
         )
 
         if not self.parallel:
-            if False:
-                # Reduce the number for testing
-                quad_names["normal"] = list(quad_names["normal"])[
-                    100:102
-                ]  # [:2] #[3:5]
-                quad_names["skew"] = list(quad_names["skew"])[:2]
+            if normal_quad_inds is None:
+                quad_names["normal"] = list(quad_names["normal"])
+            else:
+                quad_names["normal"] = [
+                    quad_names["normal"][_i] for _i in normal_quad_inds
+                ]
+
+            if skew_quad_inds is None:
+                quad_names["skew"] = list(quad_names["skew"])
+            else:
+                quad_names["skew"] = [quad_names["skew"][_i] for _i in skew_quad_inds]
 
             resp_list = _calc_linopt_resp(
-                list(quad_names["normal"]) + list(quad_names["skew"]),
+                quad_names["normal"] + quad_names["skew"],
                 dK1,
                 args_optcor,
                 kwargs_optcor,
@@ -2246,6 +2288,9 @@ class AbstractFacility:
     def correct_linopt(self, cor_frac=0.7):
         self.optcor.correct(cor_frac=cor_frac)
 
+    def restore_backed_up_quad_setpoints(self):
+        self.optcor.restore_backed_up_quad_setpoints()
+
     def plot_history(self, integ_strength=True, pdf_filepath=""):
         self.plot_sv()
 
@@ -2346,6 +2391,92 @@ class NSLS2(AbstractFacility):
                 remote_opts = default_remote_opts
 
         super().generate_linopt_numRM_file(remote_opts=remote_opts)
+
+
+class NSLS2U(AbstractFacility):
+    def __init__(
+        self, design_LTE: ltemanager.Lattice, lattice_type: str, parallel: bool = True
+    ):
+        super().__init__(design_LTE, parallel=parallel)
+
+        self.fsdb = ltemanager.NSLS2U(self.design_LTE, lattice_type=lattice_type)
+        self.LTE = self.fsdb.LTE
+
+        self.config_descr = dict(quad={}, bpm={})
+        _descr = self.config_descr["quad"]
+        _descr["all_independent"] = "Each normal/skew magnet as independent knobs"
+        _descr = self.config_descr["bpm"]
+        _descr["all"] = "Include all regular (arc) BPMs"
+
+    def get_BPM_elem_inds_for_orbit_cor(self):
+        return self.fsdb.get_regular_BPM_elem_inds()
+
+    def get_corrector_elem_inds_for_orbit_cor(self):
+        return self.fsdb.get_slow_corrector_elem_inds()
+
+    def get_BPM_elem_inds_for_linopt_RM(self):
+        return self.get_BPM_elem_inds_for_linopt_cor("all")
+
+    def get_quad_elem_inds_for_linopt_RM(self):
+        names_d = self.fsdb.get_em_quad_names(flat_skew_quad_names=True)
+
+        LTE = self.LTE
+
+        return dict(
+            normal=LTE.get_elem_inds_from_names(names_d["normal"]),
+            skew=LTE.get_elem_inds_from_names(names_d["skew"]),
+        )
+
+    def get_BPM_elem_inds_for_linopt_cor(self, config_key: Union[int, str] = "all"):
+        assert config_key in self.config_descr["bpm"]
+
+        if config_key == "all":
+            return self.fsdb.get_regular_BPM_elem_inds()
+        else:
+            raise ValueError(f"Invalid `config_key` value: '{config_key}'")
+
+    def get_quad_elem_inds_for_linopt_cor(self, config_key: Union[int, str]):
+        assert config_key in self.config_descr["quad"]
+
+        names_d = self.fsdb.get_em_quad_names(flat_skew_quad_names=False)
+
+        LTE = self.LTE
+
+        lumped_inds = {}
+        if config_key == "all_independent":
+            lumped_inds["normal"] = [
+                [ind] for ind in LTE.get_elem_inds_from_names(names_d["normal"])
+            ]
+            lumped_inds["skew"] = [
+                LTE.get_elem_inds_from_names(skew_names).tolist()
+                for skew_names in names_d["skew"]
+            ]
+        else:
+            raise ValueError(f"Invalid `config_key` value: '{config_key}'")
+
+        return lumped_inds
+
+    def generate_linopt_numRM_file(
+        self,
+        remote_opts: Union[None, Dict] = None,
+        normal_quad_inds: Union[None, List] = None,
+        skew_quad_inds: Union[None, List] = None,
+    ):
+        if self.parallel:
+            default_remote_opts = dict(
+                job_name="RM", partition="normal", ntasks=100, time="30:00", qos="long"
+            )
+
+            if remote_opts is not None:
+                default_remote_opts.update(remote_opts)
+
+                remote_opts = default_remote_opts
+
+        super().generate_linopt_numRM_file(
+            remote_opts=remote_opts,
+            normal_quad_inds=normal_quad_inds,
+            skew_quad_inds=skew_quad_inds,
+        )
 
 
 def _calc_linopt_resp(quad_names, dK1, args_optcor, kwargs_optcor):

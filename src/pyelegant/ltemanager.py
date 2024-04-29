@@ -1825,3 +1825,242 @@ class NSLS2(AbstractFacility):
         gs_inds, ge_inds = [np.array(tup) for tup in zip(*g_paired_inds)]
 
         return gs_inds, ge_inds
+
+
+class NSLS2U(AbstractFacility):
+    def __init__(self, LTE: Lattice, lattice_type: str = "20231218_nonsplitSF1"):
+        super().__init__(LTE, lattice_type)
+
+        assert self.lat_type in (
+            "20231218",
+            "20231218_nonsplitSF1",
+            "20231218_nonsplitSF1_w_skew",
+            "20231218_nonsplitSF1_w_skew_v2",
+        )
+
+        self.E_MeV = 3e3
+        self.N_KICKS = dict(CSBEND=40, KQUAD=40, KSEXT=20, KOCT=20)
+        self.n_cells = 30
+
+    def get_regular_BPM_elem_inds(self):
+        """Get the element indexes for regular (arc) BPMs"""
+
+        LTE = self.LTE
+
+        inds = LTE.get_elem_inds_from_regex("^BPM_\d+$")
+        assert len(inds) == 11 * self.n_cells
+
+        return dict(x=inds.copy(), y=inds.copy())
+
+    def get_regular_BPM_names(self):
+        """Get the names for regular (arc) BPMs"""
+
+        inds_d = self.get_regular_BPM_elem_inds()
+        assert np.all(inds_d["x"] == inds_d["y"])
+
+        LTE = self.LTE
+
+        names = LTE.get_names_from_elem_inds(inds_d["x"])
+        assert len(names) == 11 * self.n_cells
+
+        return dict(x=names.copy(), y=names.copy())
+
+    def get_slow_corrector_elem_inds(self):
+        """Get the element indexes for slow orbit correctors"""
+        LTE = self.LTE
+
+        if self.lat_type == "20231218_nonsplitSF1":
+            inds = LTE.get_elem_inds_from_regex("^COR_\d+$")
+        elif self.lat_type in (
+            "20231218_nonsplitSF1_w_skew",
+            "20231218_nonsplitSF1_w_skew_v2",
+        ):
+            inds = LTE.get_elem_inds_from_regex("^ORBCOR_\d+$")
+        else:
+            raise ValueError
+
+        assert len(inds) == 7 * self.n_cells
+
+        return dict(x=inds.copy(), y=inds.copy())
+
+    def get_slow_corrector_names(self):
+        """Get the names for slow orbit correctors"""
+
+        inds_d = self.get_slow_corrector_elem_inds()
+
+        LTE = self.LTE
+
+        hcor_names = LTE.get_names_from_elem_inds(inds_d["x"])
+        assert len(hcor_names) == 7 * self.n_cells
+
+        vcor_names = LTE.get_names_from_elem_inds(inds_d["y"])
+        assert len(vcor_names) == 7 * self.n_cells
+
+        return dict(x=hcor_names, y=vcor_names)
+
+    def get_comb_func_mag_elem_inds(self):
+        """Get the element indexes for bends (combined-function magnets w/ quad components)"""
+
+        LTE = self.LTE
+        inds = LTE.get_elem_inds_from_regex("^B\d+_\d+$")
+        assert len(inds) == self.n_cells * 15 * 2
+        return inds
+
+    def get_comb_func_mag_names(self):
+        """Get the names for bends (combined-function magnets w/ quad components)"""
+
+        inds = self.get_comb_func_mag_elem_inds()
+
+        LTE = self.LTE
+        names = LTE.get_names_from_elem_inds(inds)
+        assert len(names) == self.n_cells * 15 * 2
+
+        return names
+
+    def get_em_quad_elem_inds(self):
+
+        LTE = self.LTE
+
+        normal_quad_inds = LTE.get_elem_inds_from_regex("^Q[LSDF]\w+$")
+        assert len(normal_quad_inds) == (3 + 2 + 1) * 2 * self.n_cells
+
+        if self.lat_type == "20231218_nonsplitSF1":
+            skew_quad_inds = np.array([])
+            assert len(skew_quad_inds) == 0
+        elif self.lat_type == "20231218_nonsplitSF1_w_skew":
+            skew_quad_inds = LTE.get_elem_inds_from_regex("^SKQUAD_\d+$")
+            assert len(skew_quad_inds) == 7 * self.n_cells
+        elif self.lat_type == "20231218_nonsplitSF1_w_skew_v2":
+            skew_quad_inds = LTE.get_elem_inds_from_regex("^SKQUAD_\d+$")
+            assert len(skew_quad_inds) == 4 * self.n_cells
+        else:
+            raise ValueError
+
+        return dict(normal=normal_quad_inds, skew=skew_quad_inds)
+
+    def get_em_quad_names(self, flat_skew_quad_names: bool = False):
+        LTE = self.LTE
+
+        inds_d = self.get_em_quad_elem_inds()
+
+        inds = inds_d["normal"]
+
+        normal_quad_names = LTE.get_names_from_elem_inds(inds)
+        assert len(normal_quad_names) == len(np.unique(normal_quad_names))
+
+        inds = inds_d["skew"]
+        skew_quad_names = LTE.get_names_from_elem_inds(inds)
+
+        if flat_skew_quad_names:
+            assert len(skew_quad_names) == len(np.unique(skew_quad_names))
+            return dict(
+                normal=normal_quad_names, skew=skew_quad_names, skew_lumped=False
+            )
+        else:
+            # Skew quads are NOT split (at least as of 04/25/2024)
+            lumped_skew_quad_names = [[name] for name in skew_quad_names]
+            assert len(lumped_skew_quad_names) == len(skew_quad_names)
+
+            return dict(
+                normal=normal_quad_names, skew=lumped_skew_quad_names, skew_lumped=True
+            )
+
+    def get_sext_elem_inds(self):
+        """Get the element indexes for sextupoles"""
+
+        LTE = self.LTE
+
+        inds = LTE.get_elem_inds_from_regex("^S[HLDF]\w+$")
+        if self.lat_type in (
+            "20231218_nonsplitSF1",
+            "20231218_nonsplitSF1_w_skew",
+            "20231218_nonsplitSF1_w_skew_v2",
+        ):
+            assert len(inds) == (3 + 3 + 3 + 3) * self.n_cells
+        elif self.lat_type == "20231218":
+            assert len(inds) == (3 + 4 + 4 + 3) * self.n_cells
+        else:
+            raise NotImplementedError
+
+        return inds
+
+    def get_sext_names(self):
+        """Get the names for sextupoles"""
+
+        inds = self.get_sext_elem_inds()
+
+        LTE = self.LTE
+        names = LTE.get_names_from_elem_inds(inds)
+        assert len(names) == len(inds)
+
+        return names
+
+    def get_oct_elem_inds(self):
+        """Get the element indexes for octupoles"""
+
+        LTE = self.LTE
+
+        inds = LTE.get_elem_inds_from_regex("^OCT[1-3]_\w+$")
+        assert len(inds) == (3 + 3) * self.n_cells
+
+        return inds
+
+    def get_oct_names(self):
+        """Get the names for octupoles"""
+
+        inds = self.get_oct_elem_inds()
+
+        LTE = self.LTE
+        names = LTE.get_names_from_elem_inds(inds)
+        assert len(names) == len(inds)
+
+        return names
+
+    def get_girder_marker_pairs(self):
+        LTE = self.LTE
+
+        gs_inds = LTE.get_elem_inds_from_regex("^GS\w+")
+        gs_names = LTE.get_names_from_elem_inds(gs_inds)
+        assert len(gs_names) == 10 * self.n_cells
+
+        ge_inds = LTE.get_elem_inds_from_regex("^GE\w+")
+        ge_names = LTE.get_names_from_elem_inds(ge_inds)
+        assert len(ge_names) == 10 * self.n_cells
+
+        g_paired_names = list(zip(gs_names[:-1], ge_names[1:]))
+        g_paired_inds = list(zip(gs_inds[:-1], ge_inds[1:]))
+        assert len(g_paired_inds) == 10 * self.n_cells - 1
+
+        g_paired_names.append((gs_names[-1], ge_names[0]))
+        g_paired_inds.append((gs_inds[-1], ge_inds[0]))
+        assert len(g_paired_inds) == 10 * self.n_cells
+
+        for gs_name, ge_name in g_paired_names:
+            try:
+                assert gs_name[:2] == "GS"
+                assert ge_name[:2] == "GE"
+                if gs_name.startswith("GSG1"):
+                    # print(gs_name, ge_name)
+                    s_1, s_2 = gs_name.split("_")
+                    e_1, e_2 = ge_name.split("_")
+                    assert s_1 == "GSG1"
+                    assert e_1 == "GEG1"
+                    s_index = int(s_2)
+                    e_index = int(e_2)
+
+                    if s_index == 29:
+                        assert e_index == 0
+                    else:
+                        assert e_index == s_index + 1
+                else:
+                    s_1, s_2 = gs_name.split("_")
+                    e_1, e_2 = ge_name.split("_")
+                    assert s_2 == e_2
+                    mod_s_1 = s_1.replace("GSG", "GEG")
+                    assert mod_s_1 == e_1
+            except AssertionError:
+                print(gs_name, ge_name)
+
+        gs_inds, ge_inds = [np.array(tup) for tup in zip(*g_paired_inds)]
+
+        return gs_inds, ge_inds
