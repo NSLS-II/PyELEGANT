@@ -1284,6 +1284,7 @@ class ClosedOrbitThreader:
         self.iter_opts["fixed_energy"] = {
             "full_traj": dict(
                 n_iter_max=500,
+                n_max_worse_iter=10,
                 cor_frac=0.7,
                 rms_thresh={"x": 0.1e-6, "y": 0.1e-6},
                 cor_frac_divider_upon_loss=0.5,
@@ -2539,6 +2540,7 @@ class ClosedOrbitThreader:
         if iter_opts is None:
             iter_opts = self.iter_opts["fixed_energy"]["full_traj"]
         n_iter_max = iter_opts["n_iter_max"]
+        n_max_worse_iter = iter_opts["n_max_worse_iter"]
         cor_frac = iter_opts["cor_frac"]
         rms_thresh = iter_opts["rms_thresh"]
         cor_frac_divider_upon_loss = iter_opts["cor_frac_divider_upon_loss"]
@@ -2564,7 +2566,8 @@ class ClosedOrbitThreader:
 
         i_iter = 0
         i_loss = 0
-        prev_dx = prev_dy = None
+        prev_dx_rms = prev_dy_rms = None
+        n_worse_iter = 0
         while i_iter < n_iter_max:
             if debug_print:
                 print(f"Iteration #{i_iter+1}/{n_iter_max}")
@@ -2650,24 +2653,35 @@ class ClosedOrbitThreader:
             if (survived_inds["x"] == nx) and (survived_inds["y"] == ny):
                 # The particle fully survived
 
-                if dx_rms < rms_thresh["x"] and dy_rms < rms_thresh["y"]:
+                if (dx_rms < rms_thresh["x"]) and (dy_rms < rms_thresh["y"]):
                     if debug_print:
                         print("Corrections converged.")
                     success = True
                     break
 
-                if prev_dx is not None:
-                    no_improve_thresh = 1e-9  # [m]
-                    if (np.max(np.abs(dx - prev_dx)) < no_improve_thresh) and (
-                        np.max(np.abs(dy - prev_dy)) < no_improve_thresh
-                    ):
-                        if debug_print:
-                            print("No more improvement. Stopping correction.")
-                        success = True
-                        break
+                if prev_dx_rms is not None:
+                    if (dx_rms > prev_dx_rms) or (dy_rms > prev_dy_rms):
+                        n_worse_iter += 1
+                        if n_worse_iter >= n_max_worse_iter:
+                            if debug_print:
+                                print(
+                                    "Correction kept making orbit worse. Stopping correction."
+                                )
+                            success = False
+                            break
+                    else:
+                        n_worse_iter = 0
 
-                prev_dx = dx
-                prev_dy = dy
+                        if ((prev_dx_rms - dx_rms) < rms_thresh["x"]) and (
+                            (prev_dy_rms - dy_rms) < rms_thresh["y"]
+                        ):
+                            if debug_print:
+                                print("No more improvement. Stopping correction.")
+                            success = True
+                            break
+
+                prev_dx_rms = dx_rms
+                prev_dy_rms = dy_rms
 
                 i_loss = 0
 
