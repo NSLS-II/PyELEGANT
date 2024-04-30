@@ -1636,6 +1636,7 @@ class AbstractFacility:
         indiv_design_LTEZIP_filepath: Union[Path, str],
         error_LTEZIP_name_prefix: str,
         seed: Union[int, None, np.random.Generator] = 42,
+        output_folder: Union[None, Path, str] = None,
     ):
         """
         Based on MATLAB SC (Simulated Commissioning).
@@ -1651,6 +1652,11 @@ class AbstractFacility:
         """
         assert isinstance(design_LTE, ltemanager.Lattice)
         self.design_LTE = design_LTE
+
+        if output_folder is None:
+            self.output_folder = Path.cwd()
+        else:
+            self.output_folder = Path(output_folder)
 
         self.lattice_type = lattice_type
 
@@ -1695,10 +1701,15 @@ class AbstractFacility:
     def _get_rng_state_json_str(rng: np.random.Generator):
         return json.dumps(rng.bit_generator.state)
 
-    def get_default_instance_LTEZIP_filepath(self, inst_num: int):
+    def get_default_instance_LTEZIP_filepath(
+        self, inst_num: int, inst_num_format: str = "04d"
+    ):
         prefix = self.error_LTEZIP_name_prefix
         seed = self._seed_str
-        return Path(f"{prefix}_s{seed}_e{inst_num:03d}.ltezip")
+        return (
+            self.output_folder
+            / f"{prefix}_s{seed}_e{inst_num:{inst_num_format}}.ltezip"
+        )
 
     def instantiate(
         self, output_LTEZIP_filepath: Union[Path, str] = "", verbose: int = 0
@@ -1735,6 +1746,7 @@ class NSLS2(AbstractFacility):
         indiv_design_LTEZIP_filepath: Union[Path, str],
         error_LTEZIP_name_prefix: str,
         seed: Union[int, None, np.random.Generator] = 42,
+        output_folder: Union[None, Path, str] = None,
     ):
 
         super().__init__(
@@ -1743,6 +1755,7 @@ class NSLS2(AbstractFacility):
             indiv_design_LTEZIP_filepath,
             error_LTEZIP_name_prefix,
             seed=seed,
+            output_folder=output_folder,
         )
 
         # "fsdb" stands for "(f)acility-(s)pecific (d)ata(b)ase"
@@ -2017,6 +2030,7 @@ class NSLS2U(AbstractFacility):
         indiv_design_LTEZIP_filepath: Union[Path, str],
         error_LTEZIP_name_prefix: str,
         seed: Union[int, None, np.random.Generator] = 42,
+        output_folder: Union[None, Path, str] = None,
     ):
 
         super().__init__(
@@ -2025,6 +2039,7 @@ class NSLS2U(AbstractFacility):
             indiv_design_LTEZIP_filepath,
             error_LTEZIP_name_prefix,
             seed=seed,
+            output_folder=output_folder,
         )
 
         # "fsdb" stands for "(f)acility-(s)pecific (d)ata(b)ase"

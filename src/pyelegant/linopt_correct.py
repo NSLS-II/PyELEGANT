@@ -41,6 +41,7 @@ class TbTLinOptCorrector:
         design_LTE: Union[Lattice, None] = None,
         RM_filepath: Union[Path, str] = "",
         RM_obs_weights: Union[Dict, None] = None,
+        max_beta_beat_thresh_for_coup_cor: float = 5e-2,
         rcond: float = 1e-4,
         N_KICKS: Union[None, Dict] = None,
         tempdir_path: Union[None, Path, str] = None,
@@ -129,6 +130,8 @@ class TbTLinOptCorrector:
 
         if RM_filepath != "":
             self._construct_RM(RM_filepath, obs_weights=RM_obs_weights, rcond=rcond)
+
+        self.max_beta_beat_thresh_for_coup_cor = max_beta_beat_thresh_for_coup_cor
 
     def make_tempdir(self, tempdir_path=None):
         if isinstance(tempdir_path, Path):
@@ -1210,6 +1213,10 @@ class TbTLinOptCorrector:
                 raise ValueError(f"Following observation key is not valid: {k}")
 
         self.obs_weights = obs_weights
+        self.obs_weights_wo_skews = {
+            k: v if k not in ("x2_re", "x2_im", "y2_re", "y2_im", "etay") else 0.0
+            for k, v in obs_weights.items()
+        }
 
         self.RM = {}
         with h5py.File(RM_filepath, "r") as f:
@@ -1344,23 +1351,56 @@ class TbTLinOptCorrector:
             self.obs_weights["etax"] = self.obs_weights["etay"] = 10.0
 
         self._M = np.vstack([self.RM[k] * self.obs_weights[k] for k in self.obs_keys])
+        self._M_wo_skews = np.vstack(
+            [self.RM[k] * self.obs_weights_wo_skews[k] for k in self.obs_keys]
+        )
 
         self._U, self._sv, self._VT = calcSVD(self._M)
+        self._U_wo_skews, self._sv_wo_skews, self._VT_wo_skews = calcSVD(
+            self._M_wo_skews
+        )
         if False:
             plt.figure()
             plt.semilogy(self._sv / self._sv[0], "b.-")
 
-        Sinv_trunc = calcTruncSVMatrix(self._sv, rcond=rcond, nsv=None, disp=0)
+            plt.figure()
+            plt.semilogy(self._sv_wo_skews / self._sv_wo_skews[0], "b.-")
 
+        Sinv_trunc = calcTruncSVMatrix(self._sv, rcond=rcond, nsv=None, disp=0)
         self._M_pinv = self._VT.T @ Sinv_trunc @ self._U.T
+
+        Sinv_trunc = calcTruncSVMatrix(self._sv_wo_skews, rcond=rcond, nsv=None, disp=0)
+        self._M_pinv_wo_skews = self._VT_wo_skews.T @ Sinv_trunc @ self._U_wo_skews.T
 
     def correct(self, cor_frac: float = 0.7):
         if "design" not in self.tbt_avg_nu:
             self.calc_design_lin_comp()
 
+        hist = self._actual_design_diff_history
+        last_bbeat_x_rms = np.std(hist["x1_bbeat"][-1])
+        last_bbeat_y_rms = np.std(hist["y1_bbeat"][-1])
+        _bbeat_info = f"({last_bbeat_x_rms*1e2:.3g}, {last_bbeat_y_rms*1e2:.3g})"
+        print(f"\n# Beta-beat [%]: {_bbeat_info}")
+
+        bbeat_thresh = self.max_beta_beat_thresh_for_coup_cor
+
+        if max([last_bbeat_x_rms, last_bbeat_y_rms]) > bbeat_thresh:
+            use_only_normal_quads = True
+            _bbeat_info += f" "
+            print(f"Beta-beat too large (> {bbeat_thresh*1e2:.3g}%)")
+            print("Will only correct beta-beat and etax in this iteration.")
+            obs_weights = self.obs_weights_wo_skews
+            M_pinv = self._M_pinv_wo_skews
+            M = self._M_wo_skews
+        else:
+            use_only_normal_quads = False
+            obs_weights = self.obs_weights
+            M_pinv = self._M_pinv
+            M = self._M
+
         obs_diff_list = []
         for k in self.obs_keys:
-            w = self.obs_weights[k]
+            w = obs_weights[k]
 
             if k in ("etax", "etay"):
                 plane = k[-1]
@@ -1395,12 +1435,20 @@ class TbTLinOptCorrector:
 
         dv = np.hstack(obs_diff_list)
 
-        dK1s = self._M_pinv @ dv
+        dK1s = M_pinv @ dv
+
+        if use_only_normal_quads:
+            dK1s[self.nQUAD["normal"] :] = 0.0
 
         if False:
             plt.figure()
             plt.plot(dv, "b.-")
-            plt.plot(self._M @ dK1s, "r.-")
+            plt.plot(M @ dK1s, "r.-")
+
+            plt.figure()
+            plt.plot(dK1s[: self.nQUAD["normal"]], "b.-")
+            if self.nQUAD["skew"] != 0:
+                plt.plot(dK1s[self.nQUAD["normal"] :], "r.-")
 
         dK1s *= cor_frac
 
@@ -1726,7 +1774,13 @@ class AbstractFacility:
         n_turns: int = 128,
         tbt_ps_offset_wrt_CO: Union[None, Dict] = None,
         parallel: bool = True,
+        output_folder: Union[None, Path, str] = None,
     ):
+        if output_folder is None:
+            self.output_folder = Path.cwd()
+        else:
+            self.output_folder = Path(output_folder)
+
         self.design_LTE = design_LTE
         self.n_turns = n_turns
 
@@ -1799,6 +1853,10 @@ class AbstractFacility:
         bpm_elem_inds = self.get_BPM_elem_inds_for_orbit_cor()
         cor_elem_inds = self.get_corrector_elem_inds_for_orbit_cor()
 
+        output_h5_filepath = (
+            self.output_folder / f"{self.design_LTE.LTEZIP_filepath.stem}_TRM.h5"
+        )
+
         self.TRM_filepath = generate_TRM_file(
             self.design_LTE,
             bpm_elem_inds["x"],
@@ -1807,6 +1865,7 @@ class AbstractFacility:
             cor_elem_inds["y"],
             n_turns=2,
             N_KICKS=fsdb.N_KICKS,
+            output_h5_filepath=output_h5_filepath,
         )
 
     def generate_linopt_numRM_file(
@@ -1867,13 +1926,16 @@ class AbstractFacility:
                 used_beamline_name=fsdb.LTE.used_beamline_name,
             )
 
-            self.linopt_RM_filepath = Path(
-                f"{input_dict['design_LTE_filepath'].stem}_linopt_numRM.h5"
+            self.linopt_RM_filepath = (
+                self.output_folder
+                / f"{input_dict['design_LTE_filepath'].stem}_linopt_numRM.h5"
             )
+
         else:
             input_dict = dict(design_LTEZIP_filepath=fsdb.LTE.LTEZIP_filepath)
-            self.linopt_RM_filepath = Path(
-                f"{input_dict['design_LTEZIP_filepath'].stem}_linopt_numRM.h5"
+            self.linopt_RM_filepath = (
+                self.output_folder
+                / f"{input_dict['design_LTEZIP_filepath'].stem}_linopt_numRM.h5"
             )
 
         input_dict.update(
@@ -2158,6 +2220,7 @@ class AbstractFacility:
         bpm_set_key: Union[int, str, None] = None,
         bpm_names: Union[Dict, None] = None,
         obs_weights: Union[Dict, None] = None,
+        max_beta_beat_thresh_for_coup_cor: float = 5e-2,
         rcond: float = 1e-3,
         inj_CO_ps_filepath: Union[Path, str] = "",
         linopt_RM_filepath: Union[Path, str] = "",
@@ -2269,6 +2332,7 @@ class AbstractFacility:
             if linopt_RM_filepath == ""
             else linopt_RM_filepath,
             RM_obs_weights=obs_weights,
+            max_beta_beat_thresh_for_coup_cor=max_beta_beat_thresh_for_coup_cor,
             rcond=rcond,
             N_KICKS=fsdb.N_KICKS,
             tempdir_path=None,
@@ -2316,8 +2380,14 @@ class AbstractFacility:
 
 
 class NSLS2(AbstractFacility):
-    def __init__(self, design_LTE: Lattice, lattice_type: str, parallel: bool = True):
-        super().__init__(design_LTE, parallel=parallel)
+    def __init__(
+        self,
+        design_LTE: Lattice,
+        lattice_type: str,
+        parallel: bool = True,
+        output_folder: Union[None, Path, str] = None,
+    ):
+        super().__init__(design_LTE, parallel=parallel, output_folder=output_folder)
 
         self.fsdb = ltemanager.NSLS2(self.design_LTE, lattice_type=lattice_type)
         self.LTE = self.fsdb.LTE
@@ -2395,9 +2465,13 @@ class NSLS2(AbstractFacility):
 
 class NSLS2U(AbstractFacility):
     def __init__(
-        self, design_LTE: ltemanager.Lattice, lattice_type: str, parallel: bool = True
+        self,
+        design_LTE: ltemanager.Lattice,
+        lattice_type: str,
+        parallel: bool = True,
+        output_folder: Union[None, Path, str] = None,
     ):
-        super().__init__(design_LTE, parallel=parallel)
+        super().__init__(design_LTE, parallel=parallel, output_folder=output_folder)
 
         self.fsdb = ltemanager.NSLS2U(self.design_LTE, lattice_type=lattice_type)
         self.LTE = self.fsdb.LTE
