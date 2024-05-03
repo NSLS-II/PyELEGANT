@@ -18,7 +18,12 @@ from scipy import signal
 from . import elebuilder, eleutil, ltemanager, sdds, sigproc, std_print_enabled
 from .local import disable_stdout, enable_stdout, run
 from .ltemanager import Lattice
-from .orbit import ClosedOrbitCalculatorViaTraj, ClosedOrbitThreader, generate_TRM_file
+from .orbit import (
+    ClosedOrbitCalculatorViaTraj,
+    ClosedOrbitThreader,
+    generate_ORM_file,
+    generate_TRM_file,
+)
 from .remote import remote
 from .respmat import calcSVD, calcTruncSVMatrix
 from .sigproc import unwrap_montonically_increasing
@@ -1868,6 +1873,27 @@ class AbstractFacility:
             output_h5_filepath=output_h5_filepath,
         )
 
+    def generate_ORM_file(self):
+        """Generate (closed) orbit response matrix for orbit correction."""
+
+        fsdb = self.fsdb
+
+        bpm_elem_inds = self.get_BPM_elem_inds_for_orbit_cor()
+        cor_elem_inds = self.get_corrector_elem_inds_for_orbit_cor()
+
+        output_h5_filepath = (
+            self.output_folder / f"{self.design_LTE.LTEZIP_filepath.stem}_ORM.h5"
+        )
+
+        self.ORM_filepath = generate_ORM_file(
+            self.design_LTE,
+            bpm_elem_inds["x"],
+            bpm_elem_inds["y"],
+            cor_elem_inds["x"],
+            cor_elem_inds["y"],
+            output_h5_filepath=output_h5_filepath,
+        )
+
     def generate_linopt_numRM_file(
         self,
         remote_opts: Union[None, Dict] = None,
@@ -2106,7 +2132,7 @@ class AbstractFacility:
         err_LTEZIP_filepath: Union[Path, str],
         zero_orbit_type="BBA",
         BBA_elem_type="KQUAD",
-        BBA_elem_names=None,
+        custom_BBA_elem_names=None,
         iter_opts=None,
         rcond=1e-4,
         plot=False,
@@ -2165,14 +2191,19 @@ class AbstractFacility:
             cor_names["y"],
             zero_orbit_type=zero_orbit_type,
             BBA_elem_type=BBA_elem_type,
-            BBA_elem_names=BBA_elem_names,
+            custom_BBA_elem_names=custom_BBA_elem_names,
             TRM_filepath=self.TRM_filepath,
+            ORM_filepath=self.ORM_filepath,
             iter_opts=iter_opts,
         )
 
+        elapsed = {}
+
+        tStart = time.perf_counter()
         out = threader.start_fixed_energy_orbit_correction(
             rcond=rcond, debug_print=True, debug_plot=False
         )
+        elapsed["fixed_energy_cor"] = time.perf_counter() - tStart
 
         try:
             assert out["success"]
@@ -2185,6 +2216,8 @@ class AbstractFacility:
         # vkicks_hist = out["vkicks_hist"]
         # traj_hist = out["traj_hist"]
 
+        tStart = time.perf_counter()
+
         # Maintain the closed trajectory while the ring length is made closer to
         # the circumference by adjusting the beam energy.
         init_inj_coords = inj_coords_list[-1]
@@ -2195,14 +2228,31 @@ class AbstractFacility:
             debug_plot=False,
             plot=plot,
         )
+        elapsed["fixed_length_cor"] = time.perf_counter() - tStart
+
+        fin_result = out
 
         parent = err_LTEZIP_filepath.parent
         stem = err_LTEZIP_filepath.stem
 
         CO_filepath = parent / f"{stem}_cOrb_CO.hdf5"
+        _kwargs = dict(compression="gzip")
         with h5py.File(CO_filepath, "w") as f:
             f["x"], f["xp"], f["y"], f["yp"] = out["fin_inj_coords"]
             f["dp"] = out["fin_dp"]
+
+            g = f.create_group("elapsed")
+            for k, v in elapsed.items():
+                g[k] = v
+
+            f.create_dataset("cod_all_s", data=out["all_s"], **_kwargs)
+            f.create_dataset("cod_all_x", data=out["all_x"], **_kwargs)
+            f.create_dataset("cod_all_y", data=out["all_y"], **_kwargs)
+
+            for k in ["cor_s", "bpm_s", "target_orbit", "fin_kicks", "fin_diff_orbs"]:
+                g = f.create_group(k)
+                for plane, v in out[k].items():
+                    g.create_dataset(plane, data=v, **_kwargs)
 
         fin_LTEZIP_filepath = parent / f"{stem}_cOrb.ltezip"
         threader.save_current_lattice_to_LTEZIP_file(fin_LTEZIP_filepath)
@@ -2210,7 +2260,9 @@ class AbstractFacility:
         LTE.remove_tempdir()
         threader.remove_tempdir()
 
-        return dict(LTEZIP=fin_LTEZIP_filepath, CO_inj_ps=CO_filepath)
+        filepath_d = dict(LTEZIP=fin_LTEZIP_filepath, CO_inj_ps=CO_filepath)
+
+        return dict(filepath_d=filepath_d, orbcor_data=fin_result)
 
     def configure(
         self,
