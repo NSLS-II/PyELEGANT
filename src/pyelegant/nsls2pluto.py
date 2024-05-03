@@ -1320,6 +1320,8 @@ def run(
             print("stderr:")
             print(err)
 
+        output = dict(out=out, err=err)
+
     return output
 
 
