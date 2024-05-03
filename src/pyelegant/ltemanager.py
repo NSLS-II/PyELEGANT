@@ -1170,7 +1170,7 @@ class Lattice:
         else:
             return [self._elem_props[name] for name in elem_names]
 
-    def get_closest_us_ds_elem_inds_from_ref_elem_ind(
+    def get_closest_us_ds_elem_inds_from_ref_elem_ind_by_elem_type(
         self, ref_elem_ind: int, elem_type_to_search: str, n_us: int = 1, n_ds: int = 1
     ) -> Dict[str, np.ndarray]:
         assert n_us >= 0
@@ -1209,20 +1209,20 @@ class Lattice:
 
         return output
 
-    def get_closest_us_ds_elem_inds_from_ref_name(
+    def get_closest_us_ds_elem_inds_from_ref_name_by_elem_type(
         self, ref_elem_name: str, elem_type_to_search: str, n_us: int = 1, n_ds: int = 1
     ) -> List[Dict[str, np.ndarray]]:
         return [
-            self.get_closest_us_ds_elem_inds_from_ref_elem_ind(
+            self.get_closest_us_ds_elem_inds_from_ref_elem_ind_by_elem_type(
                 ref_elem_ind, elem_type_to_search, n_us=n_us, n_ds=n_ds
             )
             for ref_elem_ind in self.get_elem_inds_from_name(ref_elem_name)
         ]
 
-    def get_closest_elem_inds_from_ref_elem_ind(
+    def get_closest_elem_inds_from_ref_elem_ind_by_sel_elem_inds(
         self,
         ref_elem_ind: int,
-        elem_type_to_search: str,
+        sel_elem_inds: Union[List[int], np.ndarray],
         n: int = 1,
         output_type: OutputType = OutputType.NumPy,
     ) -> np.ndarray:
@@ -1233,7 +1233,7 @@ class Lattice:
 
         s_ref = s_mid[ref_elem_ind]
 
-        inds = self.get_elem_inds_from_elem_type(elem_type_to_search)
+        inds = sel_elem_inds
 
         if inds.size == 0:
             return None
@@ -1248,17 +1248,62 @@ class Lattice:
         else:
             return inds_ext[sort_inds[:n]].tolist()
 
-    def get_closest_elem_inds_from_ref_name(
+    def get_closest_names_from_ref_elem_ind_by_sel_elem_inds(
+        self,
+        ref_elem_ind: int,
+        sel_elem_inds: Union[List[int], np.ndarray],
+        n: int = 1,
+        output_type: OutputType = OutputType.NumPy,
+    ) -> PY_TYPES["np_array_or_list"]:
+
+        assert output_type in (OutputType.NumPy, OutputType.List)
+
+        inds = self.get_closest_elem_inds_from_ref_elem_ind_by_sel_elem_inds(
+            ref_elem_ind, sel_elem_inds, n=n
+        )
+
+        return self.get_names_from_elem_inds(inds, output_type=output_type)
+
+    def get_closest_names_from_ref_name_by_sel_elem_inds(
+        self,
+        ref_elem_name: str,
+        sel_elem_inds: Union[List[int], np.ndarray],
+        n=1,
+    ) -> List[np.ndarray]:
+        return [
+            self.get_names_from_elem_inds(
+                self.get_closest_elem_inds_from_ref_elem_ind_by_sel_elem_inds(
+                    ref_elem_ind, sel_elem_inds, n=n
+                )
+            )
+            for ref_elem_ind in self.get_elem_inds_from_name(ref_elem_name)
+        ]
+
+    def get_closest_elem_inds_from_ref_elem_ind_by_elem_type(
+        self,
+        ref_elem_ind: int,
+        elem_type_to_search: str,
+        n: int = 1,
+        output_type: OutputType = OutputType.NumPy,
+    ) -> np.ndarray:
+
+        sel_elem_inds = self.get_elem_inds_from_elem_type(elem_type_to_search)
+
+        return self.get_closest_elem_inds_from_ref_elem_ind_by_sel_elem_inds(
+            ref_elem_ind, sel_elem_inds, n=n, output_type=output_type
+        )
+
+    def get_closest_elem_inds_from_ref_name_by_elem_type(
         self, ref_elem_name: str, elem_type_to_search: str, n: int = 1
     ) -> List[np.ndarray]:
         return [
-            self.get_closest_elem_inds_from_ref_elem_ind(
+            self.get_closest_elem_inds_from_ref_elem_ind_by_elem_type(
                 ref_elem_ind, elem_type_to_search, n=n
             )
             for ref_elem_ind in self.get_elem_inds_from_name(ref_elem_name)
         ]
 
-    def get_closest_names_from_ref_elem_ind(
+    def get_closest_names_from_ref_elem_ind_by_elem_type(
         self,
         ref_elem_ind: int,
         elem_type_to_search: str,
@@ -1267,13 +1312,13 @@ class Lattice:
     ) -> PY_TYPES["np_array_or_list"]:
         assert output_type in (OutputType.NumPy, OutputType.List)
 
-        inds = self.get_closest_elem_inds_from_ref_elem_ind(
+        inds = self.get_closest_elem_inds_from_ref_elem_ind_by_elem_type(
             ref_elem_ind, elem_type_to_search, n=n
         )
 
         return self.get_names_from_elem_inds(inds, output_type=output_type)
 
-    def get_closest_names_from_ref_name(
+    def get_closest_names_from_ref_name_by_elem_type(
         self,
         ref_elem_name: str,
         elem_type_to_search: str,
@@ -1281,7 +1326,7 @@ class Lattice:
     ) -> List[np.ndarray]:
         return [
             self.get_names_from_elem_inds(
-                self.get_closest_elem_inds_from_ref_elem_ind(
+                self.get_closest_elem_inds_from_ref_elem_ind_by_elem_type(
                     ref_elem_ind, elem_type_to_search, n=n
                 )
             )
