@@ -566,14 +566,20 @@ class Errors:
         self.magnets = {}
         self._magnets_dist = defaultdict(list)
 
-        if isinstance(rng, int):
-            self.rng = np.random.default_rng(seed=rng)
-        elif isinstance(rng, np.random.Generator):
-            self.rng = rng
-        else:
-            raise TypeError("`rng` must be an integer or np.random.Generator")
+        self.change_rng(rng)
 
         self.mod_prop_dict_list = []
+
+    def change_rng(
+        self, new_seed_or_rng: Union[int, np.integer, np.random.Generator] = 42
+    ):
+
+        if isinstance(new_seed_or_rng, (int, np.integer)):
+            self.rng = np.random.default_rng(seed=new_seed_or_rng)
+        elif isinstance(new_seed_or_rng, np.random.Generator):
+            self.rng = new_seed_or_rng
+        else:
+            raise TypeError("`rng` must be an integer or np.random.Generator")
 
     def _init_support_offsets(self):
         coord_strs = [f.name for f in dc.fields(Offset3D)]
@@ -1664,18 +1670,6 @@ class AbstractFacility:
 
         self.error_LTEZIP_name_prefix = error_LTEZIP_name_prefix
 
-        self._inst_record = []
-
-        rng = self.change_rng(seed)
-
-        self.err = Errors(design_LTE, rng=rng)
-
-        if self.err.is_LTE_individualized():
-            self.err.generate_LTE_file_wo_errors(
-                output_LTEZIP_filepath=self.indiv_design_LTEZIP_filepath
-            )
-
-    def change_rng(self, seed: Union[int, None, np.random.Generator]):
         if seed is None:
             rng = np.random.default_rng()
             self._seed_str = "NA"
@@ -1688,14 +1682,44 @@ class AbstractFacility:
         else:
             raise TypeError(rng)
 
-        self._inst_record.append(
-            dict(ini_rng_state=self._get_rng_state_json_str(rng), rng_states=[])
-        )
+        self.err = Errors(design_LTE)
 
-        try:
-            self.err.rng = rng
-        except AttributeError:
-            return rng
+        self._create_unique_rand_int_generator()
+
+        if self.err.is_LTE_individualized():
+            self.err.generate_LTE_file_wo_errors(
+                output_LTEZIP_filepath=self.indiv_design_LTEZIP_filepath
+            )
+
+    def _unique_rand_int_generator(self):
+
+        _internal_max_seed = 10_000_000
+
+        generated = set()
+
+        while True:
+            unique_integer = self.err.rng.integers(1, _internal_max_seed + 1)
+            if unique_integer not in generated:
+                generated.add(unique_integer)
+                yield unique_integer
+
+    def _create_unique_rand_int_generator(self):
+
+        self._unique_rand_int_gen = self._unique_rand_int_generator()
+        self._current_generator_index = 0
+
+    def get_seed(self, instance_num: int):
+
+        assert instance_num >= 1
+
+        instance_index = instance_num - 1
+
+        while self._current_generator_index < instance_index:
+            self._current_generator_index += 1
+            next(self._unique_rand_int_gen)
+
+        self._current_generator_index += 1
+        return next(self._unique_rand_int_gen)
 
     @staticmethod
     def _get_rng_state_json_str(rng: np.random.Generator):
@@ -1712,19 +1736,26 @@ class AbstractFacility:
         )
 
     def instantiate(
-        self, output_LTEZIP_filepath: Union[Path, str] = "", verbose: int = 0
+        self,
+        instance_num: int,
+        output_LTEZIP_filepath: Union[Path, str] = "",
+        verbose: int = 0,
     ):
 
         t0 = time.perf_counter()
 
+        self.err.change_rng(self.get_seed(instance_num))
+
         if output_LTEZIP_filepath == "":
-            inst_num = len(self._inst_record[-1]["rng_states"]) + 1
-            output_LTEZIP_filepath = self.get_default_instance_LTEZIP_filepath(inst_num)
+            # inst_num = len(self._inst_record[-1]["rng_states"]) + 1
+            output_LTEZIP_filepath = self.get_default_instance_LTEZIP_filepath(
+                instance_num
+            )
         output_LTEZIP_filepath = Path(output_LTEZIP_filepath)
 
-        state = self._get_rng_state_json_str(self.err.rng)
+        # state = self._get_rng_state_json_str(self.err.rng)
         self.err.apply_errors()
-        self._inst_record[-1]["rng_states"].append(state)
+        # self._inst_record[-1]["rng_states"].append(state)
 
         self.err.generate_LTE_file(output_LTEZIP_filepath)
 
