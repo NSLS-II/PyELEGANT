@@ -1763,6 +1763,9 @@ class ClosedOrbitThreader:
     def save_current_lattice_to_LTE_file(self, new_LTE_filepath: Union[Path, str]):
         new_LTE_filepath = Path(new_LTE_filepath).resolve()
 
+        if self._uncommited_cor_change:
+            self._write_cor_setpoints_file()
+
         run(
             self.lte_save_ele_path,
             print_cmd=False,
@@ -1774,6 +1777,9 @@ class ClosedOrbitThreader:
     def save_current_lattice_to_LTEZIP_file(
         self, new_LTEZIP_filepath: Union[Path, str]
     ):
+        if self._uncommited_cor_change:
+            self._write_cor_setpoints_file()
+
         tmp = tempfile.NamedTemporaryFile(
             dir=self.tempdir.name, delete=False, prefix=f"tmpLte_", suffix=".lte"
         )
@@ -1982,6 +1988,12 @@ class ClosedOrbitThreader:
         clo_calc = ClosedOrbitCalculator_obj
 
         clo_calc.set_kick_angles(hkick_rads, vkick_rads)
+
+        # Critical to record the new setpoints here, if they need to be saved
+        # into LTE/LTEZIP files later.
+        for plane, kick_rads in [("x", hkick_rads), ("y", vkick_rads)]:
+            for rad, elem_name in zip(kick_rads, self.cor_names[plane]):
+                self.change_corrector_setpoint(elem_name, plane, rad)
 
         try:
             d = clo_calc.calc(run_local=True)
