@@ -20,6 +20,7 @@ from typing import Dict, List, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+from ruamel import yaml
 from scipy.stats import truncnorm
 
 from . import ltemanager, sdds
@@ -1643,6 +1644,7 @@ class AbstractFacility:
         error_LTEZIP_name_prefix: str,
         seed: Union[int, None, np.random.Generator] = 42,
         output_folder: Union[None, Path, str] = None,
+        spec_filepath: Union[None, Path, str] = None,
     ):
         """
         Based on MATLAB SC (Simulated Commissioning).
@@ -1663,6 +1665,14 @@ class AbstractFacility:
             self.output_folder = Path.cwd()
         else:
             self.output_folder = Path(output_folder)
+
+        if spec_filepath is None:
+            self.spec_filepath = None
+            self.spec_override = None
+        else:
+            self.spec_filepath = Path(spec_filepath)
+            yml = yaml.YAML()
+            self.spec_override = yml.load(self.spec_filepath.read_text())
 
         self.lattice_type = lattice_type
 
@@ -1778,6 +1788,7 @@ class NSLS2(AbstractFacility):
         error_LTEZIP_name_prefix: str,
         seed: Union[int, None, np.random.Generator] = 42,
         output_folder: Union[None, Path, str] = None,
+        spec_filepath: Union[None, Path, str] = None,
     ):
 
         super().__init__(
@@ -1787,6 +1798,7 @@ class NSLS2(AbstractFacility):
             error_LTEZIP_name_prefix,
             seed=seed,
             output_folder=output_folder,
+            spec_filepath=spec_filepath,
         )
 
         # "fsdb" stands for "(f)acility-(s)pecific (d)ata(b)ase"
@@ -2062,6 +2074,7 @@ class NSLS2U(AbstractFacility):
         error_LTEZIP_name_prefix: str,
         seed: Union[int, None, np.random.Generator] = 42,
         output_folder: Union[None, Path, str] = None,
+        spec_filepath: Union[None, Path, str] = None,
     ):
 
         super().__init__(
@@ -2071,6 +2084,7 @@ class NSLS2U(AbstractFacility):
             error_LTEZIP_name_prefix,
             seed=seed,
             output_folder=output_folder,
+            spec_filepath=spec_filepath,
         )
 
         # "fsdb" stands for "(f)acility-(s)pecific (d)ata(b)ase"
@@ -2082,7 +2096,7 @@ class NSLS2U(AbstractFacility):
 
         self.register_BPMs()
         self.register_bends()
-        self.register_quads_sexts()
+        self.register_quads_nonlin_magnets()
         self.register_girders()
 
     def _get_elem_inds(self):
@@ -2222,6 +2236,13 @@ class NSLS2U(AbstractFacility):
         tbt_noise_spec = TGES(rms=3e-6, rms_unit="m", cutoff=1.0)
         co_noise_spec = TGES(rms=0.1e-6, rms_unit="m", cutoff=1.0)
 
+        if self.spec_override:
+            ov_spec = self.spec_override.get("bpms", None)
+            if ov_spec:
+                ov_d = ov_spec.get("offset", None)
+                if ov_d:
+                    offset_spec = TGES(**ov_d)
+
         spec = BPMErrorSpec(
             offset=OffsetSpec2D(x=offset_spec, y=offset_spec),
             gain=GainSpec(x=gain_spec, y=gain_spec),
@@ -2241,6 +2262,17 @@ class NSLS2U(AbstractFacility):
             offset_spec = TGES(rms=15e-6, rms_unit="m", cutoff=1.0)
             roll_spec = TGES(rms=0.1e-3, rms_unit="rad", cutoff=1.0)
 
+        if self.spec_override:
+            ov_spec = self.spec_override.get("bends", None)
+            if ov_spec:
+                ov_d = ov_spec.get("offset", None)
+                if ov_d:
+                    offset_spec = TGES(**ov_d)
+
+                ov_d = ov_spec.get("roll", None)
+                if ov_d:
+                    roll_spec = TGES(**ov_d)
+
         mp_err_specs = self.get_multipole_err_specs()
         main_err_specs = {4: MainMultipoleErrorSpec(fse=TGES(rms=1e-3, cutoff=1.0))}
         mp_err_specs["PMQ"].set_main_error_spec(main_err_specs)
@@ -2253,7 +2285,7 @@ class NSLS2U(AbstractFacility):
 
         self.err.register_magnets(self.elem_inds["PMQ"], err_spec=spec)
 
-    def register_quads_sexts(self):
+    def register_quads_nonlin_magnets(self):
 
         mp_err_specs = self.get_multipole_err_specs()
 
@@ -2272,11 +2304,29 @@ class NSLS2U(AbstractFacility):
                 raise ValueError(mag_type)
             v.set_main_error_spec(main_err_spec)
 
-        offset_spec = TGES(rms=30e-6, rms_unit="m", cutoff=1.0)
-        roll_spec = TGES(rms=0.2e-3, rms_unit="rad", cutoff=1.0)
+        def_offset_spec = TGES(rms=30e-6, rms_unit="m", cutoff=1.0)
+        def_roll_spec = TGES(rms=0.2e-3, rms_unit="rad", cutoff=1.0)
+
+        if self.spec_override:
+            ov_spec = self.spec_override.get("quads_nonlin_magnets", None)
+
         for mag_type, mp_err_spec in mp_err_specs.items():
             if mag_type in excl_mag_types:
                 continue
+
+            offset_spec = def_offset_spec
+            roll_spec = def_roll_spec
+            if ov_spec:
+                ov_d = ov_spec.get(mag_type, None)
+                if ov_d:
+                    ov_d2 = ov_d.get("offset", None)
+                    if ov_d2:
+                        offset_spec = TGES(**ov_d2)
+
+                    ov_d2 = ov_d.get("roll", None)
+                    if ov_d2:
+                        roll_spec = TGES(**ov_d2)
+
             spec = MagnetErrorSpec(
                 multipole=mp_err_spec,
                 offset=OffsetSpec2D(x=offset_spec, y=offset_spec),
@@ -2292,10 +2342,23 @@ class NSLS2U(AbstractFacility):
         gs_inds, ge_inds = fsdb.get_girder_marker_pairs()
 
         offset_spec = TGES(rms=100e-6, rms_unit="m", cutoff=1.0)
+        roll_spec = TGES(rms=0.5e-3, rms_unit="rad", cutoff=1.0)
+
+        if self.spec_override:
+            ov_spec = self.spec_override.get("girders", None)
+            if ov_spec:
+                ov_d = ov_spec.get("offset", None)
+                if ov_d:
+                    offset_spec = TGES(**ov_d)
+
+                ov_d = ov_spec.get("roll", None)
+                if ov_d:
+                    roll_spec = TGES(**ov_d)
+
         spec = SupportErrorSpec1DRoll(
             us_offset=OffsetSpec3D(x=offset_spec, y=offset_spec, z=None),
             ds_offset=OffsetSpec3D(x=offset_spec, y=offset_spec, z=None),
-            rot=RotationSpec1D(roll=TGES(rms=0.5e-3, rms_unit="rad", cutoff=1.0)),
+            rot=RotationSpec1D(roll=roll_spec),
         )
 
         self.err.register_supports(
