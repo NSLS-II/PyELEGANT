@@ -873,6 +873,11 @@ class Errors:
             copy_errs = {}
 
             for (us_ei, ds_ei), spec in self.supports[_type].items():
+                if _type.name in self.ring[us_ei]:
+                    del self.ring[us_ei][_type.name]
+                if _type.name in self.ring[ds_ei]:
+                    del self.ring[ds_ei][_type.name]
+
                 us_elem_name, ds_elem_name = self.indiv_LTE.get_names_from_elem_inds(
                     [us_ei, ds_ei]
                 )
