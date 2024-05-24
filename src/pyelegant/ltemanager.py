@@ -1881,6 +1881,9 @@ class NSLS2U(AbstractFacility):
             "20231218_nonsplitSF1",
             "20231218_nonsplitSF1_w_skew",
             "20231218_nonsplitSF1_w_skew_v2",
+            "20231218_corConfig20240513",
+            "20231218_corConfig20240515",
+            "20231218_corConfig20240521",
         )
 
         self.E_MeV = 3e3
@@ -1893,7 +1896,14 @@ class NSLS2U(AbstractFacility):
         LTE = self.LTE
 
         inds = LTE.get_elem_inds_from_regex("^BPM_\d+$")
-        assert len(inds) == 11 * self.n_cells
+        if self.lat_type in (
+            "20231218_corConfig20240515",
+            "20231218_corConfig20240521",
+        ):
+            n_expected = 15 * self.n_cells
+        else:
+            n_expected = 11 * self.n_cells
+        assert len(inds) == n_expected
 
         return dict(x=inds.copy(), y=inds.copy())
 
@@ -1916,15 +1926,22 @@ class NSLS2U(AbstractFacility):
 
         if self.lat_type == "20231218_nonsplitSF1":
             inds = LTE.get_elem_inds_from_regex("^COR_\d+$")
+            n_expected = 7 * self.n_cells
         elif self.lat_type in (
             "20231218_nonsplitSF1_w_skew",
             "20231218_nonsplitSF1_w_skew_v2",
+            "20231218_corConfig20240513",
+            "20231218_corConfig20240515",
         ):
             inds = LTE.get_elem_inds_from_regex("^ORBCOR_\d+$")
+            n_expected = 7 * self.n_cells
+        elif self.lat_type == "20231218_corConfig20240521":
+            inds = LTE.get_elem_inds_from_regex("^ORBCOR_\d+$")
+            n_expected = 11 * self.n_cells
         else:
             raise ValueError
 
-        assert len(inds) == 7 * self.n_cells
+        assert len(inds) == n_expected
 
         return dict(x=inds.copy(), y=inds.copy())
 
@@ -1975,7 +1992,12 @@ class NSLS2U(AbstractFacility):
         elif self.lat_type == "20231218_nonsplitSF1_w_skew":
             skew_quad_inds = LTE.get_elem_inds_from_regex("^SKQUAD_\d+$")
             assert len(skew_quad_inds) == 7 * self.n_cells
-        elif self.lat_type == "20231218_nonsplitSF1_w_skew_v2":
+        elif self.lat_type in (
+            "20231218_nonsplitSF1_w_skew_v2",
+            "20231218_corConfig20240513",
+            "20231218_corConfig20240515",
+            "20231218_corConfig20240521",
+        ):
             skew_quad_inds = LTE.get_elem_inds_from_regex("^SKQUAD_\d+$")
             assert len(skew_quad_inds) == 4 * self.n_cells
         else:
@@ -2020,6 +2042,9 @@ class NSLS2U(AbstractFacility):
             "20231218_nonsplitSF1",
             "20231218_nonsplitSF1_w_skew",
             "20231218_nonsplitSF1_w_skew_v2",
+            "20231218_corConfig20240513",
+            "20231218_corConfig20240515",
+            "20231218_corConfig20240521",
         ):
             assert len(inds) == (3 + 3 + 3 + 3) * self.n_cells
         elif self.lat_type == "20231218":
@@ -2066,19 +2091,34 @@ class NSLS2U(AbstractFacility):
 
         gs_inds = LTE.get_elem_inds_from_regex("^GS\w+")
         gs_names = LTE.get_names_from_elem_inds(gs_inds)
-        assert len(gs_names) == 10 * self.n_cells
+        if self.lat_type in (
+            "20231218",
+            "20231218_nonsplitSF1",
+            "20231218_nonsplitSF1_w_skew",
+            "20231218_nonsplitSF1_w_skew_v2",
+        ):
+            n_expected = 10 * self.n_cells
+        elif self.lat_type in (
+            "20231218_corConfig20240513",
+            "20231218_corConfig20240515",
+            "20231218_corConfig20240521",
+        ):
+            n_expected = 7 * self.n_cells
+        else:
+            raise NotImplementedError
+        assert len(gs_names) == n_expected
 
         ge_inds = LTE.get_elem_inds_from_regex("^GE\w+")
         ge_names = LTE.get_names_from_elem_inds(ge_inds)
-        assert len(ge_names) == 10 * self.n_cells
+        assert len(ge_names) == n_expected
 
         g_paired_names = list(zip(gs_names[:-1], ge_names[1:]))
         g_paired_inds = list(zip(gs_inds[:-1], ge_inds[1:]))
-        assert len(g_paired_inds) == 10 * self.n_cells - 1
+        assert len(g_paired_inds) == n_expected - 1
 
         g_paired_names.append((gs_names[-1], ge_names[0]))
         g_paired_inds.append((gs_inds[-1], ge_inds[0]))
-        assert len(g_paired_inds) == 10 * self.n_cells
+        assert len(g_paired_inds) == n_expected
 
         for gs_name, ge_name in g_paired_names:
             try:
