@@ -1266,6 +1266,8 @@ class ClosedOrbitThreader:
                     self._TRM_bpm_fields = f["bpm_fields"][()]
                     self._TRM_cor_names = f["cor_names"][()]
                     self._TRM_cor_fields = f["cor_fields"][()]
+            else:
+                print(f"WARNING: Specified file `{self.TRM_filepath}` does not exist.")
 
         if ORM_filepath == "":
             self.ORM_filepath = None
@@ -1278,6 +1280,8 @@ class ClosedOrbitThreader:
                     self._ORM_bpm_fields = f["bpm_fields"][()]
                     self._ORM_cor_names = f["cor_names"][()]
                     self._ORM_cor_fields = f["cor_fields"][()]
+            else:
+                print(f"WARNING: Specified file `{self.ORM_filepath}` does not exist.")
 
         self.E_MeV = E_MeV
 
@@ -2132,6 +2136,8 @@ class ClosedOrbitThreader:
             n_worse_iter = 0
             slice_x_cor_knobs = np.s_[: self.nCOR["x"]]
             slice_y_cor_knobs = np.s_[self.nCOR["x"] :]
+            backup_hkick_rads = hkick_rads.copy()
+            backup_vkick_rads = vkick_rads.copy()
 
             while i_iter < n_iter_max:
 
@@ -2149,7 +2155,9 @@ class ClosedOrbitThreader:
                                 print(
                                     "Correction kept making orbit worse. Stopping correction."
                                 )
-                            success = False
+                            hkick_rads = backup_hkick_rads
+                            vkick_rads = backup_vkick_rads
+                            success = True
                             break
                     else:
                         n_worse_iter = 0
@@ -2161,6 +2169,9 @@ class ClosedOrbitThreader:
                                 print("No more improvement. Stopping correction.")
                             success = True
                             break
+
+                        backup_hkick_rads = hkick_rads.copy()
+                        backup_vkick_rads = vkick_rads.copy()
 
                 prev_dx_rms = dx_rms
                 prev_dy_rms = dy_rms
@@ -2835,8 +2846,9 @@ class ClosedOrbitThreader:
 
         # Backup data placeholder. Capture backup data only when the particle fully survives.
         # If the particle is lost, roll back to the backup data.
-        backup = dict(inj_coords=None, cor_props=None)
+        backup = dict(inj_coords=None, cor_props=None, iter_index=None)
 
+        update_backup = True
         i_iter = 0
         i_loss = 0
         prev_dx_rms = prev_dy_rms = None
@@ -2935,15 +2947,34 @@ class ClosedOrbitThreader:
                 if prev_dx_rms is not None:
                     if (dx_rms > prev_dx_rms) or (dy_rms > prev_dy_rms):
                         n_worse_iter += 1
+                        update_backup = False
                         if n_worse_iter >= n_max_worse_iter:
                             if debug_print:
                                 print(
-                                    "Correction kept making orbit worse. Stopping correction."
+                                    "Correction kept making orbit worse. Reverting to best and stopping correction."
                                 )
-                            success = False
+
+                            restore_ind = backup["iter_index"]
+                            inj_coords_list.append(inj_coords_list[restore_ind].copy())
+                            hkicks_list.append(hkicks_list[restore_ind].copy())
+                            vkicks_list.append(vkicks_list[restore_ind].copy())
+                            traj_list.append(traj_list[restore_ind].copy())
+
+                            # Restore corrector setpoints from backup
+                            for plane in "xy":
+                                for elem_name, prev_val in backup["cor_props"][
+                                    plane
+                                ].items():
+                                    self.change_corrector_setpoint(
+                                        elem_name, plane, prev_val
+                                    )
+                            self._write_cor_setpoints_file()
+
+                            success = True
                             break
                     else:
                         n_worse_iter = 0
+                        update_backup = True
 
                         if ((prev_dx_rms - dx_rms) < rms_thresh["x"]) and (
                             (prev_dy_rms - dy_rms) < rms_thresh["y"]
@@ -2973,7 +3004,9 @@ class ClosedOrbitThreader:
                 dI_inj = dI[:n_inj_coords]
                 dI_cor = dI[n_inj_coords:]
 
-                backup["inj_coords"] = inj_coords.copy()
+                if update_backup:
+                    backup["iter_index"] = i_iter
+                    backup["inj_coords"] = inj_coords.copy()
                 inj_coords += dI_inj
 
                 assert incl_nKnobs["x"] == self.nCOR["x"]
@@ -2981,20 +3014,23 @@ class ClosedOrbitThreader:
                 slice_x_cor_knobs = np.s_[: self.nCOR["x"]]
                 slice_y_cor_knobs = np.s_[self.nCOR["x"] :]
 
-                backup["cor_props"] = dict(x={}, y={})
                 dtheta_H = dI_cor[slice_x_cor_knobs]
                 dtheta_V = dI_cor[slice_y_cor_knobs]
                 assert len(self.cor_names["x"]) == len(dtheta_H)
+                if update_backup:
+                    backup["cor_props"] = dict(x={}, y={})
                 for elem_name, dtheta in zip(self.cor_names["x"], dtheta_H):
-                    backup["cor_props"]["x"][elem_name] = self.cor_props["x"][
-                        elem_name
-                    ]["value"]
+                    if update_backup:
+                        backup["cor_props"]["x"][elem_name] = self.cor_props["x"][
+                            elem_name
+                        ]["value"]
                     self.change_corrector_setpoint_by(elem_name, "x", dtheta)
                 assert len(self.cor_names["y"]) == len(dtheta_V)
                 for elem_name, dtheta in zip(self.cor_names["y"], dtheta_V):
-                    backup["cor_props"]["y"][elem_name] = self.cor_props["y"][
-                        elem_name
-                    ]["value"]
+                    if update_backup:
+                        backup["cor_props"]["y"][elem_name] = self.cor_props["y"][
+                            elem_name
+                        ]["value"]
                     self.change_corrector_setpoint_by(elem_name, "y", dtheta)
 
             else:  # The particle didn't fully survive.
@@ -3096,7 +3132,7 @@ class ClosedOrbitThreader:
             inj_coords_list=np.array(inj_coords_list),
             hkicks_hist=np.array(hkicks_list),
             vkicks_hist=np.array(vkicks_list),
-            traj_hist=np.array(hkicks_list),
+            traj_hist=np.array(traj_list),
         )
 
     def _check_no_NaN_observations(self, traj):
@@ -3791,9 +3827,10 @@ class ClosedOrbitThreader:
             _reduc_fac_y = np.max(np.abs(dtheta_V) / max_dtheta_rad["y"])
             _reduc_fac = max([_reduc_fac_x, _reduc_fac_y])
 
-            dI_inj /= _reduc_fac
-            dtheta_H /= _reduc_fac
-            dtheta_V /= _reduc_fac
+            if _reduc_fac > 1.0:
+                dI_inj /= _reduc_fac
+                dtheta_H /= _reduc_fac
+                dtheta_V /= _reduc_fac
 
             self._save_backup(inj_coords)
 
@@ -3920,16 +3957,23 @@ class ClosedOrbitThreader:
 
                 dI_next = _Mnext_inv @ np.array(next_bpm_dv)
                 dI_next *= cor_frac
-                # `dI_next` should NOT be limited by `max_dtheta_rad`
-                # as it may require a large kick changes to get through a
-                # difficult area.
 
                 try:
-                    _dI_next_x = dI_next[plane_list.index("x")]
+                    _i = plane_list.index("x")
+                    _reduc_fac = np.max(np.abs(dI_next[_i]) / max_dtheta_rad["x"])
+                    if _reduc_fac > 1.0:
+                        dI_next[_i] /= _reduc_fac
+
+                    _dI_next_x = dI_next[_i]
                 except ValueError or IndexError:
                     _dI_next_x = None
                 try:
-                    _dI_next_y = dI_next[plane_list.index("y")]
+                    _i = plane_list.index("y")
+                    _reduc_fac = np.max(np.abs(dI_next[_i]) / max_dtheta_rad["y"])
+                    if _reduc_fac > 1.0:
+                        dI_next[_i] /= _reduc_fac
+
+                    _dI_next_y = dI_next[_i]
                 except ValueError or IndexError:
                     _dI_next_y = None
                 try:
