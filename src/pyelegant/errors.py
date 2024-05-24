@@ -217,6 +217,27 @@ class SupportErrorSpec1DRoll:
 
 
 @dataclass
+class SupportErrorSpec3DChained:
+    def __init__(
+        self,
+        chained_us_elem_ind: int,
+        chained_us_offset: Union[OffsetSpec3D, None] = None,
+        ds_offset: Union[OffsetSpec3D, None] = None,
+        rot: Union[RotationSpec1D, None] = None,
+    ) -> None:
+
+        self.chained_us_elem_ind = chained_us_elem_ind
+        self.chained_us_offset = (
+            OffsetSpec3D() if chained_us_offset is None else chained_us_offset
+        )
+        self.ds_offset = OffsetSpec3D() if ds_offset is None else ds_offset
+        self.rot = RotationSpec1D() if rot is None else rot
+
+        assert isinstance(self.ds_offset, OffsetSpec3D)
+        assert isinstance(self.rot, RotationSpec1D)
+
+
+@dataclass
 class SupportError:
     def __init__(
         self,
@@ -721,7 +742,12 @@ class Errors:
         support_type: SupportType,
         us_elem_inds: np.ndarray,
         ds_elem_inds: np.ndarray,
-        err_spec: Union[SupportErrorSpec3DRoll, SupportErrorSpec1DRoll, None] = None,
+        err_spec: Union[
+            SupportErrorSpec3DRoll,
+            SupportErrorSpec1DRoll,
+            SupportErrorSpec3DChained,
+            None,
+        ] = None,
         overwrite: bool = False,
     ) -> None:
         """Based on SCregisterSupport.m"""
@@ -737,7 +763,10 @@ class Errors:
 
         if err_spec is None:
             err_spec = SupportErrorSpec1DRoll()
-        assert isinstance(err_spec, (SupportErrorSpec3DRoll, SupportErrorSpec1DRoll))
+        assert isinstance(
+            err_spec,
+            (SupportErrorSpec3DRoll, SupportErrorSpec1DRoll, SupportErrorSpec3DChained),
+        )
 
         for us_ei, ds_ei in zip(us_elem_inds, ds_elem_inds):
             if (us_ei, ds_ei) in supports:
@@ -896,6 +925,7 @@ class Errors:
                     continue
 
                 if isinstance(spec, SupportErrorSpec1DRoll):
+                    extra = None
                     for v, ei, name, prop_path in [
                         (spec.us_offset.x, us_ei, us_elem_name, ["offset", "x"]),
                         (spec.us_offset.y, us_ei, us_elem_name, ["offset", "y"]),
@@ -914,11 +944,12 @@ class Errors:
                         mean = v.mean
 
                         self._supports_dist[_type][(rms, cutoff, mean)].append(
-                            (ei, name, prop_path)
+                            (ei, name, prop_path, extra)
                         )
 
                 elif isinstance(spec, SupportErrorSpec3DRoll):
                     copy_errs[ds_ei] = dict(src_ei=us_ei, elem_name=ds_elem_name)
+                    extra = None
 
                     for v, ei, name, prop_path in [
                         (spec.offset.x, us_ei, us_elem_name, ["offset", "x"]),
@@ -932,12 +963,69 @@ class Errors:
                         assert v.rms_unit == "m"
 
                         self._supports_dist[_type][(rms, cutoff, mean)].append(
-                            (ei, name, prop_path)
+                            (ei, name, prop_path, extra)
+                        )
+
+                elif isinstance(spec, SupportErrorSpec3DChained):
+                    extra = None
+                    for v, ei, name, prop_path in [
+                        (spec.ds_offset.x, ds_ei, ds_elem_name, ["offset", "x"]),
+                        (spec.ds_offset.y, ds_ei, ds_elem_name, ["offset", "y"]),
+                        (spec.rot.roll, us_ei, us_elem_name, ["rot", "roll"]),
+                    ]:
+                        rms = v.rms
+                        cutoff = v.cutoff
+                        if prop_path[0] == "offset":
+                            assert v.rms_unit == "m"
+                        elif prop_path[0] == "rot":
+                            assert v.rms_unit == "rad"
+                        else:
+                            raise ValueError(prop_path[0])
+                        mean = v.mean
+
+                        self._supports_dist[_type][(rms, cutoff, mean)].append(
+                            (ei, name, prop_path, extra)
+                        )
+
+                    (chained_us_elem_name,) = self.indiv_LTE.get_names_from_elem_inds(
+                        [spec.chained_us_elem_ind]
+                    )
+
+                    chained_us_elem = dict(
+                        index=spec.chained_us_elem_ind, name=chained_us_elem_name
+                    )
+                    extra = dict(chained_us_elem=chained_us_elem)
+
+                    for v, ei, name, prop_path in [
+                        (
+                            spec.chained_us_offset.x,
+                            us_ei,
+                            us_elem_name,
+                            ["offset", "x"],
+                        ),
+                        (
+                            spec.chained_us_offset.y,
+                            us_ei,
+                            us_elem_name,
+                            ["offset", "y"],
+                        ),
+                    ]:
+                        rms = v.rms
+                        cutoff = v.cutoff
+                        if prop_path[0] == "offset":
+                            assert v.rms_unit == "m"
+                        else:
+                            raise ValueError(prop_path[0])
+                        mean = v.mean
+
+                        self._supports_dist[_type][(rms, cutoff, mean)].append(
+                            (ei, name, prop_path, extra)
                         )
 
                 else:
                     raise TypeError(spec)
 
+            deferred = []
             for (rms, cutoff, mean), elem_ind_elem_prop_paths in self._supports_dist[
                 _type
             ].items():
@@ -949,16 +1037,24 @@ class Errors:
                 else:
                     prop_vals = np.zeros(len(elem_ind_elem_prop_paths))
 
-                for (ei, elem_name, prop_path), prop_val in zip(
+                for (ei, elem_name, prop_path, extra), prop_val in zip(
                     elem_ind_elem_prop_paths, prop_vals
                 ):
-                    assert self.ring[ei]["name"] == elem_name
-                    sup_err = self.ring[ei].get(_type.name, SupportError(elem_name))
-                    obj = sup_err
-                    for prop in prop_path[:-1]:
-                        obj = getattr(obj, prop)
-                    setattr(obj, prop_path[-1], prop_val)
-                    self.ring[ei][_type.name] = sup_err
+                    if extra is None:
+                        assert self.ring[ei]["name"] == elem_name
+                        sup_err = self.ring[ei].get(_type.name, SupportError(elem_name))
+                        obj = sup_err
+                        for prop in prop_path[:-1]:
+                            obj = getattr(obj, prop)
+                        setattr(obj, prop_path[-1], prop_val)
+                        self.ring[ei][_type.name] = sup_err
+
+                    elif "chained_us_elem" in extra:
+                        # First need to apply errors for all downstream elements
+                        deferred.append(((ei, elem_name, prop_path, extra), prop_val))
+
+                    else:
+                        raise NotImplementedError
 
             for ds_ei, d in copy_errs.items():
                 us_ei = d["src_ei"]
@@ -966,6 +1062,25 @@ class Errors:
                 assert self.ring[ds_ei]["name"] == ds_elem_name
                 src_sup_err = self.ring[us_ei][_type.name]
                 self.ring[ds_ei][_type.name] = SupportError(**dc.asdict(src_sup_err))
+
+            for (ei, elem_name, prop_path, extra), prop_val in deferred:
+                if "chained_us_elem" in extra:
+                    chained_us_elem_name = extra["chained_us_elem"]["name"]
+                    chained_us_ei = extra["chained_us_elem"]["index"]
+                    assert self.ring[chained_us_ei]["name"] == chained_us_elem_name
+                    src_sup_err = self.ring[chained_us_ei][_type.name]
+                    obj = src_sup_err
+                    for prop in prop_path[:-1]:
+                        obj = getattr(obj, prop)
+                    prop_val += getattr(obj, prop_path[-1])
+
+                    assert self.ring[ei]["name"] == elem_name
+                    sup_err = self.ring[ei].get(_type.name, SupportError(elem_name))
+                    obj = sup_err
+                    for prop in prop_path[:-1]:
+                        obj = getattr(obj, prop)
+                    setattr(obj, prop_path[-1], prop_val)
+                    self.ring[ei][_type.name] = sup_err
 
             for us_ei, ds_ei in list(self.supports[_type]):
                 us_sup_err = self.ring[us_ei][_type.name]
@@ -2112,7 +2227,14 @@ class NSLS2U(AbstractFacility):
         elem_inds = {}
 
         _inds = fsdb.get_regular_BPM_elem_inds()
-        assert len(_inds["x"]) == len(_inds["y"]) == 330
+        if self.lattice_type in (
+            "20231218_corConfig20240515",
+            "20231218_corConfig20240521",
+        ):
+            n_expected = 15 * 30
+        else:
+            n_expected = 11 * 30
+        assert len(_inds["x"]) == len(_inds["y"]) == n_expected
         assert np.all(_inds["x"] == _inds["y"])
         elem_inds["BPM"] = _inds["x"]
 
@@ -2146,6 +2268,9 @@ class NSLS2U(AbstractFacility):
             "20231218_nonsplitSF1",
             "20231218_nonsplitSF1_w_skew",
             "20231218_nonsplitSF1_w_skew_v2",
+            "20231218_corConfig20240513",
+            "20231218_corConfig20240515",
+            "20231218_corConfig20240521",
         ):
             assert len(elem_inds["SEXT"]) == 360
         else:
@@ -2350,6 +2475,7 @@ class NSLS2U(AbstractFacility):
 
         offset_spec = TGES(rms=100e-6, rms_unit="m", cutoff=1.0)
         roll_spec = TGES(rms=0.5e-3, rms_unit="rad", cutoff=1.0)
+        chain_constraints = None
 
         if self.spec_override:
             ov_spec = self.spec_override.get("girders", None)
@@ -2362,15 +2488,64 @@ class NSLS2U(AbstractFacility):
                 if ov_d:
                     roll_spec = TGES(**ov_d)
 
-        spec = SupportErrorSpec1DRoll(
-            us_offset=OffsetSpec3D(x=offset_spec, y=offset_spec, z=None),
-            ds_offset=OffsetSpec3D(x=offset_spec, y=offset_spec, z=None),
-            rot=RotationSpec1D(roll=roll_spec),
-        )
+                ov_list = ov_spec.get("chain_constraints", None)
+                if ov_list:
+                    assert isinstance(ov_list, list)
+                    chain_constraints = ov_list
 
-        self.err.register_supports(
-            SupportType.girder, gs_inds, ge_inds, spec, overwrite=False
-        )
+        if chain_constraints is None:
+            spec = SupportErrorSpec1DRoll(
+                us_offset=OffsetSpec3D(x=offset_spec, y=offset_spec, z=None),
+                ds_offset=OffsetSpec3D(x=offset_spec, y=offset_spec, z=None),
+                rot=RotationSpec1D(roll=roll_spec),
+            )
+
+            self.err.register_supports(
+                SupportType.girder, gs_inds, ge_inds, spec, overwrite=False
+            )
+        else:
+            chained_gs_inds = []
+
+            gs_inds_list = gs_inds.tolist()
+
+            for _d in chain_constraints:
+                x_spec = _d.get("x", {})
+                y_spec = _d.get("y", {})
+                for gs_i, chained_us_elem_ind in _d["elem_inds_to_adjust_and_target"]:
+                    ge_i = ge_inds[gs_inds_list.index(gs_i)]
+                    chained_gs_inds.append(gs_i)
+                    chained_spec = SupportErrorSpec3DChained(
+                        chained_us_elem_ind,
+                        chained_us_offset=OffsetSpec3D(
+                            x=TGES(**x_spec), y=TGES(**y_spec), z=None
+                        ),
+                        ds_offset=OffsetSpec3D(x=offset_spec, y=offset_spec, z=None),
+                        rot=RotationSpec1D(roll=roll_spec),
+                    )
+
+                    self.err.register_supports(
+                        SupportType.girder,
+                        [gs_i],
+                        [ge_i],
+                        chained_spec,
+                        overwrite=False,
+                    )
+
+            non_chained_gs_inds = []
+            non_chained_ge_inds = []
+            for gs_i, ge_i in zip(gs_inds, ge_inds):
+                if gs_i not in chained_gs_inds:
+                    non_chained_gs_inds.append(gs_i)
+                    non_chained_ge_inds.append(ge_i)
+
+            if non_chained_gs_inds != []:
+                self.err.register_supports(
+                    SupportType.girder,
+                    non_chained_gs_inds,
+                    non_chained_ge_inds,
+                    spec,
+                    overwrite=False,
+                )
 
 
 if __name__ == "__main__":
