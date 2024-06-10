@@ -1858,9 +1858,11 @@ class AbstractFacility:
         bpm_elem_inds = self.get_BPM_elem_inds_for_orbit_cor()
         cor_elem_inds = self.get_corrector_elem_inds_for_orbit_cor()
 
-        output_h5_filepath = (
-            self.output_folder / f"{self.design_LTE.LTEZIP_filepath.stem}_TRM.h5"
-        )
+        try:
+            stem = self.design_LTE.LTEZIP_filepath.stem
+        except AttributeError:
+            stem = self.design_LTE.LTE_filepath.stem
+        output_h5_filepath = self.output_folder / f"{stem}_TRM.h5"
 
         self.TRM_filepath = generate_TRM_file(
             self.design_LTE,
@@ -1881,9 +1883,11 @@ class AbstractFacility:
         bpm_elem_inds = self.get_BPM_elem_inds_for_orbit_cor()
         cor_elem_inds = self.get_corrector_elem_inds_for_orbit_cor()
 
-        output_h5_filepath = (
-            self.output_folder / f"{self.design_LTE.LTEZIP_filepath.stem}_ORM.h5"
-        )
+        try:
+            stem = self.design_LTE.LTEZIP_filepath.stem
+        except AttributeError:
+            stem = self.design_LTE.LTE_filepath.stem
+        output_h5_filepath = self.output_folder / f"{stem}_ORM.h5"
 
         self.ORM_filepath = generate_ORM_file(
             self.design_LTE,
