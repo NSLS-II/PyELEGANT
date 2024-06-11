@@ -1021,7 +1021,7 @@ class ClosedOrbitCalculatorViaTraj:
 
         x0, xp0, y0, yp0, dp0 = inj_coords
         base_traj = self._calc_traj(x0=x0, xp0=xp0, y0=y0, yp0=yp0, dp0=dp0, dt=True)
-        if self.alphac is None:
+        if self.fixed_length and (self.alphac is None):
             dp_change = 1e-6
 
             traj = self._calc_traj(
