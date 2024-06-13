@@ -4348,8 +4348,8 @@ def calc_analytical_uncoupled_ORM(
     beta_b = beta_at_bpms["y"]
     phi_c = phi_avg_at_cors["y"]
     phi_b = phi_at_bpms["y"]
-    eta_c = eta_avg_at_cors["x"]
-    eta_b = eta_at_bpms["x"]
+    eta_c = eta_avg_at_cors["y"]
+    eta_b = eta_at_bpms["y"]
     tune = nu["y"]
 
     for i in range(n_bpm["y"]):
