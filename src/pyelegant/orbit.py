@@ -809,7 +809,8 @@ class ClosedOrbitCalculatorViaTraj:
         self,
         LTE: Lattice,
         E_MeV: float,
-        N_KICKS: Optional[dict] = None,
+        N_KICKS: Optional[Dict] = None,
+        load_parameters: Union[None, Dict, List] = None,
         x0: float = 0.0,
         xp0: float = 0.0,
         y0: float = 0.0,
@@ -832,6 +833,7 @@ class ClosedOrbitCalculatorViaTraj:
         self.LTE = LTE
         self.LTE_filepath = LTE.LTE_filepath
         self.N_KICKS = N_KICKS
+        self.load_parameters = load_parameters
 
         self.E_MeV = E_MeV
 
@@ -931,6 +933,29 @@ class ClosedOrbitCalculatorViaTraj:
         )
 
         ed.add_newline()
+
+        if self.load_parameters is not None:
+
+            if isinstance(self.load_parameters, dict):
+                load_parameters_list = [self.load_parameters]
+            elif isinstance(self.load_parameters, list):
+                load_parameters_list = self.load_parameters
+            else:
+                raise TypeError
+
+            for load_parameters in load_parameters_list:
+                if "change_defined_values" in load_parameters:
+                    if not load_parameters["change_defined_values"]:
+                        raise ValueError(
+                            'load_parameters["change_defined_values"] cannot be False'
+                        )
+                else:
+                    load_parameters["change_defined_values"] = True
+                load_parameters.setdefault("allow_missing_elements", True)
+                load_parameters.setdefault("allow_missing_parameters", True)
+                ed.add_block("load_parameters", **load_parameters)
+
+                ed.add_newline()
 
         if self.N_KICKS is not None:
             elebuilder.add_N_KICKS_alter_elements_blocks(ed, self.N_KICKS)
