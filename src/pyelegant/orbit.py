@@ -817,11 +817,14 @@ class ClosedOrbitCalculatorViaTraj:
         yp0: float = 0.0,
         dp0: float = 0.0,
         fixed_length=True,
+        rf_freq_Hz: Optional[float] = None,
+        harmonic_number: int = 0,
         n_iter_max: int = 200,
         transv_cor_frac: float = 0.5,
         alphac: Union[None, float] = None,
         dp_cor_frac: float = 0.8,
         dp_change_thresh: float = 1e-7,
+        traj_rms_thresh: float = 1e-9,
         tempdir_path: Optional[str] = None,
         print_stdout=False,
         print_stderr=True,
@@ -844,6 +847,21 @@ class ClosedOrbitCalculatorViaTraj:
             self.alphac = alphac
             self.dp_cor_frac = dp_cor_frac
             self.dp_change_thresh = dp_change_thresh
+
+            c = constants.c
+            circumf = self.LTE.get_circumference()
+
+            assert harmonic_number != 0
+            h = harmonic_number
+
+            if rf_freq_Hz is None:
+                self.rf_freq_Hz = h * c / circumf
+            else:
+                self.rf_freq_Hz = rf_freq_Hz
+
+            self.delta_pathlen = h * c / self.rf_freq_Hz - circumf
+
+        self.traj_rms_thresh = traj_rms_thresh
 
         self.n_iter_max = n_iter_max
 
@@ -1003,7 +1021,7 @@ class ClosedOrbitCalculatorViaTraj:
         watch_filepaths = list(self.traj_calc_ele_path.parent.glob("*.wc*"))
         assert len(watch_filepaths) == 1
 
-        data, meta = sdds.sdds2dicts(watch_filepaths[0])
+        data, meta = sdds.sdds2dicts(watch_filepaths[0], str_format="%25.16e")
         col = data["columns"]
 
         traj = {k: col[k] for k in ["x", "xp", "y", "yp"]}
@@ -1043,6 +1061,8 @@ class ClosedOrbitCalculatorViaTraj:
         if self.fixed_length:
             circumf = self.LTE.get_circumference()
             c = constants.c  # speed of light [m/s]
+
+            target_delta_pathlen = self.delta_pathlen
 
         x0, xp0, y0, yp0, dp0 = inj_coords
         base_traj = self._calc_traj(x0=x0, xp0=xp0, y0=y0, yp0=yp0, dp0=dp0, dt=True)
@@ -1091,7 +1111,10 @@ class ClosedOrbitCalculatorViaTraj:
                 inj_coords, _fopt, _n_iter, _n_func_calls, _warnflag = res
                 if _warnflag == 0:
                     if self.fixed_length:
-                        dC_over_C = (c * self.dt) / circumf
+                        actual_delta_pathlen = c * self.dt
+                        dC_over_C = (
+                            actual_delta_pathlen - target_delta_pathlen
+                        ) / circumf
                         full_dp_change = dC_over_C / self.alphac * (-1)
 
                         dp_converged = np.abs(full_dp_change) < self.dp_change_thresh
@@ -1197,7 +1220,8 @@ class ClosedOrbitCalculatorViaTraj:
                     print(f"Iteration #{i_iter+1}/{self.n_iter_max}")
 
                 if self.fixed_length:
-                    dC_over_C = (c * self.dt) / circumf
+                    actual_delta_pathlen = c * self.dt
+                    dC_over_C = (actual_delta_pathlen - target_delta_pathlen) / circumf
                     full_dp_change = dC_over_C / self.alphac * (-1)
 
                     dp_converged = np.abs(full_dp_change) < self.dp_change_thresh
@@ -1206,7 +1230,7 @@ class ClosedOrbitCalculatorViaTraj:
                     [np.diff(traj[coord])[0] for coord in ["x", "xp", "y", "yp"]]
                 )
 
-                if np.std(traj_diff) < 1e-9:
+                if np.std(traj_diff) < self.traj_rms_thresh:
                     if self.fixed_length:
                         if dp_converged:
                             break
